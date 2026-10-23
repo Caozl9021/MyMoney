@@ -67,9 +67,28 @@ tmp/
 # 个人截图与录屏（含交易页面，避免隐私外泄；如作规则样本请先脱敏）
 截图/
 
-# ---------- 6. 可选：进一步瘦身 ----------
-# 下面的记录体积较大（runs 约 28MB 截图/日志，deliverables 约 5MB 预览图）。
-# README / TEST_REPORT / DEPLOYMENT 中有指向 runs 内验证文件的链接，
-# 默认保留文本证据。若你更看重仓库轻量，可取消注释整体忽略：
-# runs/
-# deliverables/
+# ---------- 6. 测试记录与规划文档（只留本地） ----------
+# 单元测试源码（app/src/test、billkit/src/test）仍然入库。
+# 测试/验证记录：模拟器截图、日志、测试库、交付快照与测试报告
+runs/
+deliverables/
+TEST_REPORT.md
+
+# 规划：plan 文档与 OpenSpec 变更
+docs/PLAN_*.md
+docs/*_PLAN.md
+openspec/
+
+# ---------- 7. 沙箱挂载的占位文件（非项目内容） ----------
+/.bash_profile
+/.bashrc
+/.profile
+/.zprofile
+/.zshrc
+/.gitconfig
+/.gitmodules
+/.ripgreprc
+/.mcp.json
+/.claude/
+/.idea
+/.vscode

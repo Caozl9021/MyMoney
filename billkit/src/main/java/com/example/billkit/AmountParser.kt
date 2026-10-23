@@ -241,12 +241,28 @@ object AmountParser {
         }
     }
 
+    /**
+     * 「…中」后紧跟「心」是名词「中心」（售后处理中心 / 退款中心），不是进行中状态。
+     * 同一行里只要还有一处真正的状态词（`处理中心 处理中`）仍算命中。
+     */
+    private fun containsStatusWord(line: String, word: String): Boolean {
+        var from = 0
+        while (true) {
+            val at = line.indexOf(word, from)
+            if (at < 0) return false
+            val end = at + word.length
+            if (!(word.endsWith('中') && line.getOrNull(end) == '心')) return true
+            from = at + 1
+        }
+    }
+
     fun status(items: List<String>): Status {
         val joined = items.joinToString(" ")
         return when {
             failedWords.any { joined.contains(it) } -> Status.FAILED
             listOf("取消退款", "退款取消", "退款已取消", "退款关闭").any { joined.contains(it) } -> Status.CANCELLED
-            pendingWords.any { joined.contains(it) } || refundApplicationIsStatus(items) -> Status.PENDING
+            pendingWords.any { word -> items.any { containsStatusWord(it, word) } } ||
+                refundApplicationIsStatus(items) -> Status.PENDING
             isCompletedRefund(items) -> Status.SUCCESS
             cancelledWords.any { joined.contains(it) } -> Status.CANCELLED
             successWords.any { joined.contains(it) } -> Status.SUCCESS

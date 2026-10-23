@@ -126,7 +126,8 @@ object ConfirmOverlay {
             isFocusableInTouchMode = true
             setOnKeyListener { _, keyCode, event ->
                 if (keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP) {
-                    dismiss()
+                    // 返回键 = 先放一边，不是丢弃
+                    setAside(app, draft)
                     true
                 } else {
                     false
@@ -172,7 +173,7 @@ object ConfirmOverlay {
             rootView = root
             this.owner = owner
             showing = true
-            registerScreenOff(app)
+            registerScreenOff(app, draft)
                 com.example.autobook.capture.ConfirmDelivery.cancel(app, draft.fingerprint)
             root.requestFocus()
             true
@@ -235,16 +236,29 @@ object ConfirmOverlay {
                                 onError = { saving = false; saveError = it.message ?: "保存失败，请重试" })
                         }
                     },
-                    onDiscard = { if (!saving) { PendingStore.remove(draft.fingerprint); dismiss() } },
+                    onIgnore = { if (!saving) { PendingStore.remove(draft.fingerprint); dismiss() } },
+                    onDismiss = { if (!saving) setAside(app, draft) },
+                    noteSuggestions = com.example.autobook.ui.rememberNoteSuggestions(),
                 )
             }
         }
     }
 
-    private fun registerScreenOff(app: Context) {
+    /**
+     * 下滑 / 点空白 / 返回键 / 熄屏：用户没说"不要"，草稿回到待确认，首页可以补记。
+     * 只有顶部「忽略」才真正丢弃。
+     */
+    private fun setAside(app: Context, draft: BillDraft) {
+        if (!showing) return
+        PendingStore.add(draft)
+        dismiss()
+        main.post { android.widget.Toast.makeText(app, "已放到待确认，可在首页补记", android.widget.Toast.LENGTH_SHORT).show() }
+    }
+
+    private fun registerScreenOff(app: Context, draft: BillDraft) {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
-                if (intent?.action == Intent.ACTION_SCREEN_OFF) dismiss()
+                if (intent?.action == Intent.ACTION_SCREEN_OFF) { PendingStore.add(draft); dismiss() }
             }
         }
         val ok = runCatching {

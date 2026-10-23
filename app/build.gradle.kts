@@ -16,8 +16,8 @@ android {
         applicationId = "com.example.autobook"
         minSdk = 26
         targetSdk = 35
-        versionCode = 27
-        versionName = "0.6.8"
+        versionCode = 29
+        versionName = "0.7.0"
     }
 
     // 签名信息放在仓库之外（~/.autobook-keys/keystore.properties），不进版本库。

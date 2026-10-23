@@ -1,6 +1,6 @@
 # AutoBook 构建与部署
 
-当前候选 **0.6.8 / versionCode 27（待用户验收）**，最低 API 26，compile/target SDK 35。[最新验证记录](runs/20261023-092336-brand-jpg-wechat-release/outputs/verification.md) 已记录候选包的测试与资源核查；下列命令用于复现，不代表本次文档更新重新执行了构建。
+当前版本 **0.7.0 / versionCode 29（已验收（2026-10-23用户验收通过））**，最低 API 26，compile/target SDK 35。[最新验证记录](runs/20261023-150000-compact-confirm/outputs/verification.md) 已记录交付包的测试与签名核查；下列命令用于复现，不代表本次文档更新重新执行了构建。
 
 ## 环境与直接构建
 
@@ -43,16 +43,16 @@ bash build-all.sh
 
 | 文件 | 大小（字节） | SHA-256 |
 |---|---:|---|
-| [debug](dist/AutoBook-0.6.8-debug.apk) | 54,951,514 | `521a26ad057b0ffc8f33f296ea3e50fec0547ba5afe07ed4775d828c19d6d8b7` |
-| [release](dist/AutoBook-0.6.8-release.apk) | 45,925,556 | `4d34c9fa47a9450e2b9679ef898e2997a8f1bd483097408e385875cd278c32aa` |
+| [debug](dist/AutoBook-0.7.0-debug.apk) | 54,984,014 | `b0bf4a9c5783554ab8a9758e7c8183f8e7b16050b0887079b5d198eb873a7417` |
+| [release](dist/AutoBook-0.7.0-release.apk) | 45,941,940 | `00902b902dd8b15657b2454cef1a6c8fd34ce743c35e115ec3333451750a898c` |
 
-来源：[包核查 JSON](runs/20261023-092336-brand-jpg-wechat-release/outputs/apk-verification.json)。两包版本均为 0.6.8/27 且签名核查通过；release 证书与 0.6.7 一致。
+来源：[包核查](runs/20261023-150000-compact-confirm/outputs/apk-verification.txt)。两包版本均为 0.7.0/29，签名核查通过；release 证书与 0.6.9 一致，可覆盖安装。已验收的 0.6.9 包保留在 `deliverables/0.6.9/`。
 
 ```bash
 source "$HOME/opt/autobook-env.sh"
 cd "$HOME/Projects/AutoBook"
 adb devices
-adb install -r dist/AutoBook-0.6.8-release.apk
+adb install -r dist/AutoBook-0.7.0-release.apk
 ```
 
 如连接多台设备，为命令添加 `adb -s <serial>`。签名冲突时先确认设备现有包与候选证书；不要把卸载应用或清除启动器数据作为常规升级步骤，以免丢失账本或桌面布局。图标显示异常时先核对安装版本、图标资源及启动器刷新情况。
@@ -64,9 +64,9 @@ adb install -r dist/AutoBook-0.6.8-release.apk
 ```bash
 source "$HOME/opt/autobook-env.sh"
 cd "$HOME/Projects/AutoBook"
-"$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging dist/AutoBook-0.6.8-release.apk
-"$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs dist/AutoBook-0.6.8-release.apk
-sha256sum dist/AutoBook-0.6.8-debug.apk dist/AutoBook-0.6.8-release.apk
+"$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging dist/AutoBook-0.7.0-release.apk
+"$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs dist/AutoBook-0.7.0-release.apk
+sha256sum dist/AutoBook-0.7.0-debug.apk dist/AutoBook-0.7.0-release.apk
 adb shell dumpsys activity services com.example.autobook
 adb logcat | rg 'AutoBook|AB-Guardian|Xposed'
 ```
@@ -75,6 +75,6 @@ LSP 是主 APK 内置的可选功能，详见 [模块说明](docs/LSP_MODULE.md)
 
 ## 验证与交付边界
 
-0.6.8 有 221 项单测/24 类、双构建、版本/签名及每包 26 项品牌资源核查。API35 当前目视只覆盖确认卡、QS 磁贴和已放置 widget；旧 UI 操作证据见 [测试报告](TEST_REPORT.md)。真实微信付款成功页的瞬时识别/悬浮确认、通知实际显示、LSP 拦截、厂商保活与低 API 设备兼容仍待验证。
+0.6.9 有 229 项单测/26 类、双构建、版本/签名核查，以及 API35 模拟器上的批次0回放（纯文本桩，不是微信）。0.6.8 有 221 项单测/24 类及每包 26 项品牌资源核查。API35 当前目视只覆盖确认卡、QS 磁贴和已放置 widget；旧 UI 操作证据见 [测试报告](TEST_REPORT.md)。真实微信付款成功页的瞬时识别/悬浮确认、通知实际显示、LSP 拦截、厂商保活与低 API 设备兼容仍待验证。
 
 复现运行应建立独立 `runs/<时间>-<标签>/`，保存 manifest、日志、测试结果和设备证据；稳定交付在 `deliverables/` 记录来源与摘要。截图转录只能作为规则样本，不能当实际节点或付款事件证据。用户明确验收前状态保持“待验收”。后续 [plan1.0](docs/PLAN_1.0.md) 新功能尚未实施。

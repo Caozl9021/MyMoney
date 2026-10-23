@@ -107,6 +107,15 @@ object LedgerConfig {
         })
     }
 
+    // ---------- 排序（顺序就是列表本身的顺序，确认卡、备份都按它） ----------
+
+    fun moveGroup(type: BillType, from: Int, to: Int) = writeGroups(type, Reorder.move(groupsFor(type), from, to))
+
+    fun moveSub(type: BillType, group: String, from: Int, to: Int) =
+        writeGroups(type, groupsFor(type).map { if (it.name == group) it.copy(subs = Reorder.move(it.subs, from, to)) else it })
+
+    fun moveAccount(from: Int, to: Int) = writeStrings(KEY_ACCOUNTS, DEFAULT_ACCOUNTS, Reorder.move(accounts, from, to))
+
     fun subsOf(type: BillType, group: String?): List<String> =
         groupsFor(type).firstOrNull { it.name == group }?.subs.orEmpty()
 

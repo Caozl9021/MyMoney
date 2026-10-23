@@ -73,7 +73,16 @@ class ConfirmActivity : ComponentActivity() {
                                 onError = { saving = false; saveError = it.message ?: "保存失败，请重试" })
                         }
                     },
-                    onDiscard = { if (!saving) { PendingStore.remove(draft.fingerprint); finish() } },
+                    onIgnore = { if (!saving) { PendingStore.remove(draft.fingerprint); finish() } },
+                    // 下滑 / 点空白 / 返回键：先放一边，回到待确认（来自待确认列表的再放回去也只是去重覆盖）
+                    onDismiss = {
+                        if (!saving) {
+                            PendingStore.add(draft)
+                            android.widget.Toast.makeText(applicationContext, "已放到待确认，可在首页补记", android.widget.Toast.LENGTH_SHORT).show()
+                            finish()
+                        }
+                    },
+                    noteSuggestions = rememberNoteSuggestions(),
                 )
             }
         }

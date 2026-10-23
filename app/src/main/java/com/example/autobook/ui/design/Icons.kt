@@ -54,6 +54,8 @@ object AbIcons {
 
     val ChevronRight = line("chevronRight", "M9 5l7 7-7 7")
     val ChevronLeft = line("chevronLeft", "M15 5l-7 7 7 7")
+    val ChevronUp = line("chevronUp", "M5 15l7-7 7 7")
+    val ChevronDown = line("chevronDown", "M5 9l7 7 7-7")
     val Plus = line("plus", "M12 5v14", "M5 12h14")
     val Close = line("close", "M6.5 6.5l11 11", "M17.5 6.5l-11 11")
     val Check = line("check", "M5 12.5l4.5 4.5L19 6.5")

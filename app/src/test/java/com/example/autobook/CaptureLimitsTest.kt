@@ -78,8 +78,14 @@ class CaptureLimitsTest {
             assertTrue(BillKit.offer(bill, now = 10000) is BillPipeline.Outcome.Draft)
             assertTrue(DebugBus.state.value!!.outcome.startsWith("draft:"))
             assertTrue(DebugBus.state.value!!.outcome.endsWith(" [截断]"))
+            // The identical screen offered again is recognised as the same page first.
             BillKit.offer(bill, now = 10001)
+            assertEquals("skip:same-page [截断]", DebugBus.state.value?.outcome)
+            // A different bill right after the first is throttled.
+            val other = Samples.snapshot(Packages.WECHAT, Samples.wechatBill).copy(truncated = true)
+            BillKit.offer(other, now = 10002)
             assertEquals("skip:throttled [截断]", DebugBus.state.value?.outcome)
+            // Leaving the page ends the session; the 90s fingerprint window still catches the same bill.
             BillKit.offer(bill, now = 12000)
             assertEquals("skip:duplicate [截断]", DebugBus.state.value?.outcome)
         } finally {

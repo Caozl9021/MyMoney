@@ -51,6 +51,15 @@ object BillKit {
     private val lastSeen = LinkedHashMap<String, Long>()
     private var lastAcceptedAt = 0L
 
+    /**
+     * 最近一次出草稿的那一屏（包名 + 有序文本，不含时间）。
+     *
+     * 确认卡关掉后，被盖住的成功页会重新获焦、再送进来一模一样的文本；页面没写时间时
+     * 草稿时间 = 识别时刻，指纹按分钟变，90s/10min 去重都拦不住（F16/F9 实测重复入库）。
+     * 同一屏再来直接跳过；白名单里任何一屏不同的文本（离开这页、进入下一次付款）就清掉。
+     */
+    private var lastDraftPage: List<Any>? = null
+
     fun install(
         config: BillKitConfig = BillKitConfig(),
         sink: BillSink,
@@ -73,6 +82,7 @@ object BillKit {
     fun reset() {
         lastSeen.clear()
         lastAcceptedAt = 0L
+        lastDraftPage = null
     }
 
     /** 主入口：一屏文本进去，命中草稿就回调 [sink]。返回值可直接用于调试展示。 */
@@ -109,20 +119,28 @@ object BillKit {
     }
 
     private fun dispatch(outcome: BillPipeline.Outcome, snapshot: UiSnapshot, now: Long) {
+        val page = listOf(snapshot.packageName, snapshot.items)
+        if (page != lastDraftPage) lastDraftPage = null
         when (outcome) {
             is BillPipeline.Outcome.Skipped -> {
                 DebugBus.publish(snapshot, snapshot.diagnostic("skip:${outcome.reason}"))
             }
 
             is BillPipeline.Outcome.Draft -> {
+                if (page == lastDraftPage) {
+                    DebugBus.publish(snapshot, snapshot.diagnostic("skip:same-page"))
+                    return
+                }
                 if (now - lastAcceptedAt < config.minIntervalMs) {
                     DebugBus.publish(snapshot, snapshot.diagnostic("skip:throttled"))
                     return
                 }
                 if (isDuplicate(outcome.draft.fingerprint, now)) {
+                    lastDraftPage = page
                     DebugBus.publish(snapshot, snapshot.diagnostic("skip:duplicate"))
                     return
                 }
+                lastDraftPage = page
                 lastAcceptedAt = now
                 lastSeen[outcome.draft.fingerprint] = now
                 prune(now)

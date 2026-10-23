@@ -69,7 +69,8 @@ fun BillEditorDialog(original: BillEntity?, newSource: String, newTime: Long, so
             onAmountBounds = { target = it },
             editableDetails = true,
             saveLabel = if (original == null) "记一笔" else "保存修改",
-            discardLabel = "取消",
+            ignoreLabel = "取消",
+            noteSuggestions = rememberNoteSuggestions(excludeId = original?.id),
             showImport = false,
             saving = saving,
             errorMessage = error,
@@ -94,7 +95,7 @@ fun BillEditorDialog(original: BillEntity?, newSource: String, newTime: Long, so
                 }
             },
             onImport = {},
-            onDiscard = { if (!operation.saving) onClose() },
+            onIgnore = { if (!operation.saving) onClose() },
         )
         val destination = target
         if (sourceAmountBounds != null && destination != null && progress.value < 1f) {

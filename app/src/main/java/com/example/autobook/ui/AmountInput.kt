@@ -31,6 +31,12 @@ internal fun parseAmountCents(text: String): Long? {
     return cents
 }
 
+/**
+ * 确认卡金额框的初始文本：新建（0 分）留空，让 `0.00` 只当占位符显示 ——
+ * 用户第一下就能直接输数字，不用先删 0.00；有真实金额时照常格式化。
+ */
+internal fun initialAmountText(cents: Long): String = if (cents <= 0L) "" else formatForInput(cents)
+
 /** 金额 → 输入框里的文本。固定两位小数、固定 `Locale.US` 的小数点。 */
 internal fun formatForInput(cents: Long): String =
     String.format(Locale.US, "%.2f", abs(cents) / 100.0)

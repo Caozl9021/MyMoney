@@ -1,6 +1,6 @@
 # AGENTS.md — AutoBook 开发与交接约定
 
-更新：2026-10-23。当前App **0.6.8 / 27，待验收**；最新计划为 [plan1.0](docs/PLAN_1.0.md)，新增功能尚未实施。版本事实与证据见 [PROGRESS](docs/PROGRESS.md)，用户操作见 [README](README.md)，构建安装见 [DEPLOYMENT](DEPLOYMENT.md)。本文件替代旧版堆叠补遗，旧版本细节保留在进度、CHANGELOG与run证据中。
+更新：2026-10-23。当前App **0.7.0 / 29，已验收（2026-10-23用户验收通过）**（plan1.0批次1紧凑确认卡）；0.6.9/28（批次0：F9/F16/F17）已经用户真机验收。最新计划为 [plan1.0](docs/PLAN_1.0.md)，批次2起尚未实施。版本事实与证据见 [PROGRESS](docs/PROGRESS.md)，用户操作见 [README](README.md)，构建安装见 [DEPLOYMENT](DEPLOYMENT.md)。本文件替代旧版堆叠补遗，旧版本细节保留在进度、CHANGELOG与run证据中。
 
 ## 1. 产品与边界
 
@@ -29,7 +29,7 @@ Android本地自动记账：读取用户当前支付/购物页面文本，经规
 | billkit | `BillKit.kt`接收`UiSnapshot`，节流/去重/诊断；`PageClassifier`→`AmountParser`→`FieldExtractor`→`BillPipeline`；`TextCollector`采集并报告截断 |
 | app装配 | `App.kt`装配规则推荐/备注/投递；`CaptureModeManager`统一模式、总开关和起停 |
 | 采集 | `capture/BillAccessibilityService`和`AccessibilityCaptureSchedule`；Root路径`root/RootForegroundService`→`RootWatcher` |
-| 确认投递 | `capture/ConfirmDelivery`优先`overlay/ConfirmOverlay`，Activity兜底，失败保留待确认并通知；`ui/ConfirmSheet`共用UI |
+| 确认投递 | `capture/ConfirmDelivery`优先`overlay/ConfirmOverlay`，Activity兜底，失败保留待确认并通知；`ui/ConfirmSheet`共用UI；只有「忽略」会丢弃草稿，dismiss（下滑/点空白/返回/熄屏）放回待确认；备注建议由`data/NoteSuggester`本地计算 |
 | 存储 | `data/Bill.kt` Room v2，保留MIGRATION_1_2；`BillWriter`唯一写入/更新与落库前查重；`PendingStore`最多20条草稿，不是识别历史 |
 | 本地规则 | `LedgerConfig`、`CategorySuggester`及规则相关文件，独立分类/账户来源、JSON覆盖、餐段、手动与频次学习；用例见本地规则文档 |
 | 备份/导出 | `Backup`/`BackupStore`、`MiniJson`，iCost `export/CostCsv`/`CostShare`/`ExportRange` |
@@ -48,7 +48,7 @@ Android本地自动记账：读取用户当前支付/购物页面文本，经规
 - 退款为独立REFUND；结余=收入−原支出+退款，转账不算收支；iCost模板不支持退款，含退款明确阻止导出。禁止回写历史收入假装退款已迁移。
 - 无障碍窗口120ms，内容600ms且最长等待1秒，根不可用只重试一次400ms；这些是策略期限而非实测弹框总时延。微信极简成功页已有严格规则/转录回归，实际付款瞬间采集与投递仍需真机验证。
 - 无障碍守护30秒巡检，DISABLED连续2次、UNBOUND连续4次提醒；不能阻止LMK或自动修复授权。LSP有四种候选Hook签名，killApplication重载为兼容回退，不应称四处始终同时注册，无PowerManagerService Hook。
-- 新增紧凑确认卡/分类手势与排序/备注气泡、周月图表、识别历史、账单操作页均为**plan1.0待做**。旧待办逐项状态只维护plan1.0，避免重复漂移。
+- 紧凑确认卡、排序、备注气泡已在0.7.0实施并经用户验收；分类长按手势、周月图表、识别历史、账单操作页为**plan1.0待做**。旧待办逐项状态只维护plan1.0，避免重复漂移。
 
 ## 5. 环境、测试与签名
 
@@ -64,7 +64,7 @@ source ~/opt/autobook-env.sh
 
 签名配置由Gradle从`~/.autobook-keys/keystore.properties`读取；缺失时release为unsigned，不能误交付。备份外部密钥及配置但不要把口令写进文档/日志/版本库。release证书与历史一致才能覆盖安装；debug与release不同签名，不能直接互相覆盖，避免卸载丢数据。
 
-最新221单测/24类全绿、双构建与26资源/签名/版本证据：`runs/20261023-092336-brand-jpg-wechat-release/`。完整TalkBack、低API、锁屏安全、Root功耗/启动恢复、LSP真机拦截和真实微信支付尚有证据缺口，见TEST_REPORT。
+最新237单测/27类全绿、双构建、签名/版本及API35批次1交互证据：`runs/20261023-150000-compact-confirm/`（批次0回放见`runs/20261023-140000-batch0-fix/`，0.6.8资源见`runs/20261023-092336-brand-jpg-wechat-release/`）。`BillKit`同页记忆返回`skip:same-page`，排查漏报时它代表“同一屏已经出过草稿”，不是规则未命中。完整TalkBack、低API、锁屏安全、Root功耗/启动恢复、LSP真机拦截和真实微信支付尚有证据缺口，见TEST_REPORT。
 
 ## 6. 易错点与修改约束
 
