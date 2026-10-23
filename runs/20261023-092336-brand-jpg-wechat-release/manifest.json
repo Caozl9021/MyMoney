@@ -1,0 +1,23 @@
+{
+  "startedAt": "2026-10-23T09:23:36.216174+08:00",
+  "gitCommit": null,
+  "version": "0.6.8",
+  "versionCode": 27,
+  "input": {
+    "path": "Auto.jpg",
+    "sha256": "4cd027395b75bab78a57454541af422d59f3efd1c4a1106d1fae62ff8f5a5e22"
+  },
+  "captureMode": "ACCESSIBILITY",
+  "status": "verified-awaiting-user-acceptance",
+  "previousCandidateRun": "20261023-091258-brand-wechat-fix",
+  "environment": "Linux/JDK17/Android35; OpenSpec CLI unavailable",
+  "deliveryStatus": "待验收",
+  "finishedAt": "2026-10-23T09:27:23.756416+08:00",
+  "tests": {
+    "total": 221,
+    "classes": 24,
+    "failures": 0
+  },
+  "verification": "outputs/verification.md",
+  "brandRun": "20261023-092349-jpg-brand-icons"
+}

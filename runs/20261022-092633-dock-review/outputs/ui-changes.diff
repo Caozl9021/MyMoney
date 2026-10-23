@@ -1,0 +1,693 @@
+diff -ru /tmp/autobook-dock-before/ui/LedgerConfigCard.kt app/src/main/java/com/example/autobook/ui/LedgerConfigCard.kt
+--- /tmp/autobook-dock-before/ui/LedgerConfigCard.kt	2026-10-21 16:00:24.176111998 +0800
++++ app/src/main/java/com/example/autobook/ui/LedgerConfigCard.kt	2026-10-22 09:27:14.514054588 +0800
+@@ -17,6 +17,7 @@
+ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.getValue
+ import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.saveable.rememberSaveable
+ import androidx.compose.runtime.remember
+ import androidx.compose.runtime.setValue
+ import androidx.compose.ui.Alignment
+@@ -53,10 +54,10 @@
+     initialTab: Int = 0,
+ ) {
+     val p = LocalAbPalette.current
+-    var tab by remember { mutableStateOf(initialTab) }          // 0 支出 1 收入
+-    var openGroup by remember { mutableStateOf<String?>(null) } // 非空 = 在二级页
++    var tab by rememberSaveable { mutableStateOf(initialTab) }          // 0 支出 1 收入
++    var openGroup by rememberSaveable { mutableStateOf<String?>(null) } // 非空 = 在二级页
+     var version by remember { mutableStateOf(0) }               // 强制重读清单
+-    var newGroup by remember { mutableStateOf("") }
++    var newGroup by rememberSaveable { mutableStateOf("") }
+ 
+     val groups = remember(version, tab) {
+         if (tab == 0) LedgerConfig.expenseGroups else LedgerConfig.incomeGroups
+@@ -200,7 +201,7 @@
+     onChanged: () -> Unit,
+ ) {
+     val p = LocalAbPalette.current
+-    var draft by remember { mutableStateOf("") }
++    var draft by rememberSaveable { mutableStateOf("") }
+ 
+     // 父级可能已被删掉，重新读一次保证 subs 是最新的
+     val fresh = remember(group.name, version) {
+@@ -294,7 +295,7 @@
+ @Composable
+ private fun AccountsSection(version: Int, onChanged: () -> Unit) {
+     val p = LocalAbPalette.current
+-    var draft by remember { mutableStateOf("") }
++    var draft by rememberSaveable { mutableStateOf("") }
+     val accounts = remember(version) { LedgerConfig.accounts }
+ 
+     Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
+diff -ru /tmp/autobook-dock-before/ui/MainActivity.kt app/src/main/java/com/example/autobook/ui/MainActivity.kt
+--- /tmp/autobook-dock-before/ui/MainActivity.kt	2026-10-21 23:39:49.506634009 +0800
++++ app/src/main/java/com/example/autobook/ui/MainActivity.kt	2026-10-22 09:30:38.735997125 +0800
+@@ -19,8 +19,6 @@
+ import androidx.compose.foundation.background
+ import androidx.compose.foundation.layout.Box
+ import androidx.compose.foundation.layout.fillMaxSize
+-import androidx.compose.foundation.layout.navigationBarsPadding
+-import androidx.compose.foundation.layout.padding
+ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.MutableIntState
+ import androidx.compose.runtime.getValue
+@@ -28,7 +26,7 @@
+ import androidx.compose.runtime.mutableStateOf
+ import androidx.compose.runtime.remember
+ import androidx.compose.runtime.setValue
+-import androidx.compose.ui.Alignment
++import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.platform.ComposeView
+ import androidx.compose.ui.platform.LocalContext
+@@ -36,11 +34,11 @@
+ import androidx.core.view.ViewCompat
+ import androidx.core.view.WindowInsetsCompat
+ import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import com.example.autobook.R
+ import com.example.autobook.data.AppDb
+ import com.example.autobook.ui.design.AbIcons
+ import com.example.autobook.ui.design.AbMotion
+ import com.example.autobook.ui.design.AbSize
+-import com.example.autobook.ui.design.AbSpacing
+ import com.example.autobook.ui.design.LocalAbPalette
+ import com.example.autobook.ui.design.LiquidTabBar
+ import com.example.autobook.ui.design.TabItem
+@@ -82,6 +80,7 @@
+             ),
+         )
+         super.onCreate(savedInstanceState)
++        tabState.intValue = savedInstanceState?.getInt("selectedTab", 0)?.coerceIn(tabs.indices) ?: 0
+         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+             window.isNavigationBarContrastEnforced = false
+         }
+@@ -93,6 +92,7 @@
+         val root = FrameLayout(this)
+ 
+         val contentView = ComposeView(this).apply {
++            id = R.id.main_content
+             setViewCompositionStrategy(
+                 ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed,
+             )
+@@ -126,6 +126,7 @@
+             val bottom = (16f * density).toInt()
+ 
+             val fallbackBar = ComposeView(this).apply {
++                id = R.id.dock_tabs
+                 setViewCompositionStrategy(
+                     ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed,
+                 )
+@@ -140,7 +141,7 @@
+                 }
+             }
+             // 假玻璃兜底的胶囊阴影：View 级 elevation（ComposeView 自己画的内容
+-            // 不会带投影，所以挂在外层 FrameLayout 上）。真玻璃那边同样用 View 级 elevation。
++            // 不会带投影，所以挂在外层 FrameLayout 上）。真玻璃则使用独立的位图阴影层。
+             fallbackBar.elevation = 12f * density
+             fallbackBar.outlineProvider = object : android.view.ViewOutlineProvider() {
+                 override fun getOutline(view: android.view.View, outline: android.graphics.Outline) {
+@@ -176,6 +177,11 @@
+ 
+         setContentView(root)
+     }
++
++    override fun onSaveInstanceState(outState: Bundle) {
++        outState.putInt("selectedTab", tabState.intValue)
++        super.onSaveInstanceState(outState)
++    }
+ }
+ 
+ private val tabs = listOf(
+@@ -190,6 +196,7 @@
+     val context = LocalContext.current
+     val p = LocalAbPalette.current
+     val tab = tabState.intValue
++    val tabStates = rememberSaveableStateHolder()
+ 
+     // 上一次切换方向：向右点 = 新页从右进；向左点 = 新页从左进。
+     var forward by remember { mutableStateOf(true) }
+@@ -222,15 +229,17 @@
+             label = "tabSwitch",
+             modifier = Modifier.fillMaxSize(),
+         ) { current ->
+-            when (current) {
+-                0 -> HomeScreen(
+-                    bills = bills,
+-                    onSeeAll = { tabState.intValue = 1 },
+-                    onOpenSettings = { tabState.intValue = 3 },
+-                )
+-                1 -> BillsScreen(bills = bills)
+-                2 -> StatsScreen(bills = bills)
+-                else -> SettingsScreen()
++            tabStates.SaveableStateProvider(current) {
++                when (current) {
++                    0 -> HomeScreen(
++                        bills = bills,
++                        onSeeAll = { tabState.intValue = 1 },
++                        onOpenSettings = { tabState.intValue = 3 },
++                    )
++                    1 -> BillsScreen(bills = bills)
++                    2 -> StatsScreen(bills = bills)
++                    else -> SettingsScreen()
++                }
+             }
+         }
+     }
+diff -ru /tmp/autobook-dock-before/ui/Theme.kt app/src/main/java/com/example/autobook/ui/Theme.kt
+--- /tmp/autobook-dock-before/ui/Theme.kt	2026-10-21 22:53:36.814828377 +0800
++++ app/src/main/java/com/example/autobook/ui/Theme.kt	2026-10-22 09:30:38.736136530 +0800
+@@ -62,7 +62,7 @@
+ ) {
+     val context = LocalContext.current
+     // 跟随系统强调色（Android 12+ 从壁纸取色）；取不到就用品牌薄荷绿。
+-    // 只换 accent / onAccent / tabIndicator / 玻璃描边，中性色不动。
++    // 只换 accent / onAccent / 玻璃描边，中性色和 Tab 选中块不动。
+     val basePalette = if (darkTheme) DarkPalette else LightPalette
+     val palette = remember(darkTheme, context) {
+         SystemAccent.apply(context, basePalette, darkTheme)
+diff -ru /tmp/autobook-dock-before/ui/design/Chrome.kt app/src/main/java/com/example/autobook/ui/design/Chrome.kt
+--- /tmp/autobook-dock-before/ui/design/Chrome.kt	2026-10-22 00:05:45.228653152 +0800
++++ app/src/main/java/com/example/autobook/ui/design/Chrome.kt	2026-10-22 09:27:48.956286740 +0800
+@@ -6,6 +6,9 @@
+ import androidx.compose.animation.core.spring
+ import androidx.compose.animation.core.tween
+ import androidx.compose.foundation.background
++import androidx.compose.foundation.selection.selectable
++import androidx.compose.foundation.selection.selectableGroup
++import androidx.compose.ui.semantics.Role
+ import androidx.compose.foundation.clickable
+ import androidx.compose.foundation.interaction.MutableInteractionSource
+ import androidx.compose.foundation.layout.Arrangement
+@@ -20,11 +23,6 @@
+ import androidx.compose.foundation.layout.height
+ import androidx.compose.foundation.layout.padding
+ import androidx.compose.ui.unit.Dp
+-import kotlinx.coroutines.launch
+-import androidx.compose.runtime.LaunchedEffect
+-import androidx.compose.animation.core.VectorConverter
+-import androidx.compose.animation.core.LinearEasing
+-import androidx.compose.animation.core.Animatable
+ import androidx.compose.foundation.layout.width
+ import androidx.compose.foundation.layout.size
+ import androidx.compose.foundation.layout.offset
+@@ -44,8 +42,6 @@
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.platform.LocalDensity
+ import androidx.compose.ui.unit.IntOffset
+-import androidx.compose.ui.graphics.TransformOrigin
+-import androidx.compose.ui.graphics.graphicsLayer
+ import androidx.compose.ui.draw.alpha
+ import androidx.compose.ui.draw.clip
+ import androidx.compose.ui.draw.clipToBounds
+@@ -169,7 +165,7 @@
+ /**
+  * 底部悬浮胶囊 Tab 栏（API < 33 的假玻璃兜底）：半透明玻璃、内容从它下面穿过。
+  *
+- * 悬浮感靠两层：`GlassSurface` 的投影（玻璃强度越高越明显）+ 这里的强调阴影。
++ * 宿主负责左右边距和 View 投影，此处只提供胶囊背景及四个入口。
+  */
+ @Composable
+ fun LiquidTabBar(
+@@ -178,13 +174,11 @@
+     onSelect: (Int) -> Unit,
+     modifier: Modifier = Modifier,
+ ) {
+-    val p = LocalAbPalette.current
+     if (items.isEmpty()) return
+ 
+     GlassSurface(
+         modifier = modifier
+             .fillMaxWidth()
+-            .padding(horizontal = 50.dp)
+             .height(AbSize.tabBarHeight),
+         shape = RoundedCornerShape(AbRadius.capsule),
+         content = {
+@@ -216,103 +210,37 @@
+     if (items.isEmpty()) return
+     val haptic = rememberAbHaptic()
+ 
+-    // 选中块的水平位置、以及它在"切换瞬间被挤扁"的程度。
+-    // 这两个必须一起驱动：只挪位是平移感，加一点横向挤压再弹回才是 duang。
+-    val colors = p
+-    BoxWithConstraints(modifier.fillMaxSize()) {
+-        val count = items.size
+-        // 选中色块与大 dock 内缘的间距：四边统一用 inset（首/末块到圆头、上下到胶囊边）。
+-        // 色块之间不额外留缝 —— 四块把"可用宽"完整均分。
+-        // inset 调小 = 色块往外扩；只要宽度仍大于高度，RoundedCornerShape(percent=50)
+-        // 就还是横向胶囊，不会退化成圆角方块。
++    // 选中块、点击区域与内容共用同一套等分网格。
++    BoxWithConstraints(modifier.fillMaxSize().selectableGroup()) {
+         val inset = 6.dp
+-        // 色块与图标用**两套独立网格**（反复返工后的结论）：
+-        //   色块：铺满胶囊内缘（左右各留 inset），四块之间不留缝 —— 割裂感消失，
+-        //         滑块滑动时是一整块灰胶囊在动。
+-        //   图标：在色块区基础上再往里各收 iconGap，四格等分，中心仍等距、
+-        //         仍关于屏幕中线对称。
+-        // 之前把两者绑在同一个 cellW 上，结果是「要么色块贴不满、要么图标被推到边上」。
+-        val blobGap = 0.dp
+-        val blobW = ((maxWidth - inset * 2 - blobGap * (count - 1)) / count)
+-            .coerceAtLeast(1.dp)
+-        val startPad = inset
+-        val iconGap = 10.dp
+-        val cellGap = 0.dp
+-        val cellW = ((maxWidth - (inset + iconGap) * 2 - cellGap * (count - 1)) / count)
+-            .coerceAtLeast(1.dp)
+-        // 色块高度：胶囊高减去上下 inset。图标 + 文字现在整体居中，
+-        // 色块仍然包住这一格的全部内容（图标和标题都在块内）。
+-        val blobH = (maxHeight - inset * 2).coerceAtLeast(1.dp)
+-        val step = blobW + blobGap
+-
+-        // 位置用“第几格”表示，切换时插值 —— 比 animateDpAsState 更好控回弹
+-        val pos = remember { Animatable(selected.toFloat()) }
+-        val squash = remember { Animatable(1f) }
+-        LaunchedEffect(selected) {
+-            // 先挤扁再弹回：两段 spring 串行，中间那一帧的形变就是"duang"
+-            launch {
+-                squash.animateTo(
+-                    0.80f,
+-                    animationSpec = tween(70, easing = LinearEasing),
+-                )
+-                squash.animateTo(
+-                    1f,
+-                    animationSpec = spring(dampingRatio = 0.38f, stiffness = 300f),
+-                )
+-            }
+-            pos.animateTo(
+-                selected.toFloat(),
+-                animationSpec = spring(dampingRatio = 0.55f, stiffness = 380f),
+-            )
+-        }
+-        LaunchedEffect(Unit) { pos.snapTo(selected.toFloat()) }
+-
+-        // 关键：Blob 只做平移+缩放，尺寸恒为 blobW。
+-        // 之前把 `width(blobW * squash)` 和 `offset(x)` 写在同一个 Modifier 链上，
+-        // 父级是 loose 约束，宽度一缩锚点就跟着动，整块会左右乱跳。
++        val cellW = ((maxWidth - inset * 2) / items.size).coerceAtLeast(1.dp)
++        val cellH = (maxHeight - inset * 2).coerceAtLeast(1.dp)
++        val pos by animateFloatAsState(
++            targetValue = selected.toFloat(),
++            animationSpec = spring(dampingRatio = 0.9f, stiffness = 500f),
++            label = "tabIndicatorPosition",
++        )
+         Box(
+             Modifier
+-                .offset {
+-                    IntOffset(
+-                        (startPad + step * pos.value).roundToPx(),
+-                        inset.roundToPx(),
+-                    )
+-                }
+-                .width(blobW)
+-                .height(blobH)
+-                .align(Alignment.TopStart)
+-                .graphicsLayer {
+-                    // 挤压用 scaleX，不改变布局尺寸，锚点在块中心，天然对称
+-                    scaleX = squash.value
+-                    transformOrigin = TransformOrigin.Center
+-                }
++                .offset { IntOffset((inset + cellW * pos).roundToPx(), inset.roundToPx()) }
++                .width(cellW)
++                .height(cellH)
+                 .clip(RoundedCornerShape(percent = 50))
+-                // 选中块的灰：比通用 fill 再深一档，否则在玻璃上几乎看不见。
+-                // 刻意不用 accent —— 强调色留给别的信息，Tab 只需要位置感。
+-                .background(colors.tabIndicator),
++                .background(p.tabIndicator),
+         )
+-
+-        // 图标压在色块中心上：格子宽 = cellW，起点 = inset + iconGap，
+-        // 四格等分色块区的内部宽。色块中心 = inset + blobW*(i+0.5)，
+-        // 格子中心 = inset + iconGap + cellW*(i+0.5)，两者只在 iconGap=0 时重合，
+-        // 所以图标会落在色块中心偏内一点点 —— 4 格时最外侧偏差 iconGap/2≈5dp，
+-        // 视觉上反而是好的（两侧图标不贴圆头）。
+-        Row(
+-            Modifier
+-                .fillMaxSize()
+-                .padding(start = inset + iconGap),
+-            horizontalArrangement = Arrangement.spacedBy(cellGap),
+-        ) {
++        Row(Modifier.fillMaxSize().padding(horizontal = inset)) {
+             items.forEachIndexed { index, item ->
+                 TabCell(
+                     item = item,
+                     active = index == selected,
+-                    inactive = p.tertiaryLabel,
++                    inactive = p.secondaryLabel,
+                     selectedColor = p.label,
+-                    modifier = Modifier.width(cellW).fillMaxHeight(),
++                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                     onSelect = {
+-                        haptic.tick()
+-                        onSelect(index)
++                        if (index != selected) {
++                            haptic.tick()
++                            onSelect(index)
++                        }
+                     },
+                 )
+             }
+@@ -329,10 +257,10 @@
+     modifier: Modifier = Modifier,
+     onSelect: () -> Unit,
+ ) {
+-    // 选中时图标放大一点：配合滑块的回弹一起"起跳"
++    // 轻微放大，不改变格子和标签的布局。
+     val iconSize by animateDpAsState(
+         targetValue = if (active) 25.dp else 22.dp,
+-        animationSpec = spring(dampingRatio = 0.40f, stiffness = 340f),
++        animationSpec = spring(dampingRatio = 1f, stiffness = 500f),
+         label = "tabIconSize",
+     )
+     val fg by animateColorAsState(
+@@ -342,7 +270,9 @@
+     )
+     Column(
+         modifier = modifier
+-            .clickable(
++            .selectable(
++                selected = active,
++                role = Role.Tab,
+                 interactionSource = remember { MutableInteractionSource() },
+                 indication = null,
+                 onClick = onSelect,
+@@ -350,16 +280,18 @@
+         horizontalAlignment = Alignment.CenterHorizontally,
+         verticalArrangement = Arrangement.Center,
+     ) {
+-        Icon(
+-            imageVector = item.icon,
+-            contentDescription = null,
+-            modifier = Modifier.size(iconSize),
+-            tint = fg,
+-        )
++        Box(Modifier.size(26.dp), contentAlignment = Alignment.Center) {
++            Icon(
++                imageVector = item.icon,
++                contentDescription = null,
++                modifier = Modifier.size(iconSize),
++                tint = fg,
++            )
++        }
+         Spacer(Modifier.height(3.dp))
+         Text(
+             text = item.label,
+-            style = AbType.caption2,
++            style = AbType.caption1,
+             color = fg,
+             maxLines = 1,
+         )
+diff -ru /tmp/autobook-dock-before/ui/design/LiquidGlassTabBar.kt app/src/main/java/com/example/autobook/ui/design/LiquidGlassTabBar.kt
+--- /tmp/autobook-dock-before/ui/design/LiquidGlassTabBar.kt	2026-10-21 23:39:49.506816421 +0800
++++ app/src/main/java/com/example/autobook/ui/design/LiquidGlassTabBar.kt	2026-10-22 09:30:38.735771494 +0800
+@@ -1,38 +1,31 @@
+ package com.example.autobook.ui.design
+ 
+ import android.annotation.SuppressLint
++import android.content.Context
++import android.graphics.Bitmap
++import android.graphics.BlurMaskFilter
++import android.graphics.Canvas
++import android.graphics.Color
++import android.graphics.Paint
++import android.graphics.PorterDuff
++import android.graphics.PorterDuffXfermode
++import android.graphics.RectF
+ import android.os.Build
+-import android.util.TypedValue
+ import android.view.Gravity
+ import android.view.View
+ import android.view.ViewGroup
+ import android.widget.FrameLayout
+ import androidx.activity.ComponentActivity
+-import androidx.compose.foundation.background
+-import androidx.compose.foundation.border
+-import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.isSystemInDarkTheme
+ import androidx.compose.foundation.layout.fillMaxSize
+-import androidx.compose.foundation.shape.RoundedCornerShape
+ import androidx.compose.runtime.MutableIntState
+ import androidx.compose.runtime.SideEffect
+ import androidx.compose.ui.Modifier
+-import androidx.compose.ui.graphics.nativeCanvas
+-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+-import androidx.compose.ui.graphics.drawscope.Stroke
+-import androidx.compose.ui.graphics.BlendMode
+-import androidx.compose.ui.draw.drawWithCache
+-import androidx.compose.ui.graphics.Color
+-import androidx.compose.ui.geometry.Size
+-import androidx.compose.ui.geometry.Offset
+-import androidx.compose.ui.geometry.CornerRadius
+-import androidx.compose.ui.draw.drawBehind
+-import androidx.compose.foundation.layout.padding
+-import androidx.compose.foundation.layout.Spacer
+ import androidx.compose.ui.platform.ComposeView
+ import androidx.compose.ui.platform.ViewCompositionStrategy
+-import androidx.compose.ui.unit.dp
+ import androidx.core.view.ViewCompat
+ import androidx.core.view.WindowInsetsCompat
++import com.example.autobook.R
+ import com.example.autobook.ui.AutoBookTheme
+ import com.qmdeve.liquidglass.widget.LiquidGlassView
+ 
+@@ -44,10 +37,10 @@
+  * 与 R/G/B 分离（色散）。所以采样源必须与玻璃**互为兄弟节点** —— 玻璃若长在被采样的
+  * 子树里，就会把自己也录进去，形成无限反馈。
+  *
+- * 于是这里手搓三层：
++ * 内容采样与 dock 分开：
+  * 1. `source`：整页内容（Activity 里的 ComposeView），只当采样源；
+  * 2. [LiquidGlassView]：胶囊本体，`bind(source)`，负责真实折射 / 色散 / 霜化；
+- * 3. 一个小的 ComposeView：只画四个 Tab 图标，透明背景压在玻璃上面，保持锐利。
++ * 3. 独立阴影 View 与透明 ComposeView：阴影在玻璃下，图标和标签在玻璃上。
+  *
+  * 因为库只在 API 33+ 建 impl（更低版本只剩一个透明壳），调用方必须先问
+  * [supportsLiquidGlass]，为 false 时退回 Compose 假玻璃 [LiquidTabBar]。
+@@ -63,10 +56,7 @@
+ 
+     private val glass = LiquidGlassView(activity)
+ 
+-    private val overlay = ComposeView(activity)
+-
+-    /** 画悬浮阴影用的一层（不参与玻璃采样） */
+-    private lateinit var shadowView: ComposeView
++    private val overlay = ComposeView(activity).apply { id = R.id.dock_tabs }
+ 
+     private val density = resources.displayMetrics.density
+ 
+@@ -76,11 +66,8 @@
+     /** 距屏幕底边 16dp，导航条 inset 在运行时再叠加 */
+     private val baseBottomPx = (16f * density).toInt()
+ 
+-    /**
+-     * 阴影画笔画到轮廓外多远（px）。**只影响画笔，不再影响布局** ——
+-     * 容器与胶囊始终保持原始尺寸，胶囊不能因为要画阴影而被撑大。
+-     */
+-    private val shadowBleedPx = (7f * density).toInt()
++    // 6dp 模糊及 2dp 下移的尾部有完整透明空间，胶囊本身尺寸不变。
++    private val shadowBleedPx = (18f * density).toInt()
+ 
+     private val barHeightPx = AbSize.tabBarHeight.value * density
+ 
+@@ -107,81 +94,10 @@
+         glass.setDraggableEnabled(false)
+         glass.setElasticEnabled(false)
+         glass.setTouchEffectEnabled(false)
+-        // 注意：这里**不能**给 glass 设 View 级 elevation。
+-        // LiquidGlassView 没有 background，ViewOutlineProvider.BACKGROUND 取不到轮廓，
+-        // 设了 elevation 也是零阴影；自定义 ViewOutlineProvider 又会被 AGSL 采样进去，
+-        // 变成玻璃里的一块黑斑。悬浮阴影因此放在 overlay 这个不参与采样的 ComposeView 里，
+-        // 用 drawBehind 画在玻璃**下面**（见下）。
+-        // 阴影层：**严格沿胶囊轮廓**的一圈外投影。
+-        //
+-        // 关键约束（都是实测踩出来的）：
+-        // 1) 不能给 glass 设 View elevation —— LiquidGlassView 没有 background，
+-        //    默认 ViewOutlineProvider 取不到轮廓，阴影恒为零；自定义 provider 的
+-        //    Outline 又会被库的 AGSL 采样进去，在玻璃里变成一块黑斑。
+-        // 2) 不能把阴影画在玻璃**内部** —— 库会把胶囊矩形 clip 出来单独渲染，
+-        //    内部画的东西全被它自己盖掉，只剩边缘一两个像素。
+-        // 3) 超出 View 自身 bounds 的绘制**不参与合成**（clipChildren=false 也没用），
+-        //    所以容器四周留一圈 shadowBleedPx，玻璃/图标再用同样的 margin 缩回原位，
+-        //    **视觉上胶囊尺寸完全不变**，多出来的只是给阴影用的透明边距。
+-        //
+-        // 画法：沿轮廓画两条极细的 stroke，各自带一个大的 BlurMaskFilter。
+-        // 最终效果完全由轮廓形状决定 —— 圆角处自然收窄、直边处自然铺开，
+-        // 不会像"画个圆角矩形再模糊"那样在边缘留下生硬的直边。
+-        shadowView = ComposeView(activity).apply {
+-            setViewCompositionStrategy(
+-                ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed,
+-            )
+-            setContent {
+-                AutoBookTheme {
+-                    androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+-                        // 胶囊是"直边 + 两端半圆"— 这里的 r = height/2 会让
+-                        // drawRoundRect 的四角半径都被夹到 height/2，左右两端自然是半圆。
+-                        //
+-                        // 关键：**只用一层实心圆角矩形去模糊**，绝不用 stroke，也绝不叠加
+-                        // 多条不同尺寸的矩形。stroke 在圆头两端会变成平口，叠多条会在
+-                        // 圆角外侧叠出方形边界 —— 看起来就是"矩形阴影包着圆角胶囊"。
+-                        //
+-                        // 做法：整块胶囊实心填 → 用 BlurMaskFilter 模糊 → 再挖掉轮廓内侧。
+-                        // 模糊只作用在圆形轮廓上，外缘必然是圆润的胶囊形状。
+-                        val bleed = shadowBleedPx.toFloat()
+-                        val capsule = android.graphics.RectF(
+-                            bleed,
+-                            bleed,
+-                            size.width - bleed,
+-                            size.height - bleed,
+-                        )
+-                        val r = capsule.height() / 2f
+-                        drawIntoCanvas { canvas ->
+-                            val nc = canvas.nativeCanvas
+-                            // 挖掉轮廓内侧：模糊光晕必须能**完整地**铺到胶囊外面，
+-                            // 不能先用 clipRect 把画布裁掉 —— 那样会在轮廓上切出一条
+-                            // 硬直线，看起来就是"方角/矩形阴影"。正确做法是在 Paint 上
+-                            // 用 PathEffect-free 的 XOR 合成：先画整块模糊胶囊，
+-                            // 再用 PorterDuff.CLEAR 把胶囊矩形内的像素抹掉。
+-                            val save = nc.save()
+-                            // ① 画整块模糊胶囊（含内侧，稍后抹掉）
+-                            nc.save()
+-                            nc.translate(0f, 2.dp.toPx())
+-                            nc.drawRoundRect(capsule, r, r, softFill(alpha = 60, blurPx = 6.dp.toPx()))
+-                            nc.restoreToCount(save)
+-                            // ② 抹掉胶囊内侧（含其模糊渗入部分的一半，让边缘过渡自然）
+-                            val clear = android.graphics.Paint().apply {
+-                                isAntiAlias = true
+-                                xfermode = android.graphics.PorterDuffXfermode(
+-                                    android.graphics.PorterDuff.Mode.CLEAR,
+-                                )
+-                                style = android.graphics.Paint.Style.FILL
+-                            }
+-                            nc.drawRoundRect(capsule, r, r, clear)
+-                            nc.restoreToCount(save)
+-                        }
+-                    }
+-                }
+-            }
+-        }
+-        // 阴影层必须垫在玻璃**下面**：把 glass 挪到最上层之上不行（会破坏采样），
+-        // 所以按 阴影(0) → 玻璃(1) → 图标(2) 的顺序挂。
+-        addView(shadowView, 0, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
++        // 阴影只在自己的软件位图内模糊、挖空，再作为独立兄弟层合成。
++        // CLEAR 不接触屏幕画布，硬件 Canvas 也无需支持 BlurMaskFilter。
++        val shadowView = CapsuleShadowView(activity, shadowBleedPx)
++        addView(shadowView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+         addView(
+             glass,
+             1,
+@@ -198,8 +114,16 @@
+         )
+         overlay.setContent {
+             AutoBookTheme {
+-                // 玻璃参数固定在构造函数里（v0.5.4 的取值），不再做运行时强度插值。
+-                // 边框一律不画：真玻璃靠折射和高光自身就能分界，加描边反而显得像"卡片贴图"。
++                // 黑色空白内容没有折射明暗差，补少量中性底色让胶囊仍可辨。
++                // 仅底色随主题切换，折射、色散与模糊始终保持固定值。
++                val dark = isSystemInDarkTheme()
++                val tint = LocalAbPalette.current.cardBg
++                SideEffect {
++                    glass.setTintColorRed(tint.red)
++                    glass.setTintColorGreen(tint.green)
++                    glass.setTintColorBlue(tint.blue)
++                    glass.setTintAlpha(if (dark) 0.65f else 0f)
++                }
+                 LiquidTabCells(
+                     items = items,
+                     selected = tabState.intValue,
+@@ -260,33 +184,41 @@
+ ): LiquidGlassTabBar? =
+     if (supportsLiquidGlass()) LiquidGlassTabBar(activity, source, tabState, items, onSelect) else null
+ 
+-/** dp → px 的独立换算（不在 Composable 作用域里时用）。 */
+-internal fun Float.dpToPx(density: Float): Int =
+-    TypedValue.applyDimension(
+-        TypedValue.COMPLEX_UNIT_DIP,
+-        this,
+-        android.util.DisplayMetrics().also { it.density = density },
+-    ).toInt()
+-
+-/** 画阴影用的模糊画笔：alpha 0~255、stroke 宽度、模糊半径都是 px。 */
+-private fun blurred(alpha: Int, strokePx: Float, blurPx: Float): android.graphics.Paint =
+-    android.graphics.Paint().apply {
+-        isAntiAlias = true
+-        color = android.graphics.Color.argb(alpha, 0, 0, 0)
+-        style = android.graphics.Paint.Style.STROKE
+-        strokeWidth = strokePx
+-        maskFilter = android.graphics.BlurMaskFilter(blurPx, android.graphics.BlurMaskFilter.Blur.NORMAL)
++/** 按尺寸缓存阴影；只有尺寸变化时重画软件位图，切 Tab 不分配位图。 */
++private class CapsuleShadowView(context: Context, private val bleed: Int) : View(context) {
++    private var shadow: Bitmap? = null
++    private val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
++
++    init {
++        importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
++        isClickable = false
++        isFocusable = false
+     }
+ 
+-/** 把矩形向外扩 pad（用于画"贴着轮廓外侧"的阴影）。 */
+-private fun inflate(src: android.graphics.RectF, pad: Float): android.graphics.RectF =
+-    android.graphics.RectF(src.left - pad, src.top - pad, src.right + pad, src.bottom + pad)
+-
+-/** 实心圆角矩形 + 模糊的画笔（阴影专用）：轮廓形状决定一切，不要用 stroke。 */
+-private fun softFill(alpha: Int, blurPx: Float): android.graphics.Paint =
+-    android.graphics.Paint().apply {
+-        isAntiAlias = true
+-        color = android.graphics.Color.argb(alpha, 0, 0, 0)
+-        style = android.graphics.Paint.Style.FILL
+-        maskFilter = android.graphics.BlurMaskFilter(blurPx, android.graphics.BlurMaskFilter.Blur.NORMAL)
++    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
++        super.onSizeChanged(w, h, oldw, oldh)
++        shadow = null
++        if (w <= bleed * 2 || h <= bleed * 2) return
++        val density = resources.displayMetrics.density
++        shadow = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).also { bitmap ->
++            val canvas = Canvas(bitmap)
++            val capsule = RectF(bleed.toFloat(), bleed.toFloat(), (w - bleed).toFloat(), (h - bleed).toFloat())
++            val radius = capsule.height() / 2f
++            val blurred = Paint(Paint.ANTI_ALIAS_FLAG).apply {
++                color = Color.argb(64, 0, 0, 0)
++                maskFilter = BlurMaskFilter(6f * density, BlurMaskFilter.Blur.NORMAL)
++            }
++            val shifted = RectF(capsule).apply { offset(0f, 2f * density) }
++            canvas.drawRoundRect(shifted, radius, radius, blurred)
++            val clear = Paint(Paint.ANTI_ALIAS_FLAG).apply {
++                xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
++            }
++            canvas.drawRoundRect(capsule, radius, radius, clear)
++        }
+     }
++
++    override fun onDraw(canvas: Canvas) {
++        super.onDraw(canvas)
++        shadow?.let { canvas.drawBitmap(it, 0f, 0f, bitmapPaint) }
++    }
++}
+diff -ru /tmp/autobook-dock-before/ui/design/SystemAccent.kt app/src/main/java/com/example/autobook/ui/design/SystemAccent.kt
+--- /tmp/autobook-dock-before/ui/design/SystemAccent.kt	2026-10-21 22:41:55.464846988 +0800
++++ app/src/main/java/com/example/autobook/ui/design/SystemAccent.kt	2026-10-22 09:27:14.513647884 +0800
+@@ -12,7 +12,7 @@
+  *
+  * Android 12 起系统会从壁纸里抽出一组 tonal palette，通过
+  * `android.R.color.system_accent1_*` 暴露出来。这里取 accent1 那一组，
+- * 只替换我们自己的 `accent` / `onAccent` / `tabIndicator` / 玻璃描边，
++ * 只替换我们自己的 `accent` / `onAccent` / 玻璃描边，
+  * 中性色（页面底、卡片、分隔线）保持不动 —— 中性色一旦跟着壁纸走，
+  * 浅色界面的层级就没了。
+  *
+@@ -61,14 +61,11 @@
+         val accent = Color(if (dark) tones.c200 else tones.c400)
+         // onAccent 一律用 0 档（白），压在 accent 上都够对比
+         val onAccent = Color(tones.c0)
+-        // Tab 选中块：accent 低透明度，跟着强调色走但不抢眼
+-        val indicator = accent.copy(alpha = if (dark) 0.18f else 0.12f)
+         // 玻璃上沿描边掺一点 accent 的浅档，让玻璃边缘也带系统色
+         val strokeTint = Color(if (dark) tones.c700 else tones.c100)
+         return palette.copy(
+             accent = accent,
+             onAccent = onAccent,
+-            tabIndicator = indicator,
+             glassStrokeTop = lerp(palette.glassStrokeTop, strokeTint, 0.30f),
+         )
+     }

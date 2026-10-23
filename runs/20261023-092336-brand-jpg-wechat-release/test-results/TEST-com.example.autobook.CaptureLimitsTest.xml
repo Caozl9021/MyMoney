@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.autobook.CaptureLimitsTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-10-23T01:25:17.060Z" hostname="CaoZL" time="0.028">
+  <properties/>
+  <testcase name="legacy OCR interface retains the same normalized items" classname="com.example.autobook.CaptureLimitsTest" time="0.003"/>
+  <testcase name="BillKit annotates skipped draft duplicate and throttled diagnostics" classname="com.example.autobook.CaptureLimitsTest" time="0.019"/>
+  <testcase name="tree access budget reports incomplete traversal even without text" classname="com.example.autobook.CaptureLimitsTest" time="0.004"/>
+  <testcase name="tree never overshoots character budget with the last node" classname="com.example.autobook.CaptureLimitsTest" time="0.001"/>
+  <testcase name="tree exact limits are complete but a further distinct value is truncated" classname="com.example.autobook.CaptureLimitsTest" time="0.0"/>
+  <testcase name="OCR item and character overflow report actual loss and preserve strict bounds" classname="com.example.autobook.CaptureLimitsTest" time="0.0"/>
+  <testcase name="OCR exact limits do not imply truncation after noise and duplicates" classname="com.example.autobook.CaptureLimitsTest" time="0.0"/>
+  <testcase name="tree editable subtree stays private and does not imply truncation" classname="com.example.autobook.CaptureLimitsTest" time="0.0"/>
+  <testcase name="OCR visit cap also bounds noise and split currency lookahead" classname="com.example.autobook.CaptureLimitsTest" time="0.0"/>
+  <testcase name="tree sorting remains geometric and overlong text reports loss" classname="com.example.autobook.CaptureLimitsTest" time="0.0"/>
+  <testcase name="OCR recommendation cutoff reports omitted source text" classname="com.example.autobook.CaptureLimitsTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

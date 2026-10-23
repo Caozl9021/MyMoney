@@ -1,0 +1,28 @@
+{
+  "run_id": "20261022-235052-release-0.6.7",
+  "started_at": "2026-10-22T23:50:52.317756+08:00",
+  "status": "built-with-previous-icon-superseded",
+  "delivery_status": "待验收",
+  "commit": null,
+  "commit_note": "Project directory has no Git repository",
+  "parameters": {
+    "versionName": "0.6.7",
+    "versionCode": 26,
+    "gradle_user_home": "/tmp/autobook-icon-padding-gradle",
+    "offline": true,
+    "tests_rerun": true,
+    "release_install": false
+  },
+  "inputs": [
+    "current source tree",
+    "openspec/changes/complete-u-series T7",
+    "existing external signing configuration; credentials not recorded"
+  ],
+  "environment": {
+    "timezone": "Asia/Shanghai",
+    "jdk": "17",
+    "compileSdk": 35
+  },
+  "openspec_cli": "unavailable; manual plan review",
+  "resumeNote": "Tests and debug/release build completed; agent usage limit interrupted packaging verification/delivery. User supplied Auto.png on 2026-10-23; superseded by runs/20261023-085355-new-icon-release-0.6.7."
+}

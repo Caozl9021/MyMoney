@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.autobook.BackupTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-10-23T01:25:16.989Z" hostname="CaoZL" time="0.033">
+  <properties/>
+  <testcase name="空账单也能往返" classname="com.example.autobook.BackupTest" time="0.006"/>
+  <testcase name="不是本 App 的备份要明确报错" classname="com.example.autobook.BackupTest" time="0.006"/>
+  <testcase name="退款备份往返保留类型正金额及独立指纹" classname="com.example.autobook.BackupTest" time="0.016"/>
+  <testcase name="缺可选字段按默认值处理而不是抛异常" classname="com.example.autobook.BackupTest" time="0.0"/>
+  <testcase name="完整快照往返不丢字段" classname="com.example.autobook.BackupTest" time="0.001"/>
+  <testcase name="列表里的坏元素被跳过而不是整份失败" classname="com.example.autobook.BackupTest" time="0.0"/>
+  <testcase name="缺指纹时按 BillDraft 规则补一个" classname="com.example.autobook.BackupTest" time="0.0"/>
+  <testcase name="空分类名的组被丢弃" classname="com.example.autobook.BackupTest" time="0.0"/>
+  <testcase name="备份版本太新要提示升级而不是硬读" classname="com.example.autobook.BackupTest" time="0.003"/>
+  <testcase name="没有 bills 字段视为坏文件" classname="com.example.autobook.BackupTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

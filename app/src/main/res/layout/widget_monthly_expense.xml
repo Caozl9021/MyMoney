@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:padding="16dp"
+    android:background="@drawable/widget_background">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:gravity="center_vertical">
+        <ImageView android:layout_width="24dp" android:layout_height="24dp"
+            android:layout_marginEnd="8dp" android:src="@drawable/ic_brand_color"
+            android:scaleType="fitCenter" android:contentDescription="AutoBook" />
+        <TextView android:id="@+id/widget_month"
+            android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
+            android:text="本月原支出" android:textColor="@color/widget_secondary" android:textSize="13sp" />
+    </LinearLayout>
+    <TextView android:id="@+id/widget_amount"
+        android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
+        android:gravity="center_vertical" android:text="—" android:textColor="@color/widget_primary"
+        android:textStyle="bold" android:textSize="26sp" android:maxLines="1"
+        android:autoSizeTextType="uniform" android:autoSizeMinTextSize="16sp" android:autoSizeMaxTextSize="26sp" android:autoSizeStepGranularity="1sp" />
+    <TextView android:id="@+id/widget_add"
+        android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp"
+        android:gravity="center" android:background="@drawable/widget_add_background"
+        android:contentDescription="记一笔，打开手动记账" android:text="＋ 记一笔"
+        android:textSize="16sp" android:textColor="@color/widget_primary" />
+</LinearLayout>

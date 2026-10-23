@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "packages": ["com.eg.android.AlipayGphone", "com.mybank.android.phone"],
+      "kind": "ALIPAY_BILL",
+      "require": ["账单详情|交易详情", "支付成功|交易成功"],
+      "anyOf": [["交易单号", "订单号", "商户订单号"]],
+      "exclude": ["立即支付"],
+      "strategy": "支付宝详情"
+    }
+  ],
+  "categories": [
+    {"type":"EXPENSE", "keywords":["咖啡", "奶茶"], "category":"餐饮", "subCategory":"咖啡茶饮"}
+  ],
+  "accounts": [
+    {"type":"EXPENSE", "keywords":["微信余额", "零钱"], "account":"微信钱包", "matchMethod":true}
+  ]
+}

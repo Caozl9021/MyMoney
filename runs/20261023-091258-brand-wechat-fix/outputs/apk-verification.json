@@ -1,0 +1,210 @@
+{
+  "expectedIconResources": 26,
+  "apks": {
+    "debug": {
+      "path": "dist/AutoBook-0.6.8-debug.apk",
+      "bytes": 54951514,
+      "sha256": "e32c322f8b0e4c9ce4d6bce58c13b67ec9d1561f630e3381cd8d28484d6f9fc3",
+      "badging": "package: name='com.example.autobook' versionCode='27' versionName='0.6.8' platformBuildVersionName='15' platformBuildVersionCode='35' compileSdkVersion='35' compileSdkVersionCodename='15'",
+      "signatureVerified": true,
+      "certificateSha256": "08b0f9a09430a9f8c121402fe5774dfc978e7e28b074b42390c2a358d0566cd7",
+      "all26IconsVisibleRGBAAndAlphaMatch": true,
+      "iconPaths": {
+        "app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png": [
+          "res/mipmap-xxhdpi-v4/ic_launcher_foreground.png"
+        ],
+        "app/src/main/res/mipmap-xxhdpi/ic_launcher.png": [
+          "res/mipmap-xxhdpi-v4/ic_launcher.png",
+          "res/mipmap-xxhdpi-v4/ic_launcher_round.png"
+        ],
+        "app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png": [
+          "res/mipmap-xxhdpi-v4/ic_launcher.png",
+          "res/mipmap-xxhdpi-v4/ic_launcher_round.png"
+        ],
+        "app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png": [
+          "res/mipmap-xxxhdpi-v4/ic_launcher_foreground.png"
+        ],
+        "app/src/main/res/mipmap-xxxhdpi/ic_launcher.png": [
+          "res/mipmap-xxxhdpi-v4/ic_launcher.png",
+          "res/mipmap-xxxhdpi-v4/ic_launcher_round.png"
+        ],
+        "app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png": [
+          "res/mipmap-xxxhdpi-v4/ic_launcher.png",
+          "res/mipmap-xxxhdpi-v4/ic_launcher_round.png"
+        ],
+        "app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png": [
+          "res/mipmap-xhdpi-v4/ic_launcher_foreground.png"
+        ],
+        "app/src/main/res/mipmap-xhdpi/ic_launcher.png": [
+          "res/mipmap-xhdpi-v4/ic_launcher.png",
+          "res/mipmap-xhdpi-v4/ic_launcher_round.png"
+        ],
+        "app/src/main/res/mipmap-xhdpi/ic_launcher_round.png": [
+          "res/mipmap-xhdpi-v4/ic_launcher.png",
+          "res/mipmap-xhdpi-v4/ic_launcher_round.png"
+        ],
+        "app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png": [
+          "res/mipmap-mdpi-v4/ic_launcher_foreground.png"
+        ],
+        "app/src/main/res/mipmap-mdpi/ic_launcher.png": [
+          "res/mipmap-mdpi-v4/ic_launcher.png",
+          "res/mipmap-mdpi-v4/ic_launcher_round.png"
+        ],
+        "app/src/main/res/mipmap-mdpi/ic_launcher_round.png": [
+          "res/mipmap-mdpi-v4/ic_launcher.png",
+          "res/mipmap-mdpi-v4/ic_launcher_round.png"
+        ],
+        "app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png": [
+          "res/mipmap-hdpi-v4/ic_launcher_foreground.png"
+        ],
+        "app/src/main/res/mipmap-hdpi/ic_launcher.png": [
+          "res/mipmap-hdpi-v4/ic_launcher.png",
+          "res/mipmap-hdpi-v4/ic_launcher_round.png"
+        ],
+        "app/src/main/res/mipmap-hdpi/ic_launcher_round.png": [
+          "res/mipmap-hdpi-v4/ic_launcher.png",
+          "res/mipmap-hdpi-v4/ic_launcher_round.png"
+        ],
+        "app/src/main/res/drawable-nodpi/ic_launcher_monochrome.png": [
+          "res/drawable-nodpi-v4/ic_launcher_monochrome.png"
+        ],
+        "app/src/main/res/drawable-mdpi/ic_brand_small.png": [
+          "res/drawable-mdpi-v4/ic_brand_small.png"
+        ],
+        "app/src/main/res/drawable-mdpi/ic_brand_color.png": [
+          "res/drawable-mdpi-v4/ic_brand_color.png"
+        ],
+        "app/src/main/res/drawable-xxxhdpi/ic_brand_small.png": [
+          "res/drawable-xxxhdpi-v4/ic_brand_small.png"
+        ],
+        "app/src/main/res/drawable-xxxhdpi/ic_brand_color.png": [
+          "res/drawable-xxxhdpi-v4/ic_brand_color.png"
+        ],
+        "app/src/main/res/drawable-xxhdpi/ic_brand_small.png": [
+          "res/drawable-xxhdpi-v4/ic_brand_small.png"
+        ],
+        "app/src/main/res/drawable-xxhdpi/ic_brand_color.png": [
+          "res/drawable-xxhdpi-v4/ic_brand_color.png"
+        ],
+        "app/src/main/res/drawable-xhdpi/ic_brand_small.png": [
+          "res/drawable-xhdpi-v4/ic_brand_small.png"
+        ],
+        "app/src/main/res/drawable-xhdpi/ic_brand_color.png": [
+          "res/drawable-xhdpi-v4/ic_brand_color.png"
+        ],
+        "app/src/main/res/drawable-hdpi/ic_brand_small.png": [
+          "res/drawable-hdpi-v4/ic_brand_small.png"
+        ],
+        "app/src/main/res/drawable-hdpi/ic_brand_color.png": [
+          "res/drawable-hdpi-v4/ic_brand_color.png"
+        ]
+      }
+    },
+    "release": {
+      "path": "dist/AutoBook-0.6.8-release.apk",
+      "bytes": 45914372,
+      "sha256": "47d455d8bfe51d42f40acaa249d1d85dddd77db4e2130c6b0881d40fef47f652",
+      "badging": "package: name='com.example.autobook' versionCode='27' versionName='0.6.8' platformBuildVersionName='15' platformBuildVersionCode='35' compileSdkVersion='35' compileSdkVersionCodename='15'",
+      "signatureVerified": true,
+      "certificateSha256": "bedb36b7527aa4759262d8b737d7031b57f1db191c68eab4d55829f0598a5ed6",
+      "all26IconsVisibleRGBAAndAlphaMatch": true,
+      "iconPaths": {
+        "app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png": [
+          "res/Lf.png"
+        ],
+        "app/src/main/res/mipmap-xxhdpi/ic_launcher.png": [
+          "res/RJ.png",
+          "res/fO.png"
+        ],
+        "app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png": [
+          "res/RJ.png",
+          "res/fO.png"
+        ],
+        "app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png": [
+          "res/as.png"
+        ],
+        "app/src/main/res/mipmap-xxxhdpi/ic_launcher.png": [
+          "res/Gc.png",
+          "res/o-.png"
+        ],
+        "app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png": [
+          "res/Gc.png",
+          "res/o-.png"
+        ],
+        "app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png": [
+          "res/Em.png"
+        ],
+        "app/src/main/res/mipmap-xhdpi/ic_launcher.png": [
+          "res/FS.png",
+          "res/wb.png"
+        ],
+        "app/src/main/res/mipmap-xhdpi/ic_launcher_round.png": [
+          "res/FS.png",
+          "res/wb.png"
+        ],
+        "app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png": [
+          "res/QZ.png"
+        ],
+        "app/src/main/res/mipmap-mdpi/ic_launcher.png": [
+          "res/9w.png",
+          "res/zR.png"
+        ],
+        "app/src/main/res/mipmap-mdpi/ic_launcher_round.png": [
+          "res/9w.png",
+          "res/zR.png"
+        ],
+        "app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png": [
+          "res/zr.png"
+        ],
+        "app/src/main/res/mipmap-hdpi/ic_launcher.png": [
+          "res/8c.png",
+          "res/yn.png"
+        ],
+        "app/src/main/res/mipmap-hdpi/ic_launcher_round.png": [
+          "res/8c.png",
+          "res/yn.png"
+        ],
+        "app/src/main/res/drawable-nodpi/ic_launcher_monochrome.png": [
+          "res/XW.png"
+        ],
+        "app/src/main/res/drawable-mdpi/ic_brand_small.png": [
+          "res/f-.png"
+        ],
+        "app/src/main/res/drawable-mdpi/ic_brand_color.png": [
+          "res/0p.png"
+        ],
+        "app/src/main/res/drawable-xxxhdpi/ic_brand_small.png": [
+          "res/5d.png"
+        ],
+        "app/src/main/res/drawable-xxxhdpi/ic_brand_color.png": [
+          "res/Jd.png"
+        ],
+        "app/src/main/res/drawable-xxhdpi/ic_brand_small.png": [
+          "res/S7.png"
+        ],
+        "app/src/main/res/drawable-xxhdpi/ic_brand_color.png": [
+          "res/w5.png"
+        ],
+        "app/src/main/res/drawable-xhdpi/ic_brand_small.png": [
+          "res/j8.png"
+        ],
+        "app/src/main/res/drawable-xhdpi/ic_brand_color.png": [
+          "res/g8.png"
+        ],
+        "app/src/main/res/drawable-hdpi/ic_brand_small.png": [
+          "res/Rq.png"
+        ],
+        "app/src/main/res/drawable-hdpi/ic_brand_color.png": [
+          "res/mX.png"
+        ]
+      }
+    }
+  },
+  "tests": {
+    "tests": 221,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "testClasses": 24
+}

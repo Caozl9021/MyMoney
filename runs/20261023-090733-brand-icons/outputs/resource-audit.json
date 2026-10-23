@@ -1,0 +1,267 @@
+{
+  "source": "Auto.png",
+  "sha256": "0c44eea8162476685f34935856c1ac8452b6f502de1b39ead909a27762f49aaf",
+  "resource_count": 26,
+  "resources": [
+    {
+      "path": "app/src/main/res/drawable-hdpi/ic_brand_color.png",
+      "sha256": "d6c47c7a50967e236aa0960d2a4c7de58673b159d4f10b453bba7f87e5a35564",
+      "geometry": "72x72 opaque=False"
+    },
+    {
+      "path": "app/src/main/res/drawable-hdpi/ic_brand_small.png",
+      "sha256": "497494dd6ed184e2d1d4b8ed6314e6899e35a746903405e70e7aa1ce42a6da35",
+      "geometry": "36x36 opaque=False"
+    },
+    {
+      "path": "app/src/main/res/drawable-mdpi/ic_brand_color.png",
+      "sha256": "006fb85e06f54085d351fd9ed7716f223b4b319e2322841bc2b96938430b564c",
+      "geometry": "48x48 opaque=False"
+    },
+    {
+      "path": "app/src/main/res/drawable-mdpi/ic_brand_small.png",
+      "sha256": "2df6043b3cf67710c602f94c4970a5263a5bbd5a5e22e2b1c91469b26d6485b5",
+      "geometry": "24x24 opaque=False"
+    },
+    {
+      "path": "app/src/main/res/drawable-nodpi/ic_launcher_monochrome.png",
+      "sha256": "a00692a2ef483e6ca8020a17be8f84dab1a001b7161d402fbc0aebdb802c2953",
+      "geometry": "432x432 opaque=False"
+    },
+    {
+      "path": "app/src/main/res/drawable-xhdpi/ic_brand_color.png",
+      "sha256": "267300d80ec6ae25612998d05c9da9200498c021e7cedfb941a8081072c54e8c",
+      "geometry": "96x96 opaque=False"
+    },
+    {
+      "path": "app/src/main/res/drawable-xhdpi/ic_brand_small.png",
+      "sha256": "d87b9cdc77cbf975f68468f82a0524d684f3d1f4d7ce33e5cae16b95d497772e",
+      "geometry": "48x48 opaque=False"
+    },
+    {
+      "path": "app/src/main/res/drawable-xxhdpi/ic_brand_color.png",
+      "sha256": "5ada170e8d0ea0872ef0ca3c1708404bdf2d809f4c8ee9711d8f407640f05f46",
+      "geometry": "144x144 opaque=False"
+    },
+    {
+      "path": "app/src/main/res/drawable-xxhdpi/ic_brand_small.png",
+      "sha256": "7e7819d3eb739f4508252d129c3fc1e947d4bfa965edc73c86d26884051ede73",
+      "geometry": "72x72 opaque=False"
+    },
+    {
+      "path": "app/src/main/res/drawable-xxxhdpi/ic_brand_color.png",
+      "sha256": "05adc2867197a902a45f5aca5eff2d167ebd332b29f8e7d9b3ab71cd3bd5eaa9",
+      "geometry": "192x192 opaque=False"
+    },
+    {
+      "path": "app/src/main/res/drawable-xxxhdpi/ic_brand_small.png",
+      "sha256": "df8bc069d75e1872b5456afe48186597617d0e260b5adbd635da1d9e16887c8f",
+      "geometry": "96x96 opaque=False"
+    },
+    {
+      "path": "app/src/main/res/mipmap-hdpi/ic_launcher.png",
+      "sha256": "af43076ea9ddfb1277b53faa978494790af04411536cdd6a2ac3b9ab1a1bf9b4",
+      "geometry": "72x72 opaque=True"
+    },
+    {
+      "path": "app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png",
+      "sha256": "61990d7abdb7bd5ae78b9f73611c6adf7974460a6025b5f08ce40b3d37f71fa0",
+      "geometry": "162x162 opaque=False"
+    },
+    {
+      "path": "app/src/main/res/mipmap-hdpi/ic_launcher_round.png",
+      "sha256": "af43076ea9ddfb1277b53faa978494790af04411536cdd6a2ac3b9ab1a1bf9b4",
+      "geometry": "72x72 opaque=True"
+    },
+    {
+      "path": "app/src/main/res/mipmap-mdpi/ic_launcher.png",
+      "sha256": "baaa04c7c6535ad74a764b95d3f5871fb0a8d0a8ab3499e279d8d614e73d9e81",
+      "geometry": "48x48 opaque=True"
+    },
+    {
+      "path": "app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png",
+      "sha256": "09a44d031c5a6173de949f70d150f465947da7ee75cc815b9d82633982e5228c",
+      "geometry": "108x108 opaque=False"
+    },
+    {
+      "path": "app/src/main/res/mipmap-mdpi/ic_launcher_round.png",
+      "sha256": "baaa04c7c6535ad74a764b95d3f5871fb0a8d0a8ab3499e279d8d614e73d9e81",
+      "geometry": "48x48 opaque=True"
+    },
+    {
+      "path": "app/src/main/res/mipmap-xhdpi/ic_launcher.png",
+      "sha256": "eb8b7b44357bc0f86e983c66a0528640ff0890704d18438751433febaddd4fcd",
+      "geometry": "96x96 opaque=True"
+    },
+    {
+      "path": "app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png",
+      "sha256": "4f5648078d1fb32500cf17354a26ba2dd5521e7d0dce210653399399b685ae67",
+      "geometry": "216x216 opaque=False"
+    },
+    {
+      "path": "app/src/main/res/mipmap-xhdpi/ic_launcher_round.png",
+      "sha256": "eb8b7b44357bc0f86e983c66a0528640ff0890704d18438751433febaddd4fcd",
+      "geometry": "96x96 opaque=True"
+    },
+    {
+      "path": "app/src/main/res/mipmap-xxhdpi/ic_launcher.png",
+      "sha256": "194fb898f3a64576990145aa890004e9e9491cd77ea6758cf69fb8cdecf69d33",
+      "geometry": "144x144 opaque=True"
+    },
+    {
+      "path": "app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png",
+      "sha256": "721376fbceca589bd6522d4d597002cca39c07a89fd03b529e8627aa859f61cc",
+      "geometry": "324x324 opaque=False"
+    },
+    {
+      "path": "app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png",
+      "sha256": "194fb898f3a64576990145aa890004e9e9491cd77ea6758cf69fb8cdecf69d33",
+      "geometry": "144x144 opaque=True"
+    },
+    {
+      "path": "app/src/main/res/mipmap-xxxhdpi/ic_launcher.png",
+      "sha256": "140e0717a645c4c3442f51718ac3334be4212e21af3970db15fe9583bf3a52ff",
+      "geometry": "192x192 opaque=True"
+    },
+    {
+      "path": "app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png",
+      "sha256": "63a270d7cd8a41aa950980cb327163bc54c7c60c1dffc25c689b151a69368e29",
+      "geometry": "432x432 opaque=False"
+    },
+    {
+      "path": "app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png",
+      "sha256": "140e0717a645c4c3442f51718ac3334be4212e21af3970db15fe9583bf3a52ff",
+      "geometry": "192x192 opaque=True"
+    }
+  ],
+  "references": [
+    {
+      "path": "app/src/main/AndroidManifest.xml",
+      "line": 40,
+      "reference": "android:icon=\"@mipmap/ic_launcher\""
+    },
+    {
+      "path": "app/src/main/AndroidManifest.xml",
+      "line": 41,
+      "reference": "android:roundIcon=\"@mipmap/ic_launcher_round\""
+    },
+    {
+      "path": "app/src/main/AndroidManifest.xml",
+      "line": 71,
+      "reference": "android:icon=\"@drawable/ic_brand_small\""
+    },
+    {
+      "path": "app/src/main/java/com/example/autobook/capture/ConfirmDelivery.kt",
+      "line": 155,
+      "reference": ".setSmallIcon(R.drawable.ic_brand_small)"
+    },
+    {
+      "path": "app/src/main/java/com/example/autobook/capture/ConfirmDelivery.kt",
+      "line": 156,
+      "reference": ".setLargeIcon(BrandIcons.large(context))"
+    },
+    {
+      "path": "app/src/main/java/com/example/autobook/capture/AccessibilityGuardian.kt",
+      "line": 179,
+      "reference": ".setSmallIcon(R.drawable.ic_brand_small)"
+    },
+    {
+      "path": "app/src/main/java/com/example/autobook/capture/AccessibilityGuardian.kt",
+      "line": 180,
+      "reference": ".setLargeIcon(BrandIcons.large(this))"
+    },
+    {
+      "path": "app/src/main/java/com/example/autobook/capture/AccessibilityGuardian.kt",
+      "line": 232,
+      "reference": ".setSmallIcon(R.drawable.ic_brand_small)"
+    },
+    {
+      "path": "app/src/main/java/com/example/autobook/capture/AccessibilityGuardian.kt",
+      "line": 233,
+      "reference": ".setLargeIcon(BrandIcons.large(this))"
+    },
+    {
+      "path": "app/src/main/java/com/example/autobook/systems/BrandIcons.kt",
+      "line": 11,
+      "reference": "BitmapFactory.decodeResource(context.resources, R.drawable.ic_brand_color)"
+    },
+    {
+      "path": "app/src/main/java/com/example/autobook/systems/RecognitionTileService.kt",
+      "line": 69,
+      "reference": "tile.icon = Icon.createWithResource(this, R.drawable.ic_brand_small)"
+    },
+    {
+      "path": "app/src/main/java/com/example/autobook/root/RootForegroundService.kt",
+      "line": 119,
+      "reference": ".setSmallIcon(R.drawable.ic_brand_small)"
+    },
+    {
+      "path": "app/src/main/java/com/example/autobook/root/RootForegroundService.kt",
+      "line": 120,
+      "reference": ".setLargeIcon(BrandIcons.large(this))"
+    },
+    {
+      "path": "app/src/main/res/layout/widget_monthly_expense.xml",
+      "line": 9,
+      "reference": "android:layout_marginEnd=\"8dp\" android:src=\"@drawable/ic_brand_color\""
+    },
+    {
+      "path": "app/src/main/res/mipmap-anydpi-v33/ic_launcher_round.xml",
+      "line": 4,
+      "reference": "<foreground android:drawable=\"@mipmap/ic_launcher_foreground\" />"
+    },
+    {
+      "path": "app/src/main/res/mipmap-anydpi-v33/ic_launcher_round.xml",
+      "line": 5,
+      "reference": "<monochrome android:drawable=\"@drawable/ic_launcher_monochrome\" />"
+    },
+    {
+      "path": "app/src/main/res/mipmap-anydpi-v33/ic_launcher.xml",
+      "line": 4,
+      "reference": "<foreground android:drawable=\"@mipmap/ic_launcher_foreground\" />"
+    },
+    {
+      "path": "app/src/main/res/mipmap-anydpi-v33/ic_launcher.xml",
+      "line": 5,
+      "reference": "<monochrome android:drawable=\"@drawable/ic_launcher_monochrome\" />"
+    },
+    {
+      "path": "app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml",
+      "line": 4,
+      "reference": "<foreground android:drawable=\"@mipmap/ic_launcher_foreground\" />"
+    },
+    {
+      "path": "app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml",
+      "line": 4,
+      "reference": "<foreground android:drawable=\"@mipmap/ic_launcher_foreground\" />"
+    },
+    {
+      "path": "app/src/main/res/xml/shortcuts.xml",
+      "line": 3,
+      "reference": "android:icon=\"@drawable/ic_brand_color\""
+    },
+    {
+      "path": "app/src/main/java/com/example/autobook/ui/ConfirmSheet.kt",
+      "line": 266,
+      "reference": "painter = painterResource(R.drawable.ic_brand_color),"
+    }
+  ],
+  "removed_obsolete_assets": [
+    "drawable/ic_recognition_tile.xml",
+    "drawable/ic_add_bill.xml"
+  ],
+  "functional_icons_unchanged": true,
+  "uncovered_brand_entrypoints": [],
+  "verification_limits": [
+    "No Gradle in subtask",
+    "No device notification/QS/widget rendering verification in this run",
+    "Status icon actual small-scale clarity awaits host/device rendering"
+  ],
+  "confirmation_card": {
+    "resource": "drawable/ic_brand_color",
+    "size_dp": 44,
+    "corner_radius_dp": 12,
+    "content_description": "AutoBook",
+    "business_type_text_unchanged": true
+  }
+}

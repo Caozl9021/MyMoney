@@ -1,0 +1,57 @@
+{
+  "run_id": "20261022-101537-capture-mode",
+  "started_at": "2026-10-22T10:15:37.441674+08:00",
+  "commit": null,
+  "parameters": {
+    "versionName": "0.6.1",
+    "versionCode": 20,
+    "capture_mode": "exclusive persistent selection"
+  },
+  "inputs": [
+    "app/src/main"
+  ],
+  "environment": {
+    "jdk": 17,
+    "compileSdk": 35,
+    "device": "autobook_api35"
+  },
+  "status": "verified_pending_acceptance",
+  "acceptance": "待验收",
+  "finished_at": "2026-10-22T10:25:59.541075+08:00",
+  "unit_tests": {
+    "tests": 149,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "builds": [
+    "debug successful",
+    "signed release successful"
+  ],
+  "apk_metadata": {
+    "versionName": "0.6.1",
+    "versionCode": 20
+  },
+  "release_certificate_matches_previous": true,
+  "files": {
+    "dist/AutoBook-0.6.1-debug.apk": "940c05f25ae155d11f424ec3927c3ad0dfb989216e6d18ed51f38139e6ef6d2a",
+    "dist/AutoBook-0.6.1-release.apk": "5db96cf3d3bfb45b789cbbad7853b5e2a59a1f9c78fb9d3486c0b0bcf04b61a7"
+  },
+  "source_sha256": {
+    "app/build.gradle.kts": "850672f904d8ea5196b440a6b2e91fe78c03e58a2ea9d29babef2aa83a4fc698",
+    "app/src/main/java/com/example/autobook/App.kt": "4a6ce7dd0d75d868765eab620954a6e573529968f8dc2e83d62384d620531efa",
+    "app/src/main/java/com/example/autobook/ui/HomeScreen.kt": "64f3fb0e1495aed0b432316549fe537e447372126aa7238ea62560688e3f8fb1",
+    "app/src/main/java/com/example/autobook/ui/SettingsScreen.kt": "79ed963204cb93ebfaa5d2198929daa9e080702e3a0ebfcd31b252e3bd3ec492",
+    "app/src/main/java/com/example/autobook/ui/MainActivity.kt": "32aef58259600122a3f5106a213e8a4c85c20a4ca439ec0fd9a4ff689725b2da",
+    "app/src/main/java/com/example/autobook/root/BootReceiver.kt": "c1f4915745e17bdb2514c97cde989f2fec4227f4fea4d5cd319883848c4f160e",
+    "app/src/main/java/com/example/autobook/root/RootForegroundService.kt": "0dd9d9fbb92b1a01cf15f2e8fc76ddc3120b37be859e462ea7776eaf8bb6303f",
+    "app/src/main/java/com/example/autobook/root/RootWatcher.kt": "d61628024d7513a4364857b73c8b2fd32dadc3607ec7faceed8045b3f8503a68",
+    "app/src/main/java/com/example/autobook/capture/BillAccessibilityService.kt": "2880ce56f4636c029e94e25de18a08cbcc60fd3fba007e407dc631df986f9865",
+    "app/src/main/java/com/example/autobook/data/BackupStore.kt": "33038ddc804656dff0a550a17604e74b10eaf291de3074af883f897eca06b81c",
+    "app/src/main/java/com/example/autobook/data/Settings.kt": "b723617cf3bea5cf15a41e68c7033deb1689157af228e474ea2c83f9c53835b4",
+    "app/src/main/java/com/example/autobook/data/CaptureMode.kt": "9accf45d26b8bc509cd7561976890304492d420b85e154073d83a0ecba1d4c61",
+    "app/src/main/java/com/example/autobook/capture/CaptureModeManager.kt": "2d0823efc71596db1441f507db0b2871c5d89f5cc4afd92cf9ab6c5051ee703c",
+    "app/src/main/java/com/example/autobook/ui/CaptureModeScreen.kt": "da27cba173ea842f35029f9e9c0e33be3a793c665fa153e90472c678cdc31e7f",
+    "app/src/test/java/com/example/autobook/CaptureModePolicyTest.kt": "d966756620330716b450f63d79b545961f5d3fe9b93c3eea4f7e5c446be024a1"
+  }
+}

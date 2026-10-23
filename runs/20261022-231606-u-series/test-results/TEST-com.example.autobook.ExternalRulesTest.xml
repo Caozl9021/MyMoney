@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.autobook.ExternalRulesTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-10-22T15:43:25.898Z" hostname="CaoZL" time="0.439">
+  <properties/>
+  <testcase name="sampleIndexAndDuplicateNamesKeepBothOriginals" classname="com.example.autobook.ExternalRulesTest" time="0.026"/>
+  <testcase name="badFilesRejectWithoutChangingInstalledPages" classname="com.example.autobook.ExternalRulesTest" time="0.01"/>
+  <testcase name="listsAndInputPagesCannotBeEnabledByJson" classname="com.example.autobook.ExternalRulesTest" time="0.0"/>
+  <testcase name="jsonOverridesBuiltinAndReportsSource" classname="com.example.autobook.ExternalRulesTest" time="0.002"/>
+  <testcase name="coverageExpiresAndPersistsOnlySevenCalendarDays" classname="com.example.autobook.ExternalRulesTest" time="0.005"/>
+  <testcase name="bundledSourceAndAllAnyExcludeLiteralGrammar" classname="com.example.autobook.ExternalRulesTest" time="0.001"/>
+  <testcase name="coverageBoundedAndFailedRestorePreservesCounters" classname="com.example.autobook.ExternalRulesTest" time="0.375"/>
+  <testcase name="coverageDoesNotCountAnnotationsAndDoesNotLoseBurstPublications" classname="com.example.autobook.ExternalRulesTest" time="0.006"/>
+  <testcase name="atomicImportFailureAndResetPreserveExpectedRules" classname="com.example.autobook.ExternalRulesTest" time="0.01"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

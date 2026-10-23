@@ -1,0 +1,18 @@
+Source: Auto.jpg (1254x1254 opaque=True)
+Crop: 1067x1064+94+103; opaque input: trim and remove only edge-connected white background
+Adaptive: 54/108dp; legacy: 55%; background: #FFFFFF
+Brand small: 24dp canvas / 18dp white alpha; brand color: 48dp canvas / 40dp content
+Monochrome/small: remove near-white with 10% fuzz only in the separate mask, retain colored border and letters
+[dry-run] app/src/main/res/mipmap-mdpi/{ic_launcher,ic_launcher_round,ic_launcher_foreground}.png
+[dry-run] app/src/main/res/drawable-mdpi/{ic_brand_small,ic_brand_color}.png
+[dry-run] app/src/main/res/mipmap-hdpi/{ic_launcher,ic_launcher_round,ic_launcher_foreground}.png
+[dry-run] app/src/main/res/drawable-hdpi/{ic_brand_small,ic_brand_color}.png
+[dry-run] app/src/main/res/mipmap-xhdpi/{ic_launcher,ic_launcher_round,ic_launcher_foreground}.png
+[dry-run] app/src/main/res/drawable-xhdpi/{ic_brand_small,ic_brand_color}.png
+[dry-run] app/src/main/res/mipmap-xxhdpi/{ic_launcher,ic_launcher_round,ic_launcher_foreground}.png
+[dry-run] app/src/main/res/drawable-xxhdpi/{ic_brand_small,ic_brand_color}.png
+[dry-run] app/src/main/res/mipmap-xxxhdpi/{ic_launcher,ic_launcher_round,ic_launcher_foreground}.png
+[dry-run] app/src/main/res/drawable-xxxhdpi/{ic_brand_small,ic_brand_color}.png
+[dry-run] app/src/main/res/drawable-nodpi/ic_launcher_monochrome.png (432x432, separate near-white negative-space mask)
+[dry-run] app/src/main/res/values/colors.xml (#FFFFFF)
+Dry run: no files written.

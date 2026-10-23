@@ -1,0 +1,1042 @@
+--- /tmp/autobook-mode-before/app/build.gradle.kts	2026-10-22 09:51:45.771667211 +0800
++++ app/build.gradle.kts	2026-10-22 10:15:37.442261666 +0800
+@@ -16,8 +16,8 @@
+         applicationId = "com.example.autobook"
+         minSdk = 26
+         targetSdk = 35
+-        versionCode = 19
+-        versionName = "0.6.0"
++        versionCode = 20
++        versionName = "0.6.1"
+     }
+ 
+     // 签名信息放在仓库之外（~/.autobook-keys/keystore.properties），不进版本库。
+
+--- /tmp/autobook-mode-before/app/src/main/java/com/example/autobook/App.kt	2026-10-22 10:16:05.686644875 +0800
++++ app/src/main/java/com/example/autobook/App.kt	2026-10-22 10:17:02.533106955 +0800
+@@ -8,7 +8,7 @@
+ import com.example.autobook.data.PendingStore
+ import com.example.autobook.data.Settings
+ import com.example.autobook.ocr.MlKitOcrEngine
+-import com.example.autobook.root.RootForegroundService
++import com.example.autobook.capture.CaptureModeManager
+ import com.example.billkit.BillKit
+ import com.example.billkit.DebugBus
+ 
+@@ -21,6 +21,7 @@
+         LedgerConfig.init(this)
+         ConfirmDelivery.ensureChannel(this)
+ 
++        CaptureModeManager.init(this)
+         val settings = Settings(this)
+ 
+         BillKit.install(
+@@ -54,7 +55,6 @@
+             ocrEngine = MlKitOcrEngine(),
+         )
+ 
+-        // root 轮询是常驻的：上次开着就重新拉起来（用户点开关才会打开，这里不擅自开启）
+-        if (settings.rootMode) RootForegroundService.start(this)
++        CaptureModeManager.reconcile(this)
+     }
+ }
+
+--- /tmp/autobook-mode-before/app/src/main/java/com/example/autobook/ui/HomeScreen.kt	2026-10-22 10:16:29.119622958 +0800
++++ app/src/main/java/com/example/autobook/ui/HomeScreen.kt	2026-10-22 10:17:14.720398686 +0800
+@@ -23,6 +23,8 @@
+ import androidx.compose.ui.platform.LocalContext
+ import androidx.lifecycle.compose.collectAsStateWithLifecycle
+ import androidx.compose.ui.unit.dp
++import com.example.autobook.capture.CaptureModeManager
++import com.example.autobook.data.CaptureMode
+ import com.example.autobook.capture.ConfirmIntents
+ import com.example.autobook.data.BillEntity
+ import com.example.autobook.data.PendingStore
+@@ -53,6 +55,8 @@
+     val p = LocalAbPalette.current
+     val context = LocalContext.current
+     val listState = rememberLazyListState()
++    val captureState by CaptureModeManager.state.collectAsStateWithLifecycle()
++    val mode = captureState.mode
+     val recent = remember(bills) { bills.take(8) }
+     // 后台被系统拦下、只落进队列的草稿 —— 必须在这里露出来，
+     // 否则用户永远不知道"其实已经识别到了一笔"。
+@@ -97,7 +101,11 @@
+                         EmptyState(
+                             icon = AbIcons.Wallet,
+                             title = "还没有记录",
+-                            message = "开启识别并在系统里授权无障碍后，付款完成会自动弹出确认卡。",
++                            message = when (mode) {
++                                CaptureMode.ROOT -> "开启识别并授予 Root 和悬浮窗权限后，账单页面会自动弹出确认卡。"
++                                CaptureMode.ACCESSIBILITY -> "开启识别并授权无障碍和悬浮窗后，账单页面会自动弹出确认卡。"
++                                null -> "先选择 Root 或无障碍模式，再完成对应授权即可自动识别账单。"
++                            },
+                             actionLabel = "去开启识别",
+                             onAction = onOpenSettings,
+                         )
+@@ -150,7 +158,11 @@
+                 InsetGroup {
+                     ListRow(
+                         title = "识别与权限",
+-                        subtitle = "无障碍、悬浮窗、支持的应用",
++                        subtitle = when (mode) {
++                            CaptureMode.ROOT -> "Root 授权、悬浮窗、支持的应用"
++                            CaptureMode.ACCESSIBILITY -> "无障碍、悬浮窗、支持的应用"
++                            null -> "选择自动记账模式并完成授权"
++                        },
+                         leading = {
+                             com.example.autobook.ui.design.IconBadge(
+                                 icon = AbIcons.Shield,
+
+--- /tmp/autobook-mode-before/app/src/main/java/com/example/autobook/ui/SettingsScreen.kt	2026-10-22 10:16:29.119561603 +0800
++++ app/src/main/java/com/example/autobook/ui/SettingsScreen.kt	2026-10-22 10:22:28.468993941 +0800
+@@ -59,7 +59,8 @@
+ import com.example.autobook.data.Backup
+ import com.example.autobook.data.BackupStore
+ import com.example.autobook.overlay.OverlayAnchor
+-import com.example.autobook.root.RootForegroundService
++import com.example.autobook.capture.CaptureModeManager
++import com.example.autobook.data.CaptureMode
+ import com.example.autobook.root.RootWatcher
+ import com.example.autobook.ui.design.AbIcons
+ import com.example.autobook.ui.design.AbRadius
+@@ -107,7 +108,8 @@
+     NOTE("备注模板"),
+     APPS("支持的应用"),
+     PERMISSIONS("权限"),
+-    ROOT_MODE("Root 轮询"),
++    MODE("自动记账模式"),
++    ROOT_MODE("Root 状态"),
+     EXPORT("导出"),
+     BACKUP("备份与恢复"),
+     APPEARANCE("外观"),
+@@ -130,15 +132,17 @@
+     var page by rememberSaveable { mutableStateOf(SettingsPage.ROOT) }
+ 
+     // 贯穿整棵设置树的共享状态
+-    var enabled by remember { mutableStateOf(settings.enabled) }
++    val captureState by CaptureModeManager.state.collectAsStateWithLifecycle()
++    val enabled = captureState.enabled
++    val mode = captureState.mode
++    val scope = rememberCoroutineScope()
+     var autoConfirm by remember { mutableStateOf(settings.autoConfirm) }
+     var ocrFallback by remember { mutableStateOf(settings.ocrFallback) }
+     var whitelist by remember { mutableStateOf(settings.whitelist) }
+-    var serviceBound by remember { mutableStateOf(BillAccessibilityService.instance != null) }
++    var serviceBound by remember { mutableStateOf(isAccessibilityEnabled(context)) }
+     var overlayGranted by remember { mutableStateOf(OverlayAnchor.canShow(context)) }
+     var notifyGranted by remember { mutableStateOf(ConfirmDelivery.hasNotificationPermission(context)) }
+     var rootGranted by remember { mutableStateOf<Boolean?>(null) }
+-    var rootMode by remember { mutableStateOf(settings.rootMode) }
+     val rootStatus by RootWatcher.status.collectAsStateWithLifecycle()
+ 
+     val lifecycleOwner = LocalLifecycleOwner.current
+@@ -154,8 +158,22 @@
+         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+     }
+ 
+-    LaunchedEffect(Unit) {
+-        rootGranted = withContext(Dispatchers.IO) { RootShell.isGranted() }
++    fun checkRoot() {
++        if (mode != CaptureMode.ROOT) return
++        scope.launch {
++            rootGranted = null
++            rootGranted = withContext(Dispatchers.IO) { RootShell.isGranted() }
++            val current = CaptureModeManager.state.value
++            if (rootGranted == true && current.mode == CaptureMode.ROOT && current.enabled) {
++                // 主动检测获授权后，明确重试此前失败的 Root 服务启动。
++                CaptureModeManager.select(context, CaptureMode.ROOT)
++            } else {
++                CaptureModeManager.reconcile(context)
++            }
++        }
++    }
++    LaunchedEffect(page, mode) {
++        if (page == SettingsPage.ROOT_MODE && mode == CaptureMode.ROOT) checkRoot()
+     }
+ 
+     fun applyKit() {
+@@ -168,18 +186,6 @@
+ 
+     val back: () -> Unit = { page = SettingsPage.ROOT }
+ 
+-    fun setRootMode(on: Boolean) {
+-        settings.rootMode = on
+-        rootMode = on
+-        if (on) RootForegroundService.start(context) else RootForegroundService.stop(context)
+-        // 勾上 root 模式时顺手把识别总开关打开，否则服务起来也不干活
+-        if (on && !settings.enabled) {
+-            settings.enabled = true
+-            enabled = true
+-            BillKit.updateConfig(settings.toKitConfig())
+-        }
+-    }
+-
+     when (page) {
+         SettingsPage.ROOT -> PageScaffold(
+             title = "设置",
+@@ -198,25 +204,27 @@
+                 ),
+                 verticalArrangement = Arrangement.spacedBy(AbSpacing.xs),
+             ) {
+-                item { StatusHeader(enabled = enabled, serviceBound = serviceBound) }
++                item { StatusHeader(enabled, mode, serviceBound, rootStatus) }
+ 
+                 item { GroupHeader("自动记账") }
+                 item {
+                     InsetGroup {
+                         ListRow(
+                             title = "启用识别",
+-                            subtitle = if (enabled) "正在监听账单页面" else "已暂停采集",
++                            subtitle = when {
++                                !enabled -> "已暂停采集"
++                                mode == CaptureMode.ROOT && !rootStatus.running -> "已启用，等待 Root 授权或服务启动"
++                                mode == CaptureMode.ACCESSIBILITY && !serviceBound -> "已启用，等待无障碍服务"
++                                mode == null -> "已启用，请选择自动记账模式"
++                                else -> "正在监听账单页面"
++                            },
+                             trailing = {
+                                 AbSwitch(enabled) {
+-                                    enabled = it
+-                                    settings.enabled = it
+-                                    applyKit()
++                                    CaptureModeManager.setEnabled(context, it)
+                                 }
+                             },
+                             onClick = {
+-                                enabled = !enabled
+-                                settings.enabled = enabled
+-                                applyKit()
++                                CaptureModeManager.setEnabled(context, !enabled)
+                             },
+                         )
+                         InsetDivider()
+@@ -235,24 +243,26 @@
+                                 settings.autoConfirm = autoConfirm
+                             },
+                         )
+-                        InsetDivider()
+-                        ListRow(
+-                            title = "截图 OCR 兜底",
+-                            subtitle = "无障碍读不到时截图识别（需 root）",
+-                            dividerAbove = true,
+-                            trailing = {
+-                                AbSwitch(ocrFallback) {
+-                                    ocrFallback = it
+-                                    settings.ocrFallback = it
++                        if (mode == CaptureMode.ROOT) {
++                            InsetDivider()
++                            ListRow(
++                                title = "截图 OCR 兜底",
++                                subtitle = "Root 页面文字读取不足时截图识别",
++                                dividerAbove = true,
++                                trailing = {
++                                    AbSwitch(ocrFallback) {
++                                        ocrFallback = it
++                                        settings.ocrFallback = it
++                                        applyKit()
++                                    }
++                                },
++                                onClick = {
++                                    ocrFallback = !ocrFallback
++                                    settings.ocrFallback = ocrFallback
+                                     applyKit()
+-                                }
+-                            },
+-                            onClick = {
+-                                ocrFallback = !ocrFallback
+-                                settings.ocrFallback = ocrFallback
+-                                applyKit()
+-                            },
+-                        )
++                                },
++                            )
++                        }
+                     }
+                 }
+                 item {
+@@ -303,6 +313,14 @@
+                 item {
+                     InsetGroup {
+                         ListRow(
++                            title = "自动记账模式",
++                            subtitle = captureModeLabel(mode),
++                            leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Layers, p.accent) },
++                            chevron = true,
++                            onClick = { page = SettingsPage.MODE },
++                        )
++                        InsetDivider(inset = 62.dp)
++                        ListRow(
+                             title = "支持的应用",
+                             subtitle = "已选 ${whitelist.size} 个",
+                             leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Layers, p.accent) },
+@@ -312,25 +330,17 @@
+                         InsetDivider(inset = 62.dp)
+                         ListRow(
+                             title = "权限",
+-                            subtitle = if (serviceBound) "无障碍已连接" else "无障碍未连接",
++                            subtitle = when (mode) {
++                                CaptureMode.ROOT -> "Root 授权、悬浮窗与通知"
++                                CaptureMode.ACCESSIBILITY -> if (serviceBound) "无障碍已连接" else "无障碍未连接"
++                                null -> "请先选择自动记账模式"
++                            },
+                             leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Shield, p.accent) },
+                             chevron = true,
+                             dividerAbove = true,
+                             onClick = { page = SettingsPage.PERMISSIONS },
+                         )
+-                        InsetDivider(inset = 62.dp)
+-                        ListRow(
+-                            title = "Root 轮询",
+-                            subtitle = when {
+-                                rootGranted == false -> "未授权（可选）"
+-                                rootMode -> "运行中 · ${rootStatus.lastResult}"
+-                                else -> "已授权 · 未开启"
+-                            },
+-                            leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Terminal, p.accent) },
+-                            chevron = true,
+-                            dividerAbove = true,
+-                            onClick = { page = SettingsPage.ROOT_MODE },
+-                        )
++
+                     }
+                 }
+ 
+@@ -373,7 +383,17 @@
+             },
+         )
+ 
++        SettingsPage.MODE -> CaptureModeSettingsPage(mode, back) {
++            CaptureModeManager.select(context, it)
++            rootGranted = null
++            back()
++        }
++
+         SettingsPage.PERMISSIONS -> PermissionsPage(
++            mode = mode,
++            rootGranted = rootGranted,
++            onCheckRoot = { checkRoot() },
++            onRootStatus = { page = SettingsPage.ROOT_MODE },
+             serviceBound = serviceBound,
+             overlayGranted = overlayGranted,
+             notifyGranted = notifyGranted,
+@@ -383,10 +403,10 @@
+ 
+         SettingsPage.ROOT_MODE -> RootModePage(
+             rootGranted = rootGranted,
+-            enabled = rootMode,
++            enabled = enabled,
+             status = rootStatus,
+             onBack = back,
+-            onToggle = { on -> if (rootGranted == true) setRootMode(on) },
++            onCheckRoot = { checkRoot() },
+         )
+ 
+         SettingsPage.EXPORT -> ExportPage(
+@@ -397,21 +417,12 @@
+         SettingsPage.BACKUP -> BackupPage(
+             onBack = back,
+             onRestored = { snap ->
+-                // 恢复后要把改过的设置真正应用下去：白名单变了就刷新 BillKit，
+-                // root 开关变了就起停前台服务，否则用户会以为"恢复了但没生效"。
+-                settings.whitelist.let { whitelist = it }
+-                enabled = settings.enabled
++                if (snap != null) BackupStore.applySettings(context, snap)
++                whitelist = settings.whitelist
++                autoConfirm = settings.autoConfirm
+                 ocrFallback = settings.ocrFallback
+-                rootMode = settings.rootMode
+-                if (snap != null) {
+-                    val whitelistChanged = BackupStore.applySettings(context, snap)
+-                    whitelist = settings.whitelist
+-                    ocrFallback = settings.ocrFallback
+-                    rootMode = settings.rootMode
+-                    if (whitelistChanged) applyKit()
+-                    if (settings.rootMode) RootForegroundService.start(context)
+-                    else RootForegroundService.stop(context)
+-                }
++                CaptureModeManager.reconcile(context)
++                applyKit()
+             },
+         )
+ 
+@@ -419,14 +430,34 @@
+     }
+ }
+ 
++internal fun captureModeLabel(mode: CaptureMode?): String = when (mode) {
++    CaptureMode.ROOT -> "Root 模式"
++    CaptureMode.ACCESSIBILITY -> "无障碍模式"
++    null -> "尚未选择"
++}
++
++@Composable
++private fun CaptureModeSettingsPage(mode: CaptureMode?, onBack: () -> Unit, onSave: (CaptureMode) -> Unit) {
++    var selected by rememberSaveable { mutableStateOf(mode) }
++    SubPageScaffold(title = "自动记账模式", onBack = onBack) { padding ->
++        CaptureModeChoice(
++            mode = selected,
++            onSelect = { selected = it },
++            onDone = { selected?.let(onSave) },
++            modifier = Modifier.padding(padding),
++            doneLabel = "保存模式",
++        )
++    }
++}
++
+ // ---------------------------------------------------------------------------
+ // 入口页顶部状态卡
+ // ---------------------------------------------------------------------------
+ 
+ @Composable
+-private fun StatusHeader(enabled: Boolean, serviceBound: Boolean) {
++private fun StatusHeader(enabled: Boolean, mode: CaptureMode?, serviceBound: Boolean, status: RootWatcher.Status) {
+     val p = LocalAbPalette.current
+-    val ok = enabled && serviceBound
++    val ok = enabled && (if (mode == CaptureMode.ROOT) status.running else mode == CaptureMode.ACCESSIBILITY && serviceBound)
+     InsetGroup(Modifier.padding(top = AbSpacing.s)) {
+         Row(
+             Modifier.fillMaxWidth().padding(AbSpacing.l),
+@@ -442,8 +473,10 @@
+                 Text(
+                     when {
+                         !enabled -> "识别已暂停"
+-                        !serviceBound -> "等待无障碍服务"
+-                        else -> "正在自动记账"
++                        mode == null -> "请选择自动记账模式"
++                        mode == CaptureMode.ROOT && !status.running -> "Root 采集未运行"
++                        mode == CaptureMode.ACCESSIBILITY && !serviceBound -> "等待无障碍服务"
++                        else -> "正在自动记账 · ${captureModeLabel(mode)}"
+                     },
+                     style = AbType.headline,
+                     color = p.label,
+@@ -451,6 +484,8 @@
+                 Text(
+                     when {
+                         !enabled -> "打开上方开关即可恢复监听"
++                        mode == null -> "在「自动记账模式」中选择 Root 或无障碍"
++                        mode == CaptureMode.ROOT -> status.lastResult
+                         !serviceBound -> "去「权限」里开启无障碍服务"
+                         else -> "识别到账单页会弹出确认卡"
+                     },
+@@ -638,6 +673,10 @@
+ 
+ @Composable
+ private fun PermissionsPage(
++    mode: CaptureMode?,
++    rootGranted: Boolean?,
++    onCheckRoot: () -> Unit,
++    onRootStatus: () -> Unit,
+     serviceBound: Boolean,
+     overlayGranted: Boolean,
+     notifyGranted: Boolean,
+@@ -661,12 +700,27 @@
+         ) {
+             GroupHeader("采集权限")
+             InsetGroup {
+-                ListRow(
+-                    title = "无障碍服务",
+-                    subtitle = if (serviceBound) "已连接" else "未连接 — 点这里去开启",
+-                    chevron = true,
+-                    onClick = { openAccessibilitySettings(context) },
+-                )
++                if (mode == CaptureMode.ROOT) {
++                    ListRow(
++                        title = "Root 授权",
++                        subtitle = when (rootGranted) {
++                            true -> "已授权 — 点击重新检测"
++                            false -> "未授权 — 点击重试，可切换到无障碍模式"
++                            null -> "点击检测并申请 Root 授权"
++                        },
++                        chevron = true,
++                        onClick = onCheckRoot,
++                    )
++                    InsetDivider()
++                    ListRow(title = "Root 实时状态", chevron = true, onClick = onRootStatus)
++                } else if (mode == CaptureMode.ACCESSIBILITY) {
++                    ListRow(
++                        title = "无障碍服务",
++                        subtitle = if (serviceBound) "已连接" else "未连接 — 点这里去开启",
++                        chevron = true,
++                        onClick = { openAccessibilitySettings(context) },
++                    )
++                }
+                 InsetDivider()
+                 ListRow(
+                     title = "显示在其他应用上层",
+@@ -701,7 +755,12 @@
+                 )
+             }
+             GroupFooter(
+-                "无障碍用于读取账单页面文字。悬浮窗是「识别完立刻弹卡」的前提：" +
++                when (mode) {
++                    CaptureMode.ROOT -> "Root 用于读取账单页面，无需开启无障碍。"
++                    CaptureMode.ACCESSIBILITY -> "无障碍用于读取账单页面文字，无需 Root。"
++                    null -> "请先在「自动记账模式」中选择采集方式。"
++                } +
++                    "悬浮窗是「识别完立刻弹卡」的前提：" +
+                     "有它才能不经通知、不启动 Activity 直接把确认卡盖在对方 App 上，" +
+                     "不放任何常驻 UI。",
+             )
+@@ -720,9 +779,9 @@
+     enabled: Boolean,
+     status: RootWatcher.Status,
+     onBack: () -> Unit,
+-    onToggle: (Boolean) -> Unit,
++    onCheckRoot: () -> Unit,
+ ) {
+-    SubPageScaffold(title = "Root 轮询", onBack = onBack) { padding ->
++    SubPageScaffold(title = "Root 状态", onBack = onBack) { padding ->
+         Column(
+             Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                 .padding(padding).padding(horizontal = AbSpacing.page),
+@@ -733,22 +792,17 @@
+                 ListRow(
+                     title = "Root 授权",
+                     subtitle = when (rootGranted) {
+-                        null -> "检测中…"
++                        null -> "检测中 / 点击重试"
+                         true -> "已获得（Magisk / KernelSU）"
+-                        false -> "未获得 — 该模式不可用"
++                        false -> "未获得 — 可重试或切换到无障碍模式"
+                     },
++                    chevron = true,
++                    onClick = onCheckRoot,
+                 )
+                 InsetDivider()
+                 ListRow(
+-                    title = "启用 root 轮询（后台常驻）",
+-                    subtitle = "每 1.2 秒检查前台应用，跑在前台服务里",
+-                    dividerAbove = true,
+-                    trailing = {
+-                        AbSwitch(enabled && rootGranted == true) { on ->
+-                            if (rootGranted == true) onToggle(on)
+-                        }
+-                    },
+-                    onClick = { if (rootGranted == true) onToggle(!enabled) },
++                    title = "采集状态",
++                    subtitle = if (!enabled) "识别总开关已暂停" else if (status.running) "后台轮询运行中" else "未运行，请检查 Root 授权",
+                 )
+             }
+             GroupHeader("实时状态")
+@@ -768,10 +822,10 @@
+                 )
+             }
+             GroupFooter(
+-                "开启后通知栏会有一条常驻通知，退出 AutoBook 也继续监听（可在此关闭或点通知里的「停止」）。" +
++                "Root 模式开启识别后通知栏会有一条常驻通知，退出 AutoBook 也继续监听。" +
+                     "root 路径没有后台启动豁免，所以更需要悬浮窗权限——有权限时确认卡直接浮在页面上，" +
+                     "没有就只能落待确认队列 + 通知。" +
+-                    "与无障碍互不干扰；两个都开时会认到两次，但指纹去重只会记一笔。",
++                    "如需改用无障碍，请返回「自动记账模式」切换。",
+             )
+             Spacer(Modifier.height(AbSpacing.xl))
+         }
+
+--- /tmp/autobook-mode-before/app/src/main/java/com/example/autobook/ui/MainActivity.kt	2026-10-22 10:16:08.316527969 +0800
++++ app/src/main/java/com/example/autobook/ui/MainActivity.kt	2026-10-22 10:17:01.350263354 +0800
+@@ -3,6 +3,7 @@
+ import android.os.Build
+ import android.os.Bundle
+ import android.view.Gravity
++import android.view.View
+ import android.widget.FrameLayout
+ import androidx.activity.ComponentActivity
+ import androidx.activity.SystemBarStyle
+@@ -34,7 +35,11 @@
+ import androidx.core.view.ViewCompat
+ import androidx.core.view.WindowInsetsCompat
+ import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import androidx.lifecycle.Lifecycle
++import androidx.lifecycle.lifecycleScope
++import androidx.lifecycle.repeatOnLifecycle
+ import com.example.autobook.R
++import com.example.autobook.capture.CaptureModeManager
+ import com.example.autobook.data.AppDb
+ import com.example.autobook.ui.design.AbIcons
+ import com.example.autobook.ui.design.AbMotion
+@@ -43,6 +48,7 @@
+ import com.example.autobook.ui.design.LiquidTabBar
+ import com.example.autobook.ui.design.TabItem
+ import com.example.autobook.ui.design.createLiquidGlassTabBar
++import kotlinx.coroutines.launch
+ 
+ /**
+  * 主界面。
+@@ -80,6 +86,7 @@
+             ),
+         )
+         super.onCreate(savedInstanceState)
++        CaptureModeManager.init(this)
+         tabState.intValue = savedInstanceState?.getInt("selectedTab", 0)?.coerceIn(tabs.indices) ?: 0
+         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+             window.isNavigationBarContrastEnforced = false
+@@ -113,7 +120,9 @@
+             items = tabs,
+             onSelect = select,
+         )
++        val dockView: View
+         if (glassBar != null) {
++            dockView = glassBar
+             // 高度 / 左右 50dp / 底部 16dp + 导航条 inset 都在其构造函数里设好
+             root.addView(glassBar)
+         } else {
+@@ -140,6 +149,7 @@
+                     }
+                 }
+             }
++            dockView = fallbackBar
+             // 假玻璃兜底的胶囊阴影：View 级 elevation（ComposeView 自己画的内容
+             // 不会带投影，所以挂在外层 FrameLayout 上）。真玻璃则使用独立的位图阴影层。
+             fallbackBar.elevation = 12f * density
+@@ -175,7 +185,17 @@
+             }
+         }
+ 
++        // The choice screen lives in the content source; hide the sibling native dock as well.
++        // No extra full-screen overlay is retained after choosing a mode.
++        dockView.visibility = if (CaptureModeManager.state.value.mode == null) View.GONE else View.VISIBLE
+         setContentView(root)
++        lifecycleScope.launch {
++            repeatOnLifecycle(Lifecycle.State.STARTED) {
++                CaptureModeManager.state.collect { state ->
++                    dockView.visibility = if (state.mode == null) View.GONE else View.VISIBLE
++                }
++            }
++        }
+     }
+ 
+     override fun onSaveInstanceState(outState: Bundle) {
+@@ -197,6 +217,7 @@
+     val p = LocalAbPalette.current
+     val tab = tabState.intValue
+     val tabStates = rememberSaveableStateHolder()
++    val captureState by CaptureModeManager.state.collectAsStateWithLifecycle()
+ 
+     // 上一次切换方向：向右点 = 新页从右进；向左点 = 新页从左进。
+     var forward by remember { mutableStateOf(true) }
+@@ -210,7 +231,12 @@
+         .collectAsStateWithLifecycle(initialValue = emptyList())
+ 
+     // 返回 / 侧滑：非首页 → 回首页；已在首页 → 交给系统退出（符合 Android 惯例）
+-    BackHandler(enabled = tab != 0) { tabState.intValue = 0 }
++    BackHandler(enabled = captureState.mode != null && tab != 0) { tabState.intValue = 0 }
++
++    if (captureState.mode == null) {
++        CaptureModeScreen()
++        return
++    }
+ 
+     Box(Modifier.fillMaxSize().background(p.pageBg)) {
+         AnimatedContent(
+
+--- /tmp/autobook-mode-before/app/src/main/java/com/example/autobook/root/BootReceiver.kt	2026-10-22 10:16:05.686946727 +0800
++++ app/src/main/java/com/example/autobook/root/BootReceiver.kt	2026-10-22 10:18:17.345923747 +0800
+@@ -3,14 +3,14 @@
+ import android.content.BroadcastReceiver
+ import android.content.Context
+ import android.content.Intent
+-import com.example.autobook.data.Settings
++import com.example.autobook.capture.CaptureModeManager
+ 
+ /**
+  * 开机后把 root 轮询拉回来。
+  *
+  * 前台服务本身不是开机自启的；用户既然把它设成主力采集方式，
+  * 重启手机后就得继续工作，否则每次开机都要手动去设置页点一下。
+- * 只在用户此前自己打开过「Root 轮询」开关时才启动（[Settings.rootMode]）。
++ * 只在已选择 Root 模式且识别总开关开启时启动。
+  */
+ class BootReceiver : BroadcastReceiver() {
+ 
+@@ -22,7 +22,6 @@
+         ) {
+             return
+         }
+-        if (!Settings(context).rootMode) return
+-        runCatching { RootForegroundService.start(context) }
++        CaptureModeManager.reconcile(context)
+     }
+ }
+
+--- /tmp/autobook-mode-before/app/src/main/java/com/example/autobook/root/RootForegroundService.kt	2026-10-22 10:16:05.686872762 +0800
++++ app/src/main/java/com/example/autobook/root/RootForegroundService.kt	2026-10-22 10:18:17.346034858 +0800
+@@ -13,6 +13,8 @@
+ import androidx.core.app.NotificationCompat
+ import com.example.autobook.R
+ import com.example.autobook.data.Settings
++import com.example.autobook.data.CaptureMode
++import com.example.autobook.capture.CaptureModeManager
+ import com.example.autobook.ui.MainActivity
+ 
+ /**
+@@ -22,12 +24,16 @@
+  * 一离开设置页（甚至只是进程被回收）轮询就停了 —— 等于"root 模式"只在设置页里活着。
+  * 现在改成前台服务：开启后一直按节拍抓，通知栏有一条常驻通知（不可划掉，但很低调）。
+  *
+- * 合规：仅在用户手动打开「Root 轮询」开关时才启动；
++ * 仅在用户已选择 Root 模式且启用识别时启动；
+  * 不读第三方 App 私有数据，只用 uiautomator dump 读当前界面文字。
+  */
+ class RootForegroundService : Service() {
+ 
+     companion object {
++        @Volatile
++        var active: Boolean = false
++            private set
++
+         const val CHANNEL_ID = "autobook_root"
+         private const val NOTIFICATION_ID = 1001
+         private const val INTERVAL_MS = 1_200L
+@@ -37,6 +43,8 @@
+         private const val ACTION_STOP = "com.example.autobook.root.STOP"
+ 
+         fun start(context: Context) {
++            val settings = Settings(context)
++            if (!settings.enabled || settings.captureMode != CaptureMode.ROOT) return
+             val intent = Intent(context, RootForegroundService::class.java).setAction(ACTION_START)
+             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                 context.startForegroundService(intent)
+@@ -61,6 +69,7 @@
+     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+         when (intent?.action) {
+             ACTION_STOP -> {
++                CaptureModeManager.setEnabled(this, false)
+                 RootWatcher.stop()
+                 stopForeground(STOP_FOREGROUND_REMOVE)
+                 stopSelf()
+@@ -68,8 +77,17 @@
+             }
+ 
+             else -> {
++                val settings = Settings(this)
++                if (!settings.enabled || settings.captureMode != CaptureMode.ROOT) {
++                    stopSelf()
++                    return START_NOT_STICKY
++                }
++                active = true
+                 startInForeground()
+-                RootWatcher.start(this, Settings(this), INTERVAL_MS)
++                RootWatcher.start(this, settings, INTERVAL_MS) {
++                    stopForeground(STOP_FOREGROUND_REMOVE)
++                    stopSelf()
++                }
+             }
+         }
+         // 被系统杀掉后自动重建：轮询是"常驻"语义，重建时不要弹新通知
+@@ -77,6 +95,7 @@
+     }
+ 
+     override fun onDestroy() {
++        active = false
+         RootWatcher.stop()
+         super.onDestroy()
+     }
+
+--- /tmp/autobook-mode-before/app/src/main/java/com/example/autobook/root/RootWatcher.kt	2026-10-22 10:16:05.686795668 +0800
++++ app/src/main/java/com/example/autobook/root/RootWatcher.kt	2026-10-22 10:18:17.345781356 +0800
+@@ -4,7 +4,9 @@
+ import android.content.Context
+ import android.os.PowerManager
+ import com.example.autobook.data.Settings
++import com.example.autobook.data.CaptureMode
+ import com.example.billkit.BillKit
++import com.example.billkit.root.RootShell
+ import com.example.billkit.root.RootScreenshot
+ import com.example.billkit.root.RootUiDumpSource
+ import kotlinx.coroutines.CoroutineScope
+@@ -17,6 +19,9 @@
+ import kotlinx.coroutines.flow.asStateFlow
+ import kotlinx.coroutines.isActive
+ import kotlinx.coroutines.launch
++import kotlinx.coroutines.withContext
++import kotlinx.coroutines.currentCoroutineContext
++import kotlinx.coroutines.ensureActive
+ 
+ /**
+  * root 轮询（宿主侧驱动）。真正"怎么抓"和"怎么判"都在 :billkit：
+@@ -61,15 +66,28 @@
+     private var appContext: Context? = null
+ 
+     @Synchronized
+-    fun start(context: Context, settings: Settings, intervalMs: Long = 1_200L) {
++    fun start(
++        context: Context,
++        settings: Settings,
++        intervalMs: Long = 1_200L,
++        onAuthorizationDenied: () -> Unit = {},
++    ) {
++        if (!settings.enabled || settings.captureMode != CaptureMode.ROOT || running) return
+         stop()
+         appContext = context.applicationContext
+         // 换来源/换白名单后旧的哈希会误判为"没变化"，重启轮询时清掉
+         lastHash = null
+         val app = appContext ?: return
+         job = scope.launch {
++            update { it.copy(running = false, lastResult = "正在请求 Root 授权") }
++            if (!RootShell.isGranted()) {
++                update { it.copy(running = false, lastResult = "Root 授权失败，请授权后重新选择 Root 或开启识别") }
++                withContext(Dispatchers.Main) { onAuthorizationDenied() }
++                return@launch
++            }
++            if (!isActive || !settings.enabled || settings.captureMode != CaptureMode.ROOT) return@launch
+             update { it.copy(running = true, lastResult = "运行中") }
+-            while (isActive) {
++            while (isActive && settings.enabled && settings.captureMode == CaptureMode.ROOT) {
+                 val interactive = isInteractive(app)
+                 if (!interactive) {
+                     // 熄屏：什么都不做，长睡。醒来第一轮把 lastHash 清掉，
+@@ -92,8 +110,13 @@
+     fun stop() {
+         job?.cancel()
+         job = null
+-        source.cleanup()
+-        update { it.copy(running = false, lastResult = if (it.tickCount == 0L) "未启动" else "已停止") }
++        // Do not issue su on stop: this is also reached when Accessibility is selected.
++        // The next Root dump removes its previous temporary XML before writing.
++        update { it.copy(running = false, lastResult = when {
++            it.lastResult.startsWith("Root 授权失败") -> it.lastResult
++            it.tickCount == 0L -> "未启动"
++            else -> "已停止"
++        }) }
+     }
+ 
+     fun release() = stop()
+@@ -114,7 +137,7 @@
+     }
+ 
+     private suspend fun tick(context: Context, settings: Settings): RootPollPolicy.Tick {
+-        if (!settings.enabled) {
++        if (!settings.enabled || settings.captureMode != CaptureMode.ROOT) {
+             lastHash = null
+             update { it.copy(lastResult = "识别已关闭") }
+             return RootPollPolicy.Tick.IDLE
+@@ -132,6 +155,7 @@
+         }
+ 
+         // 前台已经查过了，直接传进去，省一次 dumpsys window
++        if (!settings.enabled || settings.captureMode != CaptureMode.ROOT) return RootPollPolicy.Tick.IDLE
+         val snapshot = source.dump(fg) ?: run {
+             update { it.copy(lastPackage = fg.packageName, lastResult = "dump 失败") }
+             return RootPollPolicy.Tick.IDLE
+@@ -149,6 +173,8 @@
+         lastHash = hash
+         update { it.copy(lastPackage = fg.packageName, lastTickAt = System.currentTimeMillis(), tickCount = it.tickCount + 1) }
+ 
++        currentCoroutineContext().ensureActive()
++        if (!settings.enabled || settings.captureMode != CaptureMode.ROOT) return RootPollPolicy.Tick.IDLE
+         val outcome = BillKit.offer(snapshot)
+         val label = when (outcome) {
+             is com.example.billkit.BillPipeline.Outcome.Draft -> "识别到账单"
+@@ -161,9 +187,12 @@
+         if (!outcome.needsOcr || !BillKit.currentConfig().ocrEnabled) return result
+         if (System.currentTimeMillis() - lastOcrAt < OCR_COOLDOWN_MS) return result
+ 
++        if (!settings.enabled || settings.captureMode != CaptureMode.ROOT) return result
+         lastOcrAt = System.currentTimeMillis()
+         val bitmap = RootScreenshot.capture() ?: return result
+         try {
++            currentCoroutineContext().ensureActive()
++            if (!settings.enabled || settings.captureMode != CaptureMode.ROOT) return result
+             val statusBarPx = (STATUS_BAR_DP * context.resources.displayMetrics.density).toInt()
+             val ocrOutcome = BillKit.offerOcr(
+                 packageName = fg.packageName,
+
+--- /tmp/autobook-mode-before/app/src/main/java/com/example/autobook/capture/BillAccessibilityService.kt	2026-10-22 10:16:05.686720244 +0800
++++ app/src/main/java/com/example/autobook/capture/BillAccessibilityService.kt	2026-10-22 10:17:02.532868941 +0800
+@@ -7,11 +7,10 @@
+ import android.util.Log
+ import android.view.accessibility.AccessibilityEvent
+ import com.example.autobook.data.Settings
++import com.example.autobook.data.CaptureMode
+ import com.example.billkit.BillKit
+ import com.example.billkit.TextCollector
+ import com.example.billkit.UiSnapshot
+-import com.example.billkit.root.RootScreenshot
+-import com.example.billkit.root.RootShell
+ import java.util.concurrent.Executors
+ 
+ /**
+@@ -31,15 +30,6 @@
+         /** 根节点缺失时的重试间隔 */
+         private const val RETRY_MS = 400L
+ 
+-        /**
+-         * OCR 兜底冷却。截图 + ML Kit 一次 150~400ms，只能当成"偶尔救场"，
+-         * 不能每屏都跑，否则无障碍路径也会开始发烫。
+-         */
+-        private const val OCR_COOLDOWN_MS = 3_000L
+-
+-        /** 状态栏高度（dp）：OCR 前裁掉状态栏，避免把时间当金额 */
+-        private const val STATUS_BAR_DP = 24
+-
+         @Volatile
+         var instance: BillAccessibilityService? = null
+             private set
+@@ -58,10 +48,6 @@
+     /** 根节点拿不到时的一次性重试标记（重试也只试一次，避免抖动） */
+     private var retried = false
+ 
+-    /** 上次 OCR 时间 + root 是否可用（只探测一次，避免每屏都 su） */
+-    private var lastOcrAt = 0L
+-    private var rootAvailable: Boolean? = null
+-
+     private val captureTask = Runnable { captureAndOffer() }
+ 
+     override fun onServiceConnected() {
+@@ -75,10 +61,14 @@
+     /** 白名单/开关变化后由 UI 调用，减少无效回调 */
+     fun refreshServiceInfo() {
+         val info = serviceInfo ?: return
+-        val enabled = settings.enabled
++        val enabled = settings.enabled && settings.captureMode == CaptureMode.ACCESSIBILITY
++        if (!enabled) {
++            handler.removeCallbacks(captureTask)
++            pendingPackage = null
++        }
+         info.packageNames = if (enabled) settings.whitelist.toTypedArray() else null
+-        info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
+-            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
++        info.eventTypes = if (enabled) AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
++            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED else 0
+         info.notificationTimeout = 300
+         info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
+         serviceInfo = info
+@@ -86,7 +76,7 @@
+ 
+     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+         if (event == null) return
+-        if (!::settings.isInitialized || !settings.enabled) return
++        if (!::settings.isInitialized || !settings.enabled || settings.captureMode != CaptureMode.ACCESSIBILITY) return
+ 
+         val pkg = event.packageName?.toString() ?: return
+         if (!BillKit.isAccepted(pkg)) return
+@@ -106,6 +96,7 @@
+     }
+ 
+     private fun captureAndOffer() {
++        if (!settings.enabled || settings.captureMode != CaptureMode.ACCESSIBILITY) return
+         val pkg = pendingPackage ?: return
+         val root = rootInActiveWindow
+ 
+@@ -134,43 +125,9 @@
+         )
+ 
+         worker.execute {
+-            val outcome = BillKit.offer(snapshot)
+-            // 无障碍读到的树不完整（自绘/WebView 页面很常见）时，只有 root 能救：
+-            // screencap 走 su，不需要 canTakeScreenshot（那是另一条合规红线）。
+-            if (outcome.needsOcr) offerOcrFallback(pkg, pendingClass)
+-        }
+-    }
+-
+-    /**
+-     * 无障碍路径的 OCR 兜底。
+-     *
+-     * 之前 OCR 只接在 root 轮询里，所以"只开无障碍"的用户这个开关是完全无效的 ——
+-     * 页面上写着「识别不到时用截图兜底」，实际永远不会触发。
+-     * 这里补上：只在 [BillPipeline.Outcome.needsOcr] 且 root 可用且过了冷却时截图。
+-     */
+-    private fun offerOcrFallback(pkg: String, activityClass: String?) {
+-        if (!BillKit.currentConfig().ocrEnabled) return
+-        val now = System.currentTimeMillis()
+-        if (now - lastOcrAt < OCR_COOLDOWN_MS) return
+-
+-        // root 探测只做一次；没有 root 就永久跳过，不反复 su
+-        val granted = rootAvailable ?: RootShell.isGranted().also { rootAvailable = it }
+-        if (!granted) return
+-
+-        lastOcrAt = now
+-        val bitmap = RootScreenshot.capture() ?: return
+-        try {
+-            val statusBarPx = (STATUS_BAR_DP * resources.displayMetrics.density).toInt()
+-            kotlinx.coroutines.runBlocking {
+-                BillKit.offerOcr(
+-                    packageName = pkg,
+-                    activityClass = activityClass,
+-                    screenshot = bitmap,
+-                    statusBarPx = statusBarPx,
+-                )
++            if (settings.enabled && settings.captureMode == CaptureMode.ACCESSIBILITY) {
++                BillKit.offer(snapshot)
+             }
+-        } finally {
+-            if (!bitmap.isRecycled) bitmap.recycle()
+         }
+     }
+ 
+
+--- /tmp/autobook-mode-before/app/src/main/java/com/example/autobook/data/BackupStore.kt	2026-10-22 10:16:05.686558534 +0800
++++ app/src/main/java/com/example/autobook/data/BackupStore.kt	2026-10-22 10:17:02.534611501 +0800
+@@ -127,7 +127,9 @@
+         if (snapshot.whitelist.isNotEmpty()) settings.whitelist = snapshot.whitelist.toSet()
+         if (snapshot.minIntervalMs in 300L..10_000L) settings.minIntervalMs = snapshot.minIntervalMs
+         settings.ocrFallback = snapshot.ocrFallback
+-        settings.rootMode = snapshot.rootMode
++        val restoredMode = CaptureModePolicy.restore(settings.captureMode, snapshot.rootMode)
++        if (settings.captureMode == null && restoredMode != null) settings.captureMode = restoredMode
++        com.example.autobook.capture.CaptureModeManager.reconcile(context)
+         return settings.whitelist != oldWhitelist
+     }
+ 
+
+--- /tmp/autobook-mode-before/app/src/main/java/com/example/autobook/data/Settings.kt	2026-10-22 10:16:05.686454786 +0800
++++ app/src/main/java/com/example/autobook/data/Settings.kt	2026-10-22 10:16:35.261774249 +0800
+@@ -29,13 +29,35 @@
+         get() = prefs.getBoolean(KEY_OCR_FALLBACK, true)
+         set(value) = prefs.edit().putBoolean(KEY_OCR_FALLBACK, value).apply()
+ 
+-    /**
+-     * root 轮询常驻开关。开启后由 `RootForegroundService` 在前台服务里跑，
+-     * 而不是只在设置页里跑。
+-     */
++    var captureMode: CaptureMode?
++        get() = CaptureMode.entries.firstOrNull { it.name == prefs.getString(KEY_CAPTURE_MODE, null) }
++        set(value) {
++            prefs.edit().apply {
++                if (value == null) remove(KEY_CAPTURE_MODE) else putString(KEY_CAPTURE_MODE, value.name)
++                putBoolean(KEY_ROOT_MODE, value == CaptureMode.ROOT)
++            }.apply()
++        }
++
++    /** Compatibility for old callers and the backup format; UI uses captureMode. */
+     var rootMode: Boolean
+-        get() = prefs.getBoolean(KEY_ROOT_MODE, false)
+-        set(value) = prefs.edit().putBoolean(KEY_ROOT_MODE, value).apply()
++        get() = captureMode == CaptureMode.ROOT ||
++            (captureMode == null && prefs.getBoolean(KEY_ROOT_MODE, false))
++        set(value) { captureMode = if (value) CaptureMode.ROOT else CaptureMode.ACCESSIBILITY }
++
++    fun migrateCaptureMode(accessibilityConfigured: Boolean) {
++        if (captureMode != null) return
++        val migrated = CaptureModePolicy.migrate(
++            null, prefs.getBoolean(KEY_ROOT_MODE, false), accessibilityConfigured,
++        )
++        if (migrated != null) captureMode = migrated
++    }
++
++    fun selectCaptureMode(mode: CaptureMode) {
++        val next = CaptureModePolicy.select(CaptureModeState(captureMode, enabled), mode)
++        prefs.edit().putString(KEY_CAPTURE_MODE, mode.name)
++            .putBoolean(KEY_ROOT_MODE, mode == CaptureMode.ROOT)
++            .putBoolean(KEY_ENABLED, next.enabled).apply()
++    }
+ 
+     var whitelist: Set<String>
+         get() = prefs.getStringSet(KEY_WHITELIST, null) ?: Packages.defaultWhitelist
+@@ -52,11 +74,13 @@
+     /** 把宿主设置映射成库的配置；改完记得调 BillKit.updateConfig */
+     fun toKitConfig(): BillKitConfig = BillKitConfig(
+         acceptedPackages = whitelist,
+-        ocrEnabled = ocrFallback,
++        ocrEnabled = ocrFallback && captureMode == CaptureMode.ROOT,
+         minIntervalMs = minIntervalMs,
+     )
+ 
+-    private companion object {
++    companion object {
++        const val PREFS_NAME = "autobook"
++        const val KEY_CAPTURE_MODE = "capture_mode"
+         const val KEY_ENABLED = "enabled"
+         const val KEY_AUTO_CONFIRM = "auto_confirm"
+         const val KEY_MIN_INTERVAL = "min_interval_ms"

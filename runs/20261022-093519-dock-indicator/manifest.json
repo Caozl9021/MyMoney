@@ -1,0 +1,37 @@
+{
+  "run_id": "20261022-093519-dock-indicator",
+  "started_at": "2026-10-22T09:35:19.305777+08:00",
+  "commit": null,
+  "parameters": {
+    "indicator_outset_dp": 3,
+    "original_inset_dp": 6
+  },
+  "inputs": [
+    "app/src/main/java/com/example/autobook/ui/design/Chrome.kt"
+  ],
+  "environment": {
+    "jdk": 17,
+    "compileSdk": 35
+  },
+  "status": "verified_pending_acceptance",
+  "acceptance": "待验收",
+  "finished_at": "2026-10-22T09:39:07.516880+08:00",
+  "versionName": "0.5.9",
+  "versionCode": 18,
+  "unit_tests": {
+    "tests": 111,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "builds": [
+    "debug successful",
+    "signed release successful"
+  ],
+  "apk_versions_verified": true,
+  "release_certificate_matches_0_5_8": true,
+  "files": {
+    "dist/AutoBook-0.5.9-debug.apk": "1dc92695ae74625d0df744dc000cc57e672ca44eea8f1fe304c42864f139b6b9",
+    "dist/AutoBook-0.5.9-release.apk": "e7f798f8ef375cdef558e45acbbd34efc70088a28a390f26235cc5bf0a6393ab"
+  }
+}

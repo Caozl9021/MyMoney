@@ -1,0 +1,91 @@
+{
+  "debug": {
+    "path": "dist/AutoBook-0.6.5-debug.apk",
+    "bytes": 54678665,
+    "sha256": "c0df5c7e8d705fb6ecddbcbb4a0709604850e44858fc75ddb3d552e396993dc7",
+    "certificateSha256": "08b0f9a09430a9f8c121402fe5774dfc978e7e28b074b42390c2a358d0566cd7",
+    "foregrounds": [
+      {
+        "path": "res/mipmap-mdpi-v4/ic_launcher_foreground.png",
+        "bytes": 6489,
+        "geometry": "108x108 opaque=False",
+        "alphaBoundingBox": "52x54+28+27"
+      },
+      {
+        "path": "res/mipmap-hdpi-v4/ic_launcher_foreground.png",
+        "bytes": 11115,
+        "geometry": "162x162 opaque=False",
+        "alphaBoundingBox": "79x81+41+40"
+      },
+      {
+        "path": "res/mipmap-xhdpi-v4/ic_launcher_foreground.png",
+        "bytes": 15855,
+        "geometry": "216x216 opaque=False",
+        "alphaBoundingBox": "105x108+55+54"
+      },
+      {
+        "path": "res/mipmap-xxhdpi-v4/ic_launcher_foreground.png",
+        "bytes": 26840,
+        "geometry": "324x324 opaque=False",
+        "alphaBoundingBox": "157x162+83+81"
+      },
+      {
+        "path": "res/mipmap-xxxhdpi-v4/ic_launcher_foreground.png",
+        "bytes": 39762,
+        "geometry": "432x432 opaque=False",
+        "alphaBoundingBox": "210x216+111+108"
+      }
+    ],
+    "versionName": "0.6.5",
+    "versionCode": 24,
+    "background": "#ffffffff"
+  },
+  "release": {
+    "path": "dist/AutoBook-0.6.5-release.apk",
+    "bytes": 45764081,
+    "sha256": "8e4271c7f8e83b95649fb8f21036c922258e7f1518304ccbfd98b94f1aa9ae35",
+    "certificateSha256": "bedb36b7527aa4759262d8b737d7031b57f1db191c68eab4d55829f0598a5ed6",
+    "foregrounds": [
+      {
+        "path": "res/QZ.png",
+        "bytes": 4721,
+        "geometry": "108x108 opaque=False",
+        "alphaBoundingBox": "52x54+28+27"
+      },
+      {
+        "path": "res/zr.png",
+        "bytes": 8129,
+        "geometry": "162x162 opaque=False",
+        "alphaBoundingBox": "79x81+41+40"
+      },
+      {
+        "path": "res/Em.png",
+        "bytes": 11795,
+        "geometry": "216x216 opaque=False",
+        "alphaBoundingBox": "105x108+55+54"
+      },
+      {
+        "path": "res/Lf.png",
+        "bytes": 21034,
+        "geometry": "324x324 opaque=False",
+        "alphaBoundingBox": "157x162+83+81"
+      },
+      {
+        "path": "res/as.png",
+        "bytes": 32153,
+        "geometry": "432x432 opaque=False",
+        "alphaBoundingBox": "210x216+111+108"
+      }
+    ],
+    "versionName": "0.6.5",
+    "versionCode": 24,
+    "background": "#ffffffff"
+  },
+  "tests": {
+    "tests": 167,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "classes": 18
+  }
+}

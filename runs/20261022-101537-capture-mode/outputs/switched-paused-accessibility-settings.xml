@@ -1,0 +1,6 @@
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <string name="capture_mode">ACCESSIBILITY</string>
+    <boolean name="enabled" value="false" />
+    <boolean name="root_mode" value="false" />
+</map>

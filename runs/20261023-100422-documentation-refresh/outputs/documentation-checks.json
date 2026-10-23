@@ -1,0 +1,14 @@
+{
+  "documents": 63,
+  "localLinksChecked": 94,
+  "brokenLinks": [],
+  "baselineVersion": "0.6.8/27",
+  "existingApkHashesUnchanged": true,
+  "businessTestsRun": false,
+  "buildRun": false,
+  "openspecCli": "unavailable; manually checked",
+  "deleted": [
+    "HANDOVER.md",
+    "docs/ENHANCEMENT_SUMMARY.md"
+  ]
+}

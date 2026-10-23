@@ -1,0 +1,10 @@
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="add_bill" android:enabled="true"
+        android:icon="@drawable/ic_brand_color"
+        android:shortcutShortLabel="@string/shortcut_add_bill_short"
+        android:shortcutLongLabel="@string/shortcut_add_bill_long">
+        <intent android:action="com.example.autobook.action.ADD_BILL"
+            android:targetPackage="com.example.autobook"
+            android:targetClass="com.example.autobook.ui.MainActivity" />
+    </shortcut>
+</shortcuts>

@@ -1,0 +1,21 @@
+{
+  "status": "待验收",
+  "source_run_id": "20261022-092633-dock-review",
+  "commit": null,
+  "source_sha256": {
+    "app/src/main/java/com/example/autobook/ui/MainActivity.kt": "52eaa9273742ae756fb5992360a364d0195c48b833833d7a3c44adc12f8c33bc",
+    "app/src/main/java/com/example/autobook/ui/LedgerConfigCard.kt": "04c0f93652c64a66c4885e455c279ff9fb7a7a980e7d21de405bb297b3fadcef",
+    "app/src/main/java/com/example/autobook/ui/Theme.kt": "1aa4fc66c9c96f7964bf64479d3da948ee03601a9e781801df3deb12ff28406b",
+    "app/src/main/java/com/example/autobook/ui/design/Chrome.kt": "9eb14ea95b87dade6a0740b72a245ab2766b0f4ae86e93fefbd44dbb041fd41d",
+    "app/src/main/java/com/example/autobook/ui/design/SystemAccent.kt": "b323cb2e08e4feb4235b6e065527401bc1fe664475d72b54bf8847b2251ded5f",
+    "app/src/main/java/com/example/autobook/ui/design/LiquidGlassTabBar.kt": "2c116e9737031fd77ce42d125599a2444b6427f06220ddb878d643f797d9a00c",
+    "app/src/main/res/values/ids.xml": "cda4f3acfbeab474020c665d776a0978d5b6a7fed3c6d82f8edf9c1bb469948b"
+  },
+  "files": {
+    "AutoBook-0.5.8-dock-debug.apk": "29a66d9fa39c9a25abd973382089b6e7ea0b198160551b46abdd507806a262e7",
+    "final-appearance-dark.png": "e5037e54fba6b220dba85e8e0278aa716fdddb995275d24c9aae033b280470d1",
+    "final-home-light.png": "56a0476bff4a2f60918ea399ca543ff611c26cc69a26ee565230f4e969506efb",
+    "verification.md": "e9af8162e9776e50851839d2b132f52e8658ac69378b77cb7114d84645e7f8b8",
+    "final-settings-bottom-light.png": "7fe9defb9a38a9e4580a121e5fbd61369b5dfec0c92bca6a9e882d2990e942bb"
+  }
+}

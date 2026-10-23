@@ -1,0 +1,153 @@
+> Task :billkit:preBuild UP-TO-DATE
+> Task :billkit:preReleaseBuild UP-TO-DATE
+> Task :billkit:writeReleaseAarMetadata UP-TO-DATE
+> Task :billkit:generateReleaseResValues UP-TO-DATE
+> Task :billkit:generateReleaseResources UP-TO-DATE
+> Task :billkit:packageReleaseResources UP-TO-DATE
+> Task :billkit:extractDeepLinksRelease UP-TO-DATE
+> Task :billkit:processReleaseManifest UP-TO-DATE
+> Task :billkit:compileReleaseLibraryResources UP-TO-DATE
+> Task :billkit:parseReleaseLocalResources UP-TO-DATE
+> Task :billkit:generateReleaseRFile UP-TO-DATE
+> Task :billkit:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:buildKotlinToolingMetadata UP-TO-DATE
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preReleaseBuild UP-TO-DATE
+> Task :billkit:compileReleaseKotlin UP-TO-DATE
+> Task :billkit:javaPreCompileRelease UP-TO-DATE
+> Task :billkit:compileReleaseJavaWithJavac NO-SOURCE
+> Task :billkit:bundleLibCompileToJarRelease UP-TO-DATE
+> Task :billkit:bundleLibRuntimeToJarRelease UP-TO-DATE
+> Task :billkit:processReleaseJavaRes UP-TO-DATE
+> Task :billkit:createFullJarRelease UP-TO-DATE
+> Task :billkit:extractProguardFiles UP-TO-DATE
+> Task :billkit:generateReleaseLintModel UP-TO-DATE
+> Task :billkit:prepareLintJarForPublish UP-TO-DATE
+> Task :billkit:mergeReleaseJniLibFolders UP-TO-DATE
+> Task :billkit:mergeReleaseNativeLibs NO-SOURCE
+> Task :billkit:stripReleaseDebugSymbols NO-SOURCE
+> Task :billkit:copyReleaseJniLibsProjectAndLocalJars UP-TO-DATE
+> Task :billkit:extractDeepLinksForAarRelease UP-TO-DATE
+> Task :app:checkReleaseAarMetadata UP-TO-DATE
+> Task :app:generateReleaseResValues UP-TO-DATE
+> Task :billkit:extractReleaseAnnotations UP-TO-DATE
+> Task :billkit:mergeReleaseGeneratedProguardFiles UP-TO-DATE
+> Task :billkit:mergeReleaseConsumerProguardFiles UP-TO-DATE
+> Task :billkit:mergeReleaseShaders UP-TO-DATE
+> Task :billkit:compileReleaseShaders NO-SOURCE
+> Task :billkit:generateReleaseAssets UP-TO-DATE
+> Task :app:mapReleaseSourceSetPaths
+> Task :billkit:packageReleaseAssets UP-TO-DATE
+> Task :billkit:prepareReleaseArtProfile UP-TO-DATE
+> Task :app:generateReleaseResources
+> Task :billkit:mergeReleaseJavaResource UP-TO-DATE
+> Task :billkit:syncReleaseLibJars UP-TO-DATE
+> Task :billkit:bundleReleaseLocalLintAar UP-TO-DATE
+> Task :billkit:lintVitalAnalyzeRelease UP-TO-DATE
+> Task :billkit:writeReleaseLintModelMetadata UP-TO-DATE
+> Task :billkit:generateReleaseLintVitalModel UP-TO-DATE
+> Task :billkit:copyReleaseJniLibsProjectOnly UP-TO-DATE
+> Task :billkit:exportReleaseConsumerProguardFiles UP-TO-DATE
+> Task :app:packageReleaseResources
+> Task :app:parseReleaseLocalResources FROM-CACHE
+> Task :app:createReleaseCompatibleScreenManifests
+> Task :app:extractDeepLinksRelease UP-TO-DATE
+> Task :app:processReleaseMainManifest
+> Task :app:processReleaseManifest
+> Task :app:javaPreCompileRelease UP-TO-DATE
+> Task :app:extractProguardFiles UP-TO-DATE
+> Task :app:mergeReleaseJniLibFolders UP-TO-DATE
+> Task :app:mergeReleaseNativeLibs UP-TO-DATE
+> Task :app:stripReleaseDebugSymbols UP-TO-DATE
+> Task :app:extractReleaseNativeSymbolTables UP-TO-DATE
+> Task :app:mergeReleaseNativeDebugMetadata NO-SOURCE
+> Task :app:checkReleaseDuplicateClasses UP-TO-DATE
+> Task :app:mergeReleaseArtProfile UP-TO-DATE
+> Task :app:mergeReleaseStartupProfile UP-TO-DATE
+> Task :app:mergeReleaseShaders UP-TO-DATE
+> Task :app:compileReleaseShaders NO-SOURCE
+> Task :app:generateReleaseAssets UP-TO-DATE
+> Task :app:mergeReleaseAssets UP-TO-DATE
+> Task :app:compressReleaseAssets UP-TO-DATE
+> Task :app:extractReleaseVersionControlInfo UP-TO-DATE
+> Task :app:collectReleaseDependencies UP-TO-DATE
+> Task :app:sdkReleaseDependencyData UP-TO-DATE
+> Task :app:validateSigningRelease UP-TO-DATE
+> Task :app:processReleaseManifestForPackage
+> Task :app:writeReleaseAppMetadata UP-TO-DATE
+> Task :app:writeReleaseSigningConfigVersions UP-TO-DATE
+> Task :app:mergeReleaseResources
+> Task :app:processReleaseResources
+> Task :app:optimizeReleaseResources
+> Task :app:kspReleaseKotlin
+> Task :app:compileReleaseKotlin
+> Task :app:compileReleaseJavaWithJavac UP-TO-DATE
+> Task :app:generateReleaseLintVitalReportModel
+> Task :app:mergeReleaseGeneratedProguardFiles UP-TO-DATE
+> Task :app:processReleaseJavaRes UP-TO-DATE
+> Task :app:mergeReleaseJavaResource UP-TO-DATE
+> Task :app:expandReleaseArtProfileWildcards
+
+> Task :app:minifyReleaseWithR8
+WARNING: /home/caozl/Projects/AutoBook/app/build/intermediates/default_proguard_files/global/proguard-android-optimize.txt-8.7.0:21:1-22:1: R8: The current version of R8 implicitly keeps the default constructor for Proguard configuration rules that have no member pattern. If the following rule should continue to keep the default constructor in the next major version of R8, then it must be augmented with the member pattern `{ void <init>(); }` to explicitly keep the default constructor:
+-keep public class com.google.vending.licensing.ILicensingService
+WARNING: /home/caozl/Projects/AutoBook/app/build/intermediates/default_proguard_files/global/proguard-android-optimize.txt-8.7.0:22:1-23:1: R8: The current version of R8 implicitly keeps the default constructor for Proguard configuration rules that have no member pattern. If the following rule should continue to keep the default constructor in the next major version of R8, then it must be augmented with the member pattern `{ void <init>(); }` to explicitly keep the default constructor:
+-keep public class com.android.vending.licensing.ILicensingService
+WARNING: /home/caozl/Projects/AutoBook/app/build/intermediates/default_proguard_files/global/proguard-android-optimize.txt-8.7.0:23:1-24:1: R8: The current version of R8 implicitly keeps the default constructor for Proguard configuration rules that have no member pattern. If the following rule should continue to keep the default constructor in the next major version of R8, then it must be augmented with the member pattern `{ void <init>(); }` to explicitly keep the default constructor:
+-keep public class com.google.android.vending.licensing.ILicensingService
+WARNING: /home/caozl/Projects/AutoBook/app/build/intermediates/default_proguard_files/global/proguard-android-optimize.txt-8.7.0:68:1-70:1: R8: The current version of R8 implicitly keeps the default constructor for Proguard configuration rules that have no member pattern. If the following rule should continue to keep the default constructor in the next major version of R8, then it must be augmented with the member pattern `{ void <init>(); }` to explicitly keep the default constructor:
+-keep class android.support.annotation.Keep
+WARNING: /home/caozl/.gradle/caches/8.14/transforms/841862d451b3db095d34ed6966837826/transformed/ui-release/proguard.txt:33:1-34:1: R8: The current version of R8 implicitly keeps the default constructor for Proguard configuration rules that have no member pattern. If the following rule should continue to keep the default constructor in the next major version of R8, then it must be augmented with the member pattern `{ void <init>(); }` to explicitly keep the default constructor:
+-keep,allowshrinking class * extends androidx.compose.ui.node.ModifierNodeElement
+WARNING: /home/caozl/.gradle/caches/8.14/transforms/ddd6a667c5916fa37ee74eac1b49ea7c/transformed/common-18.11.0/proguard.txt:10:1-15:1: R8: The current version of R8 implicitly keeps the default constructor for Proguard configuration rules that have no member pattern. If the following rule should continue to keep the default constructor in the next major version of R8, then it must be augmented with the member pattern `{ void <init>(); }` to explicitly keep the default constructor:
+-keep class com.google.android.apps.common.proguard.UsedBy*
+WARNING: /home/caozl/.gradle/caches/8.14/transforms/0c0b4d6c8b3f44a79b02f9c2940c2937/transformed/play-services-basement-18.4.0/proguard.txt:36:1-37:1: R8: The current version of R8 implicitly keeps the default constructor for Proguard configuration rules that have no member pattern. If the following rule should continue to keep the default constructor in the next major version of R8, then it must be augmented with the member pattern `{ void <init>(); }` to explicitly keep the default constructor:
+-keep class com.google.android.gms.common.internal.ReflectedParcelable
+WARNING: /home/caozl/.gradle/caches/8.14/transforms/0c0b4d6c8b3f44a79b02f9c2940c2937/transformed/play-services-basement-18.4.0/proguard.txt:37:1-38:1: R8: The current version of R8 implicitly keeps the default constructor for Proguard configuration rules that have no member pattern. If the following rule should continue to keep the default constructor in the next major version of R8, then it must be augmented with the member pattern `{ void <init>(); }` to explicitly keep the default constructor:
+-keep,allowshrinking class * implements com.google.android.gms.common.internal.ReflectedParcelable
+WARNING: /home/caozl/.gradle/caches/8.14/transforms/0c0b4d6c8b3f44a79b02f9c2940c2937/transformed/play-services-basement-18.4.0/proguard.txt:43:1-44:1: R8: The current version of R8 implicitly keeps the default constructor for Proguard configuration rules that have no member pattern. If the following rule should continue to keep the default constructor in the next major version of R8, then it must be augmented with the member pattern `{ void <init>(); }` to explicitly keep the default constructor:
+-keep @interface android.support.annotation.Keep
+WARNING: /home/caozl/.gradle/caches/8.14/transforms/0c0b4d6c8b3f44a79b02f9c2940c2937/transformed/play-services-basement-18.4.0/proguard.txt:44:1-45:1: R8: The current version of R8 implicitly keeps the default constructor for Proguard configuration rules that have no member pattern. If the following rule should continue to keep the default constructor in the next major version of R8, then it must be augmented with the member pattern `{ void <init>(); }` to explicitly keep the default constructor:
+-keep @androidx.annotation.Keep class *
+WARNING: /home/caozl/.gradle/caches/8.14/transforms/0c0b4d6c8b3f44a79b02f9c2940c2937/transformed/play-services-basement-18.4.0/proguard.txt:53:1-54:1: R8: The current version of R8 implicitly keeps the default constructor for Proguard configuration rules that have no member pattern. If the following rule should continue to keep the default constructor in the next major version of R8, then it must be augmented with the member pattern `{ void <init>(); }` to explicitly keep the default constructor:
+-keep @interface androidx.annotation.Keep
+WARNING: /home/caozl/.gradle/caches/8.14/transforms/0c0b4d6c8b3f44a79b02f9c2940c2937/transformed/play-services-basement-18.4.0/proguard.txt:54:1-55:1: R8: The current version of R8 implicitly keeps the default constructor for Proguard configuration rules that have no member pattern. If the following rule should continue to keep the default constructor in the next major version of R8, then it must be augmented with the member pattern `{ void <init>(); }` to explicitly keep the default constructor:
+-keep @androidx.annotation.Keep class *
+WARNING: /home/caozl/.gradle/caches/8.14/transforms/0c0b4d6c8b3f44a79b02f9c2940c2937/transformed/play-services-basement-18.4.0/proguard.txt:63:1-64:1: R8: The current version of R8 implicitly keeps the default constructor for Proguard configuration rules that have no member pattern. If the following rule should continue to keep the default constructor in the next major version of R8, then it must be augmented with the member pattern `{ void <init>(); }` to explicitly keep the default constructor:
+-keep @interface com.google.android.gms.common.annotation.KeepName
+WARNING: /home/caozl/.gradle/caches/8.14/transforms/0c0b4d6c8b3f44a79b02f9c2940c2937/transformed/play-services-basement-18.4.0/proguard.txt:64:1-65:1: R8: The current version of R8 implicitly keeps the default constructor for Proguard configuration rules that have no member pattern. If the following rule should continue to keep the default constructor in the next major version of R8, then it must be augmented with the member pattern `{ void <init>(); }` to explicitly keep the default constructor:
+-keep,allowshrinking @com.google.android.gms.common.annotation.KeepName class *
+WARNING: /home/caozl/.gradle/caches/8.14/transforms/0c0b4d6c8b3f44a79b02f9c2940c2937/transformed/play-services-basement-18.4.0/proguard.txt:70:1-71:1: R8: The current version of R8 implicitly keeps the default constructor for Proguard configuration rules that have no member pattern. If the following rule should continue to keep the default constructor in the next major version of R8, then it must be augmented with the member pattern `{ void <init>(); }` to explicitly keep the default constructor:
+-keep @interface com.google.android.gms.common.util.DynamiteApi
+WARNING: /home/caozl/.gradle/caches/8.14/transforms/5a945791ab0cc1382d5c6fe63cc54615/transformed/room-runtime-2.6.1/proguard.txt:1:1-2:1: R8: The current version of R8 implicitly keeps the default constructor for Proguard configuration rules that have no member pattern. If the following rule should continue to keep the default constructor in the next major version of R8, then it must be augmented with the member pattern `{ void <init>(); }` to explicitly keep the default constructor:
+-keep class * extends androidx.room.RoomDatabase
+WARNING: /home/caozl/.gradle/caches/8.14/transforms/effbf01a57218cf0042e43d7b726f69f/transformed/versionedparcelable-1.1.1/proguard.txt:1:1-2:1: R8: The current version of R8 implicitly keeps the default constructor for Proguard configuration rules that have no member pattern. If the following rule should continue to keep the default constructor in the next major version of R8, then it must be augmented with the member pattern `{ void <init>(); }` to explicitly keep the default constructor:
+-keep class * implements androidx.versionedparcelable.VersionedParcelable
+WARNING: /home/caozl/.gradle/caches/8.14/transforms/effbf01a57218cf0042e43d7b726f69f/transformed/versionedparcelable-1.1.1/proguard.txt:4:1-5:1: R8: The current version of R8 implicitly keeps the default constructor for Proguard configuration rules that have no member pattern. If the following rule should continue to keep the default constructor in the next major version of R8, then it must be augmented with the member pattern `{ void <init>(); }` to explicitly keep the default constructor:
+-keep public class androidx.versionedparcelable.ParcelImpl
+WARNING: /home/caozl/.gradle/caches/8.14/transforms/a1bfe67e4dc02d87a86dd9d849ba25f2/transformed/firebase-components-16.1.0/proguard.txt:4:1-5:1: R8: The current version of R8 implicitly keeps the default constructor for Proguard configuration rules that have no member pattern. If the following rule should continue to keep the default constructor in the next major version of R8, then it must be augmented with the member pattern `{ void <init>(); }` to explicitly keep the default constructor:
+-keep class * implements com.google.firebase.components.ComponentRegistrar
+WARNING: /home/caozl/.gradle/caches/8.14/transforms/dca13c99b8bd115f378a7950de2c4628/transformed/startup-runtime-1.1.1/proguard.txt:2:1-7:1: R8: The current version of R8 implicitly keeps the default constructor for Proguard configuration rules that have no member pattern. If the following rule should continue to keep the default constructor in the next major version of R8, then it must be augmented with the member pattern `{ void <init>(); }` to explicitly keep the default constructor:
+-keep,allowshrinking class * extends androidx.startup.Initializer
+WARNING: /home/caozl/.gradle/caches/8.14/transforms/d331fa52a8e634d38df716a001e1f69d/transformed/rules/lib/META-INF/proguard/androidx-annotations.pro:1:1-2:1: R8: The current version of R8 implicitly keeps the default constructor for Proguard configuration rules that have no member pattern. If the following rule should continue to keep the default constructor in the next major version of R8, then it must be augmented with the member pattern `{ void <init>(); }` to explicitly keep the default constructor:
+-keep,allowrepackaging,allowobfuscation @interface androidx.annotation.Keep
+
+> Task :app:lintVitalAnalyzeRelease
+> Task :app:lintVitalReportRelease
+> Task :app:lintVitalRelease
+> Task :app:compileReleaseArtProfile
+> Task :app:packageRelease
+> Task :app:createReleaseApkListingFileRedirect
+> Task :app:assembleRelease
+
+[Incubating] Problems report is available at: file:///home/caozl/Projects/AutoBook/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/8.14/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 1m 19s
+83 actionable tasks: 21 executed, 1 from cache, 61 up-to-date

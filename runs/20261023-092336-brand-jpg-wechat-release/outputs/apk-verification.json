@@ -1,0 +1,285 @@
+{
+  "expectedIconResources": 26,
+  "apks": {
+    "debug": {
+      "path": "dist/AutoBook-0.6.8-debug.apk",
+      "bytes": 54951514,
+      "sha256": "521a26ad057b0ffc8f33f296ea3e50fec0547ba5afe07ed4775d828c19d6d8b7",
+      "signatureVerified": true,
+      "certificateSha256": "08b0f9a09430a9f8c121402fe5774dfc978e7e28b074b42390c2a358d0566cd7",
+      "version": "0.6.8/27",
+      "iconChecks": [
+        {
+          "source": "app/src/main/res/drawable-mdpi/ic_brand_color.png",
+          "apkPath": "res/drawable-mdpi-v4/ic_brand_color.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/drawable-hdpi/ic_brand_color.png",
+          "apkPath": "res/drawable-hdpi-v4/ic_brand_color.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/drawable-xhdpi/ic_brand_color.png",
+          "apkPath": "res/drawable-xhdpi-v4/ic_brand_color.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/drawable-xxhdpi/ic_brand_color.png",
+          "apkPath": "res/drawable-xxhdpi-v4/ic_brand_color.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/drawable-xxxhdpi/ic_brand_color.png",
+          "apkPath": "res/drawable-xxxhdpi-v4/ic_brand_color.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/drawable-mdpi/ic_brand_small.png",
+          "apkPath": "res/drawable-mdpi-v4/ic_brand_small.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/drawable-hdpi/ic_brand_small.png",
+          "apkPath": "res/drawable-hdpi-v4/ic_brand_small.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/drawable-xhdpi/ic_brand_small.png",
+          "apkPath": "res/drawable-xhdpi-v4/ic_brand_small.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/drawable-xxhdpi/ic_brand_small.png",
+          "apkPath": "res/drawable-xxhdpi-v4/ic_brand_small.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/drawable-xxxhdpi/ic_brand_small.png",
+          "apkPath": "res/drawable-xxxhdpi-v4/ic_brand_small.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/drawable-nodpi/ic_launcher_monochrome.png",
+          "apkPath": "res/drawable-nodpi-v4/ic_launcher_monochrome.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/mipmap-mdpi/ic_launcher.png",
+          "apkPath": "res/mipmap-mdpi-v4/ic_launcher.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/mipmap-hdpi/ic_launcher.png",
+          "apkPath": "res/mipmap-hdpi-v4/ic_launcher.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/mipmap-xhdpi/ic_launcher.png",
+          "apkPath": "res/mipmap-xhdpi-v4/ic_launcher.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/mipmap-xxhdpi/ic_launcher.png",
+          "apkPath": "res/mipmap-xxhdpi-v4/ic_launcher.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/mipmap-xxxhdpi/ic_launcher.png",
+          "apkPath": "res/mipmap-xxxhdpi-v4/ic_launcher.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png",
+          "apkPath": "res/mipmap-mdpi-v4/ic_launcher_foreground.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png",
+          "apkPath": "res/mipmap-hdpi-v4/ic_launcher_foreground.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png",
+          "apkPath": "res/mipmap-xhdpi-v4/ic_launcher_foreground.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png",
+          "apkPath": "res/mipmap-xxhdpi-v4/ic_launcher_foreground.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png",
+          "apkPath": "res/mipmap-xxxhdpi-v4/ic_launcher_foreground.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/mipmap-mdpi/ic_launcher_round.png",
+          "apkPath": "res/mipmap-mdpi-v4/ic_launcher_round.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/mipmap-hdpi/ic_launcher_round.png",
+          "apkPath": "res/mipmap-hdpi-v4/ic_launcher_round.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/mipmap-xhdpi/ic_launcher_round.png",
+          "apkPath": "res/mipmap-xhdpi-v4/ic_launcher_round.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png",
+          "apkPath": "res/mipmap-xxhdpi-v4/ic_launcher_round.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png",
+          "apkPath": "res/mipmap-xxxhdpi-v4/ic_launcher_round.png",
+          "visibleRGBAAndAlphaEqual": true
+        }
+      ]
+    },
+    "release": {
+      "path": "dist/AutoBook-0.6.8-release.apk",
+      "bytes": 45925556,
+      "sha256": "4d34c9fa47a9450e2b9679ef898e2997a8f1bd483097408e385875cd278c32aa",
+      "signatureVerified": true,
+      "certificateSha256": "bedb36b7527aa4759262d8b737d7031b57f1db191c68eab4d55829f0598a5ed6",
+      "version": "0.6.8/27",
+      "iconChecks": [
+        {
+          "source": "app/src/main/res/drawable-mdpi/ic_brand_color.png",
+          "apkPath": "res/0p.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/drawable-hdpi/ic_brand_color.png",
+          "apkPath": "res/mX.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/drawable-xhdpi/ic_brand_color.png",
+          "apkPath": "res/g8.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/drawable-xxhdpi/ic_brand_color.png",
+          "apkPath": "res/w5.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/drawable-xxxhdpi/ic_brand_color.png",
+          "apkPath": "res/Jd.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/drawable-mdpi/ic_brand_small.png",
+          "apkPath": "res/f-.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/drawable-hdpi/ic_brand_small.png",
+          "apkPath": "res/Rq.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/drawable-xhdpi/ic_brand_small.png",
+          "apkPath": "res/j8.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/drawable-xxhdpi/ic_brand_small.png",
+          "apkPath": "res/S7.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/drawable-xxxhdpi/ic_brand_small.png",
+          "apkPath": "res/5d.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/drawable-nodpi/ic_launcher_monochrome.png",
+          "apkPath": "res/XW.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/mipmap-mdpi/ic_launcher.png",
+          "apkPath": "res/9w.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/mipmap-hdpi/ic_launcher.png",
+          "apkPath": "res/yn.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/mipmap-xhdpi/ic_launcher.png",
+          "apkPath": "res/FS.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/mipmap-xxhdpi/ic_launcher.png",
+          "apkPath": "res/RJ.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/mipmap-xxxhdpi/ic_launcher.png",
+          "apkPath": "res/o-.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png",
+          "apkPath": "res/QZ.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png",
+          "apkPath": "res/zr.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png",
+          "apkPath": "res/Em.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png",
+          "apkPath": "res/Lf.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png",
+          "apkPath": "res/as.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/mipmap-mdpi/ic_launcher_round.png",
+          "apkPath": "res/zR.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/mipmap-hdpi/ic_launcher_round.png",
+          "apkPath": "res/8c.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/mipmap-xhdpi/ic_launcher_round.png",
+          "apkPath": "res/wb.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png",
+          "apkPath": "res/fO.png",
+          "visibleRGBAAndAlphaEqual": true
+        },
+        {
+          "source": "app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png",
+          "apkPath": "res/Gc.png",
+          "visibleRGBAAndAlphaEqual": true
+        }
+      ]
+    }
+  }
+}

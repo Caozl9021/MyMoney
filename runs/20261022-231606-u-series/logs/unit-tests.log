@@ -1,0 +1,56 @@
+> Task :billkit:preBuild UP-TO-DATE
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :billkit:preDebugBuild UP-TO-DATE
+> Task :app:generateDebugResValues UP-TO-DATE
+> Task :billkit:writeDebugAarMetadata UP-TO-DATE
+> Task :billkit:generateDebugResValues UP-TO-DATE
+> Task :billkit:generateDebugResources UP-TO-DATE
+> Task :billkit:packageDebugResources UP-TO-DATE
+> Task :billkit:extractDeepLinksDebug UP-TO-DATE
+> Task :billkit:processDebugManifest UP-TO-DATE
+> Task :billkit:compileDebugLibraryResources UP-TO-DATE
+> Task :billkit:parseDebugLocalResources UP-TO-DATE
+> Task :billkit:generateDebugRFile UP-TO-DATE
+> Task :billkit:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :billkit:compileDebugKotlin UP-TO-DATE
+> Task :billkit:javaPreCompileDebug UP-TO-DATE
+> Task :billkit:compileDebugJavaWithJavac NO-SOURCE
+> Task :billkit:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :billkit:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :billkit:processDebugJavaRes UP-TO-DATE
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths
+> Task :app:generateDebugResources
+> Task :app:packageDebugResources
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :app:parseDebugLocalResources
+> Task :app:processDebugMainManifest
+> Task :app:processDebugManifest
+> Task :app:javaPreCompileDebug UP-TO-DATE
+> Task :app:preDebugUnitTestBuild UP-TO-DATE
+> Task :app:processDebugManifestForPackage
+> Task :app:javaPreCompileDebugUnitTest UP-TO-DATE
+> Task :app:mergeDebugResources
+> Task :app:processDebugResources
+> Task :app:kspDebugKotlin
+
+> Task :app:compileDebugKotlin
+w: file:///home/caozl/Projects/AutoBook/app/src/main/java/com/example/autobook/ui/SettingsScreen.kt:152:26 'val LocalLifecycleOwner: ProvidableCompositionLocal<LifecycleOwner>' is deprecated. Moved to lifecycle-runtime-compose library in androidx.lifecycle.compose package.
+w: file:///home/caozl/Projects/AutoBook/app/src/main/java/com/example/autobook/ui/SettingsScreen.kt:728:26 'val LocalLifecycleOwner: ProvidableCompositionLocal<LifecycleOwner>' is deprecated. Moved to lifecycle-runtime-compose library in androidx.lifecycle.compose package.
+w: file:///home/caozl/Projects/AutoBook/app/src/main/java/com/example/autobook/overlay/ConfirmOverlay.kt:165:56 'static field SOFT_INPUT_ADJUST_RESIZE: Int' is deprecated. Deprecated in Java.
+
+> Task :app:compileDebugJavaWithJavac UP-TO-DATE
+> Task :app:processDebugJavaRes
+> Task :app:bundleDebugClassesToRuntimeJar
+> Task :app:bundleDebugClassesToCompileJar
+> Task :app:kspDebugUnitTestKotlin
+> Task :app:compileDebugUnitTestKotlin
+> Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:processDebugUnitTestJavaRes UP-TO-DATE
+> Task :app:testDebugUnitTest
+
+BUILD SUCCESSFUL in 13s
+39 actionable tasks: 17 executed, 22 up-to-date

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.autobook.CostCsvTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-10-22T14:37:05.990Z" hostname="CaoZL" time="0.016">
+  <properties/>
+  <testcase name="没有分类时用兜底值" classname="com.example.autobook.CostCsvTest" time="0.01"/>
+  <testcase name="账户推断对未知渠道返回 null" classname="com.example.autobook.CostCsvTest" time="0.0"/>
+  <testcase name="包含退款时明确拒绝整个导出而非伪装收入或丢行" classname="com.example.autobook.CostCsvTest" time="0.001"/>
+  <testcase name="含逗号的单元格被引号包裹" classname="com.example.autobook.CostCsvTest" time="0.001"/>
+  <testcase name="货币可配置" classname="com.example.autobook.CostCsvTest" time="0.0"/>
+  <testcase name="表头与模板完全一致" classname="com.example.autobook.CostCsvTest" time="0.0"/>
+  <testcase name="日期是模板要求的文本格式" classname="com.example.autobook.CostCsvTest" time="0.001"/>
+  <testcase name="账户缺失时从支付方式推断" classname="com.example.autobook.CostCsvTest" time="0.001"/>
+  <testcase name="金额固定两位小数且不受区域设置影响" classname="com.example.autobook.CostCsvTest" time="0.0"/>
+  <testcase name="每行列数与表头一致" classname="com.example.autobook.CostCsvTest" time="0.001"/>
+  <testcase name="备注优先用 note" classname="com.example.autobook.CostCsvTest" time="0.0"/>
+  <testcase name="分类和账户用账单自带的值" classname="com.example.autobook.CostCsvTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

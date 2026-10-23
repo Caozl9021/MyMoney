@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.autobook.MiniJsonTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-10-22T08:12:29.381Z" hostname="CaoZL" time="0.003">
+  <properties/>
+  <testcase name="字符串里的引号换行反斜杠都被转义" classname="com.example.autobook.MiniJsonTest" time="0.0"/>
+  <testcase name="数组与嵌套往返" classname="com.example.autobook.MiniJsonTest" time="0.001"/>
+  <testcase name="整数解码成 Long 而小数解码成 Double" classname="com.example.autobook.MiniJsonTest" time="0.0"/>
+  <testcase name="中文原样保留" classname="com.example.autobook.MiniJsonTest" time="0.0"/>
+  <testcase name="语法错误抛异常而不是返回半成品" classname="com.example.autobook.MiniJsonTest" time="0.001"/>
+  <testcase name="对象往返" classname="com.example.autobook.MiniJsonTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

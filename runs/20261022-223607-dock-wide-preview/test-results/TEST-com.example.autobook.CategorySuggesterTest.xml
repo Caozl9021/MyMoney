@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.autobook.CategorySuggesterTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-10-22T14:37:05.981Z" hostname="CaoZL" time="0.007">
+  <properties/>
+  <testcase name="收入用收入分类" classname="com.example.autobook.CategorySuggesterTest" time="0.003"/>
+  <testcase name="支付方式映射到账户" classname="com.example.autobook.CategorySuggesterTest" time="0.001"/>
+  <testcase name="匹配不上时全为 null" classname="com.example.autobook.CategorySuggesterTest" time="0.001"/>
+  <testcase name="账户清单里没有时返回 null" classname="com.example.autobook.CategorySuggesterTest" time="0.0"/>
+  <testcase name="交通类映射" classname="com.example.autobook.CategorySuggesterTest" time="0.0"/>
+  <testcase name="商户关键词映射到一级和二级分类" classname="com.example.autobook.CategorySuggesterTest" time="0.001"/>
+  <testcase name="清单里没有的分类不会硬塞" classname="com.example.autobook.CategorySuggesterTest" time="0.0"/>
+  <testcase name="转账默认归到其他" classname="com.example.autobook.CategorySuggesterTest" time="0.0"/>
+  <testcase name="二级分类不在清单里时只返回一级" classname="com.example.autobook.CategorySuggesterTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

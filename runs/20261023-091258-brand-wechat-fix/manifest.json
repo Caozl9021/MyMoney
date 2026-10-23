@@ -1,0 +1,29 @@
+{
+  "runId": "20261023-091258-brand-wechat-fix",
+  "startedAt": "2026-10-23T09:12:58.667016+08:00",
+  "commit": null,
+  "status": "superseded-by-user-new-artwork",
+  "deliveryStatus": "待验收",
+  "parameters": {
+    "versionName": "0.6.8",
+    "versionCode": 27,
+    "scope": [
+      "all brand entry icons",
+      "minimal WeChat payment success",
+      "bounded accessibility scheduling"
+    ]
+  },
+  "inputs": [
+    "Auto.png",
+    "截图/96b3b482-83a9-40c1-bafe-1614d91da89c.jpg",
+    "user confirmed ACCESSIBILITY"
+  ],
+  "evidenceLimits": "Screenshot transcription is not an accessibility dump; no claim of reproducing actual device events",
+  "environment": {
+    "java": "17",
+    "gradle": "8.14",
+    "compileSdk": 35,
+    "timezone": "CST"
+  },
+  "supersededBy": "20261023-092336-brand-jpg-wechat-release"
+}

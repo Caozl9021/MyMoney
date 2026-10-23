@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.autobook.AmountInputTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-10-22T15:51:31.295Z" hostname="CaoZL" time="0.007">
+  <properties/>
+  <testcase name="格式化固定两位小数且小数点是点" classname="com.example.autobook.AmountInputTest" time="0.001"/>
+  <testcase name="两位小数不会少一分" classname="com.example.autobook.AmountInputTest" time="0.003"/>
+  <testcase name="带符号与千分位也能解析" classname="com.example.autobook.AmountInputTest" time="0.002"/>
+  <testcase name="格式化后再解析回到同一个值" classname="com.example.autobook.AmountInputTest" time="0.0"/>
+  <testcase name="整数与一位小数" classname="com.example.autobook.AmountInputTest" time="0.001"/>
+  <testcase name="非法输入返回 null 而不是 0" classname="com.example.autobook.AmountInputTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

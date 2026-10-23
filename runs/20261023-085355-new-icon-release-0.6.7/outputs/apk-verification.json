@@ -1,0 +1,299 @@
+{
+  "versionName": "0.6.7",
+  "versionCode": 26,
+  "previous_release_certificate_sha256": "bedb36b7527aa4759262d8b737d7031b57f1db191c68eab4d55829f0598a5ed6",
+  "apks": {
+    "debug": {
+      "path": "/home/caozl/Projects/AutoBook/dist/AutoBook-0.6.7-debug.apk",
+      "bytes": 54896955,
+      "sha256": "6d287fbf715edbc031f29ad2989357d7dda7335cd7d7a9ae93b89e8bdd2907cb",
+      "certificate_sha256": "08b0f9a09430a9f8c121402fe5774dfc978e7e28b074b42390c2a358d0566cd7",
+      "signature_verified": true,
+      "manifest_entries_verified": true,
+      "xposed_entry_verified": "com.example.autobook.xposed.AutoBookXposedModule",
+      "resources": {
+        "xml/shortcuts": [
+          "res/xml/shortcuts.xml"
+        ],
+        "xml/monthly_expense_widget": [
+          "res/xml/monthly_expense_widget.xml"
+        ],
+        "layout/widget_monthly_expense": [
+          "res/layout/widget_monthly_expense.xml"
+        ],
+        "mipmap/ic_launcher": [
+          "res/mipmap-mdpi-v4/ic_launcher.png",
+          "res/mipmap-hdpi-v4/ic_launcher.png",
+          "res/mipmap-xhdpi-v4/ic_launcher.png",
+          "res/mipmap-xxhdpi-v4/ic_launcher.png",
+          "res/mipmap-xxxhdpi-v4/ic_launcher.png",
+          "res/mipmap-anydpi-v26/ic_launcher.xml",
+          "res/mipmap-anydpi-v33/ic_launcher.xml"
+        ],
+        "mipmap/ic_launcher_round": [
+          "res/mipmap-mdpi-v4/ic_launcher_round.png",
+          "res/mipmap-hdpi-v4/ic_launcher_round.png",
+          "res/mipmap-xhdpi-v4/ic_launcher_round.png",
+          "res/mipmap-xxhdpi-v4/ic_launcher_round.png",
+          "res/mipmap-xxxhdpi-v4/ic_launcher_round.png",
+          "res/mipmap-anydpi-v26/ic_launcher_round.xml",
+          "res/mipmap-anydpi-v33/ic_launcher_round.xml"
+        ],
+        "mipmap/ic_launcher_foreground": [
+          "res/mipmap-mdpi-v4/ic_launcher_foreground.png",
+          "res/mipmap-hdpi-v4/ic_launcher_foreground.png",
+          "res/mipmap-xhdpi-v4/ic_launcher_foreground.png",
+          "res/mipmap-xxhdpi-v4/ic_launcher_foreground.png",
+          "res/mipmap-xxxhdpi-v4/ic_launcher_foreground.png"
+        ],
+        "drawable/ic_launcher_monochrome": [
+          "res/drawable-nodpi-v4/ic_launcher_monochrome.png"
+        ]
+      },
+      "icon_pixel_checks": [
+        {
+          "resource": "mipmap/ic_launcher",
+          "apk_path": "res/mipmap-mdpi-v4/ic_launcher.png",
+          "source": "app/src/main/res/mipmap-mdpi/ic_launcher.png",
+          "pixel_difference": 0
+        },
+        {
+          "resource": "mipmap/ic_launcher",
+          "apk_path": "res/mipmap-hdpi-v4/ic_launcher.png",
+          "source": "app/src/main/res/mipmap-hdpi/ic_launcher.png",
+          "pixel_difference": 0
+        },
+        {
+          "resource": "mipmap/ic_launcher",
+          "apk_path": "res/mipmap-xhdpi-v4/ic_launcher.png",
+          "source": "app/src/main/res/mipmap-xhdpi/ic_launcher.png",
+          "pixel_difference": 0
+        },
+        {
+          "resource": "mipmap/ic_launcher",
+          "apk_path": "res/mipmap-xxhdpi-v4/ic_launcher.png",
+          "source": "app/src/main/res/mipmap-xxhdpi/ic_launcher.png",
+          "pixel_difference": 0
+        },
+        {
+          "resource": "mipmap/ic_launcher",
+          "apk_path": "res/mipmap-xxxhdpi-v4/ic_launcher.png",
+          "source": "app/src/main/res/mipmap-xxxhdpi/ic_launcher.png",
+          "pixel_difference": 0
+        },
+        {
+          "resource": "mipmap/ic_launcher_round",
+          "apk_path": "res/mipmap-mdpi-v4/ic_launcher_round.png",
+          "source": "app/src/main/res/mipmap-mdpi/ic_launcher_round.png",
+          "pixel_difference": 0
+        },
+        {
+          "resource": "mipmap/ic_launcher_round",
+          "apk_path": "res/mipmap-hdpi-v4/ic_launcher_round.png",
+          "source": "app/src/main/res/mipmap-hdpi/ic_launcher_round.png",
+          "pixel_difference": 0
+        },
+        {
+          "resource": "mipmap/ic_launcher_round",
+          "apk_path": "res/mipmap-xhdpi-v4/ic_launcher_round.png",
+          "source": "app/src/main/res/mipmap-xhdpi/ic_launcher_round.png",
+          "pixel_difference": 0
+        },
+        {
+          "resource": "mipmap/ic_launcher_round",
+          "apk_path": "res/mipmap-xxhdpi-v4/ic_launcher_round.png",
+          "source": "app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png",
+          "pixel_difference": 0
+        },
+        {
+          "resource": "mipmap/ic_launcher_round",
+          "apk_path": "res/mipmap-xxxhdpi-v4/ic_launcher_round.png",
+          "source": "app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png",
+          "pixel_difference": 0
+        },
+        {
+          "resource": "mipmap/ic_launcher_foreground",
+          "apk_path": "res/mipmap-mdpi-v4/ic_launcher_foreground.png",
+          "source": "app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png",
+          "pixel_difference": 0
+        },
+        {
+          "resource": "mipmap/ic_launcher_foreground",
+          "apk_path": "res/mipmap-hdpi-v4/ic_launcher_foreground.png",
+          "source": "app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png",
+          "pixel_difference": 0
+        },
+        {
+          "resource": "mipmap/ic_launcher_foreground",
+          "apk_path": "res/mipmap-xhdpi-v4/ic_launcher_foreground.png",
+          "source": "app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png",
+          "pixel_difference": 0
+        },
+        {
+          "resource": "mipmap/ic_launcher_foreground",
+          "apk_path": "res/mipmap-xxhdpi-v4/ic_launcher_foreground.png",
+          "source": "app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png",
+          "pixel_difference": 0
+        },
+        {
+          "resource": "mipmap/ic_launcher_foreground",
+          "apk_path": "res/mipmap-xxxhdpi-v4/ic_launcher_foreground.png",
+          "source": "app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png",
+          "pixel_difference": 0
+        },
+        {
+          "resource": "drawable/ic_launcher_monochrome",
+          "apk_path": "res/drawable-nodpi-v4/ic_launcher_monochrome.png",
+          "source": "app/src/main/res/drawable-nodpi/ic_launcher_monochrome.png",
+          "pixel_difference": 0
+        }
+      ]
+    },
+    "release": {
+      "path": "/home/caozl/Projects/AutoBook/dist/AutoBook-0.6.7-release.apk",
+      "bytes": 45839889,
+      "sha256": "850cc3a35b2e60c6f6cca41cb8c85cf3357022d8499fd3f1f3686bd4012749bd",
+      "certificate_sha256": "bedb36b7527aa4759262d8b737d7031b57f1db191c68eab4d55829f0598a5ed6",
+      "signature_verified": true,
+      "manifest_entries_verified": true,
+      "xposed_entry_verified": "com.example.autobook.xposed.AutoBookXposedModule",
+      "resources": {
+        "xml/shortcuts": [
+          "res/Eq.xml"
+        ],
+        "xml/monthly_expense_widget": [
+          "res/da.xml"
+        ],
+        "layout/widget_monthly_expense": [
+          "res/s1.xml"
+        ],
+        "mipmap/ic_launcher": [
+          "res/9w.png",
+          "res/yn.png",
+          "res/FS.png",
+          "res/RJ.png",
+          "res/o-.png",
+          "res/BW.xml",
+          "res/IG.xml"
+        ],
+        "mipmap/ic_launcher_round": [
+          "res/zR.png",
+          "res/8c.png",
+          "res/wb.png",
+          "res/fO.png",
+          "res/Gc.png",
+          "res/0K.xml",
+          "res/6H.xml"
+        ],
+        "mipmap/ic_launcher_foreground": [
+          "res/QZ.png",
+          "res/zr.png",
+          "res/Em.png",
+          "res/Lf.png",
+          "res/as.png"
+        ],
+        "drawable/ic_launcher_monochrome": [
+          "res/XW.png"
+        ]
+      },
+      "icon_pixel_checks": [
+        {
+          "resource": "mipmap/ic_launcher",
+          "apk_path": "res/9w.png",
+          "source": "app/src/main/res/mipmap-mdpi/ic_launcher.png",
+          "pixel_difference": 0
+        },
+        {
+          "resource": "mipmap/ic_launcher",
+          "apk_path": "res/yn.png",
+          "source": "app/src/main/res/mipmap-hdpi/ic_launcher.png",
+          "pixel_difference": 0
+        },
+        {
+          "resource": "mipmap/ic_launcher",
+          "apk_path": "res/FS.png",
+          "source": "app/src/main/res/mipmap-xhdpi/ic_launcher.png",
+          "pixel_difference": 0
+        },
+        {
+          "resource": "mipmap/ic_launcher",
+          "apk_path": "res/RJ.png",
+          "source": "app/src/main/res/mipmap-xxhdpi/ic_launcher.png",
+          "pixel_difference": 0
+        },
+        {
+          "resource": "mipmap/ic_launcher",
+          "apk_path": "res/o-.png",
+          "source": "app/src/main/res/mipmap-xxxhdpi/ic_launcher.png",
+          "pixel_difference": 0
+        },
+        {
+          "resource": "mipmap/ic_launcher_round",
+          "apk_path": "res/zR.png",
+          "source": "app/src/main/res/mipmap-mdpi/ic_launcher_round.png",
+          "pixel_difference": 0
+        },
+        {
+          "resource": "mipmap/ic_launcher_round",
+          "apk_path": "res/8c.png",
+          "source": "app/src/main/res/mipmap-hdpi/ic_launcher_round.png",
+          "pixel_difference": 0
+        },
+        {
+          "resource": "mipmap/ic_launcher_round",
+          "apk_path": "res/wb.png",
+          "source": "app/src/main/res/mipmap-xhdpi/ic_launcher_round.png",
+          "pixel_difference": 0
+        },
+        {
+          "resource": "mipmap/ic_launcher_round",
+          "apk_path": "res/fO.png",
+          "source": "app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png",
+          "pixel_difference": 0
+        },
+        {
+          "resource": "mipmap/ic_launcher_round",
+          "apk_path": "res/Gc.png",
+          "source": "app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png",
+          "pixel_difference": 0
+        },
+        {
+          "resource": "mipmap/ic_launcher_foreground",
+          "apk_path": "res/QZ.png",
+          "source": "app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png",
+          "pixel_difference": 0
+        },
+        {
+          "resource": "mipmap/ic_launcher_foreground",
+          "apk_path": "res/zr.png",
+          "source": "app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png",
+          "pixel_difference": 0
+        },
+        {
+          "resource": "mipmap/ic_launcher_foreground",
+          "apk_path": "res/Em.png",
+          "source": "app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png",
+          "pixel_difference": 0
+        },
+        {
+          "resource": "mipmap/ic_launcher_foreground",
+          "apk_path": "res/Lf.png",
+          "source": "app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png",
+          "pixel_difference": 0
+        },
+        {
+          "resource": "mipmap/ic_launcher_foreground",
+          "apk_path": "res/as.png",
+          "source": "app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png",
+          "pixel_difference": 0
+        },
+        {
+          "resource": "drawable/ic_launcher_monochrome",
+          "apk_path": "res/XW.png",
+          "source": "app/src/main/res/drawable-nodpi/ic_launcher_monochrome.png",
+          "pixel_difference": 0
+        }
+      ]
+    }
+  }
+}

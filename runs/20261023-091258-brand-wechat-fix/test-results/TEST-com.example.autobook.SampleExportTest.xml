@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.autobook.SampleExportTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-10-23T01:15:35.447Z" hostname="CaoZL" time="0.001">
+  <properties/>
+  <testcase name="样本文件名含包名与时间戳" classname="com.example.autobook.SampleExportTest" time="0.0"/>
+  <testcase name="空列表不会生成残缺的 listOf" classname="com.example.autobook.SampleExportTest" time="0.0"/>
+  <testcase name="splitLines 去掉空行与首尾空白" classname="com.example.autobook.SampleExportTest" time="0.0"/>
+  <testcase name="属性名把包名里的点换成下划线" classname="com.example.autobook.SampleExportTest" time="0.0"/>
+  <testcase name="夹具里的引号与反斜杠被转义" classname="com.example.autobook.SampleExportTest" time="0.0"/>
+  <testcase name="夹具里的美元符号必须转义" classname="com.example.autobook.SampleExportTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

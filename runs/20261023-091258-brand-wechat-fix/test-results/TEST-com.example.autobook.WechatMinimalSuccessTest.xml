@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.autobook.WechatMinimalSuccessTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-10-23T01:15:35.458Z" hostname="CaoZL" time="0.014">
+  <properties/>
+  <testcase name="merchantCanRemainAbsent" classname="com.example.autobook.WechatMinimalSuccessTest" time="0.001"/>
+  <testcase name="missingCompletionOrStandaloneSuccessCannotUseMinimalRule" classname="com.example.autobook.WechatMinimalSuccessTest" time="0.001"/>
+  <testcase name="multiplePricesAndAdvertisementAmountsAreRejected" classname="com.example.autobook.WechatMinimalSuccessTest" time="0.002"/>
+  <testcase name="splitCurrencyNodeAndAlternativePaymentTitleAreSupported" classname="com.example.autobook.WechatMinimalSuccessTest" time="0.002"/>
+  <testcase name="screenshotTranscriptionProducesOneCentExpenseWithoutInventedMethodOrOrder" classname="com.example.autobook.WechatMinimalSuccessTest" time="0.001"/>
+  <testcase name="nonAdjacentRepeatedSuccessTitleDoesNotInvalidatePayment" classname="com.example.autobook.WechatMinimalSuccessTest" time="0.002"/>
+  <testcase name="transferAndIncomeRetainTheirExistingDirections" classname="com.example.autobook.WechatMinimalSuccessTest" time="0.001"/>
+  <testcase name="missingCurrencyMalformedOrSignedAmountsAreRejected" classname="com.example.autobook.WechatMinimalSuccessTest" time="0.003"/>
+  <testcase name="failedCancelledAndPendingStatesNeverBecomeExpenses" classname="com.example.autobook.WechatMinimalSuccessTest" time="0.001"/>
+  <testcase name="listsAndOtherPackagesCannotUseMinimalRule" classname="com.example.autobook.WechatMinimalSuccessTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- 分享给 iCost 的 CSV 走 cache/share/ -->
+    <cache-path name="share" path="share/" />
+</paths>

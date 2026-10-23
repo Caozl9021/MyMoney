@@ -1,0 +1,1556 @@
+--- /tmp/autobook-core-before/app/build.gradle.kts	2026-10-22 09:36:28.019282628 +0800
++++ app/build.gradle.kts	2026-10-22 09:51:45.771667211 +0800
+@@ -16,8 +16,8 @@
+         applicationId = "com.example.autobook"
+         minSdk = 26
+         targetSdk = 35
+-        versionCode = 18
+-        versionName = "0.5.9"
++        versionCode = 19
++        versionName = "0.6.0"
+     }
+ 
+     // 签名信息放在仓库之外（~/.autobook-keys/keystore.properties），不进版本库。
+
+--- /tmp/autobook-core-before/app/src/main/java/com/example/autobook/export/CostShare.kt	2026-10-21 20:25:32.632847905 +0800
++++ app/src/main/java/com/example/autobook/export/CostShare.kt	2026-10-22 09:52:42.826016363 +0800
+@@ -68,7 +68,7 @@
+ 
+     enum class ShareMode { VIEW_TARGET, SEND_TARGET, VIEW_CHOOSER, SEND_CHOOSER }
+ 
+-    /** 带用户清单的便捷入口：导出时直接用账单自带的分类/账户 */
++    /** 带用户清单的便捷入口；包含退款时抛 IllegalArgumentException，由页面显示原因。 */
+     fun shareBills(
+         context: Context,
+         bills: List<BillDraft>,
+
+--- /tmp/autobook-core-before/app/src/main/java/com/example/autobook/export/CostCsv.kt	2026-10-21 11:43:10.000000000 +0800
++++ app/src/main/java/com/example/autobook/export/CostCsv.kt	2026-10-22 09:51:43.744225607 +0800
+@@ -20,6 +20,8 @@
+  */
+ object CostCsv {
+ 
++    const val REFUND_UNSUPPORTED = "当前 iCost CSV 模板不支持退款，所选账单包含退款，无法导出。请使用 JSON 备份保留完整账目。"
++
+     const val TARGET_PACKAGE = "com.gostraight.smallAccountBook.fltandroid"
+ 
+     val HEADER = listOf(
+@@ -54,6 +56,7 @@
+     )
+ 
+     fun build(bills: List<BillDraft>, profile: Profile = Profile()): String {
++        require(bills.none { it.type == BillType.REFUND }) { REFUND_UNSUPPORTED }
+         val format = SimpleDateFormat(profile.datePattern, Locale.US)
+         val builder = StringBuilder()
+ 
+@@ -86,6 +89,7 @@
+         BillType.EXPENSE -> profile.expenseWord
+         BillType.INCOME -> profile.incomeWord
+         BillType.TRANSFER -> profile.transferWord
++        BillType.REFUND -> throw IllegalArgumentException(REFUND_UNSUPPORTED)
+     }
+ 
+     /** 账单没带账户时，从"支付方式"文本猜一个常见账户名 */
+
+--- /tmp/autobook-core-before/app/src/main/java/com/example/autobook/data/CategorySuggester.kt	2026-10-21 12:15:10.000000000 +0800
++++ app/src/main/java/com/example/autobook/data/CategorySuggester.kt	2026-10-22 09:52:42.825833124 +0800
+@@ -72,6 +72,7 @@
+         incomeGroups: List<CategoryGroup> = LedgerConfig.incomeGroups,
+         accounts: List<String> = LedgerConfig.accounts,
+     ): Suggestion {
++        // 退款沿用支出分类；独立类型绝不归入收入清单。
+         val groups = if (draft.type == BillType.INCOME) incomeGroups else expenseGroups
+         val rules = if (draft.type == BillType.INCOME) incomeRules else expenseRules
+ 
+
+--- /tmp/autobook-core-before/app/src/main/java/com/example/autobook/data/PendingStore.kt	2026-10-21 16:54:55.135367995 +0800
++++ app/src/main/java/com/example/autobook/data/PendingStore.kt	2026-10-22 09:52:42.826207298 +0800
+@@ -81,6 +81,7 @@
+ 
+     private fun toJson(draft: BillDraft): JSONObject = JSONObject().apply {
+         put("priceCents", draft.priceCents)
++        // 持久化枚举名，REFUND 与原有三类使用相同往返协议。
+         put("type", draft.type.name)
+         put("timeMillis", draft.timeMillis)
+         put("merchant", draft.merchant ?: "")
+
+--- /tmp/autobook-core-before/app/src/main/java/com/example/autobook/data/Backup.kt	2026-10-21 20:25:07.574789297 +0800
++++ app/src/main/java/com/example/autobook/data/Backup.kt	2026-10-22 09:52:42.825631956 +0800
+@@ -178,7 +178,8 @@
+         val cents = m.num("p")
+         val minute = m.num("t") / 60_000
+         val tail = m.str("ot") ?: ""
+-        return "$pkg|$cents|$minute|$tail"
++        val base = "$pkg|$cents|$minute" + if (m.str("ot") != null) "|$tail" else ""
++        return base + if (m.str("ty") == "REFUND") "|REFUND" else ""
+     }
+ 
+     private fun groups(raw: Any?): List<CategoryGroup> =
+
+--- /tmp/autobook-core-before/app/src/main/java/com/example/autobook/data/BillWriter.kt	2026-10-22 09:51:34.672898001 +0800
++++ app/src/main/java/com/example/autobook/data/BillWriter.kt	2026-10-22 09:55:58.298981671 +0800
+@@ -1,6 +1,14 @@
+ package com.example.autobook.data
+ 
+ import android.content.Context
++import androidx.room.withTransaction
++import kotlinx.coroutines.SupervisorJob
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.asStateFlow
++import kotlinx.coroutines.sync.Mutex
++import kotlinx.coroutines.sync.withLock
++import kotlinx.coroutines.withContext
+ import com.example.billkit.BillDraft
+ import com.example.billkit.BillType
+ import kotlinx.coroutines.CoroutineScope
+@@ -10,7 +18,8 @@
+ /** 草稿 → 账单的唯一落库入口（确认页 / 悬浮窗 / 待确认列表共用） */
+ object BillWriter {
+ 
+-    private val scope = CoroutineScope(Dispatchers.IO)
++    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
++    private val writeLock = Mutex()
+ 
+     /**
+      * 落库前的重复窗口。
+@@ -35,13 +44,16 @@
+     fun save(context: Context, draft: BillDraft, onDone: ((Boolean) -> Unit)? = null) {
+         val app = context.applicationContext
+         scope.launch {
+-            val db = AppDb.get(app)
+-            val inserted = try {
++            val inserted = writeLock.withLock {
++                val db = AppDb.get(app)
++                db.withTransaction {
++                    try {
+                 val since = System.currentTimeMillis() - DEDUPE_WINDOW_MS
+                 val dup = db.bills().countRecentDuplicate(
+                     fp = draft.fingerprint,
+                     pkg = draft.sourcePkg,
+                     cents = draft.priceCents,
++                    type = draft.type.name,
+                     tail = draft.orderTail,
+                     since = since,
+                 ) > 0
+@@ -68,13 +80,82 @@
+                     )
+                     true
+                 }
+-            } finally {
+-                PendingStore.remove(draft.fingerprint)
++                    } finally {
++                        PendingStore.remove(draft.fingerprint)
++                    }
++                }
+             }
+             onDone?.invoke(inserted)
+         }
+     }
+ 
++    /** 以应用级作用域提交，切换页面不会取消写入；成功/失败均回到主线程。 */
++    fun saveFromEditor(
++        context: Context,
++        draft: BillDraft,
++        original: BillEntity?,
++        onDone: (Result<Unit>) -> Unit,
++    ) {
++        val app = context.applicationContext
++        scope.launch {
++            val result = runCatching {
++                require(draft.priceCents in 1..100_000_000L) { "金额必须大于0且不超过一百万元" }
++                writeLock.withLock {
++                    val dao = AppDb.get(app).bills()
++                    if (original == null) {
++                        dao.insert(newManualEntity(draft, System.currentTimeMillis()))
++                    } else {
++                        check(dao.update(applyBillEdit(original, draft)) == 1) { "这笔账单已被删除，请重新打开明细" }
++                    }
++                }
++                Unit
++            }
++            withContext(Dispatchers.Main) { onDone(result) }
++        }
++    }
++
++    data class UndoDeletion(val bill: BillEntity, val expiresAt: Long)
++    private val undoItems = MutableStateFlow<List<UndoDeletion>>(emptyList())
++    val pendingUndo = undoItems.asStateFlow()
++
++    /** 先真实删除，再在进程内提供5秒撤销；多笔独立过期，无延迟提交丢失风险。 */
++    fun deleteUndoably(context: Context, id: Long, onError: (String) -> Unit) {
++        val app = context.applicationContext
++        scope.launch {
++            val result = runCatching {
++                writeLock.withLock {
++                    val db = AppDb.get(app)
++                    val deleted = db.withTransaction {
++                        db.bills().byId(id)?.also { db.bills().delete(id) }
++                    }
++                    if (deleted != null) {
++                        undoItems.value = undoItems.value + UndoDeletion(deleted, System.currentTimeMillis() + 5_000)
++                    }
++                }
++            }
++            result.exceptionOrNull()?.let { error ->
++                withContext(Dispatchers.Main) { onError(error.message ?: "删除失败，请重试") }
++            }
++            delay(5_000)
++            writeLock.withLock { undoItems.value = undoItems.value.filter { it.expiresAt > System.currentTimeMillis() } }
++        }
++    }
++
++    fun undoDelete(context: Context, id: Long, onDone: (Result<Unit>) -> Unit) {
++        val app = context.applicationContext
++        scope.launch {
++            val result = runCatching {
++                writeLock.withLock {
++                    val item = undoItems.value.firstOrNull { it.bill.id == id }
++                    check(item != null && System.currentTimeMillis() <= item.expiresAt) { "撤销时间已过" }
++                    check(AppDb.get(app).bills().restoreDeleted(item.bill) != -1L) { "记录编号已占用，未覆盖现有账单" }
++                    undoItems.value = undoItems.value.filterNot { it.bill.id == id }
++                }
++            }
++            withContext(Dispatchers.Main) { onDone(result) }
++        }
++    }
++
+     fun toDraft(entity: BillEntity): BillDraft = BillDraft(
+         priceCents = entity.priceCents,
+         type = runCatching { BillType.valueOf(entity.type) }.getOrDefault(BillType.EXPENSE),
+@@ -90,3 +171,27 @@
+         note = entity.note,
+     )
+ }
++
++/** 只应用允许编辑的字段，识别来源、时间和身份保持不变。 */
++internal fun applyBillEdit(original: BillEntity, edited: BillDraft): BillEntity {
++    val updated = original.copy(
++        priceCents = edited.priceCents, type = edited.type.name, merchant = edited.merchant,
++        category = edited.category, subCategory = edited.subCategory, account = edited.account,
++        note = edited.note,
++    )
++    return updated.copy(fingerprint = BillWriter.toDraft(updated).fingerprint)
++}
++
++internal fun newManualEntity(draft: BillDraft, createdAt: Long): BillEntity {
++    val source = draft.sourcePkg.takeIf { it.startsWith("com.example.autobook.manual.") }
++        ?: "com.example.autobook.manual.${java.util.UUID.randomUUID()}"
++    return BillEntity(
++    priceCents = draft.priceCents, type = draft.type.name, timeMillis = draft.timeMillis,
++    merchant = draft.merchant, method = null, orderTail = null,
++    sourcePkg = source, strategy = "手动记账",
++    fingerprint = draft.copy(sourcePkg = source, orderTail = null).fingerprint,
++    createdAt = createdAt, category = draft.category, subCategory = draft.subCategory,
++    account = draft.account, note = draft.note,
++)
++
++}
+
+--- /tmp/autobook-core-before/app/src/main/java/com/example/autobook/data/Bill.kt	2026-10-22 09:51:34.672858998 +0800
++++ app/src/main/java/com/example/autobook/data/Bill.kt	2026-10-22 09:53:11.645853353 +0800
+@@ -6,6 +6,8 @@
+ import androidx.room.Entity
+ import androidx.room.Index
+ import androidx.room.Insert
++import androidx.room.OnConflictStrategy
++import androidx.room.Update
+ import androidx.room.PrimaryKey
+ import androidx.room.Query
+ import androidx.room.Room
+@@ -71,6 +73,7 @@
+         """
+         SELECT COUNT(*) FROM bills
+         WHERE createdAt > :since
++          AND type = :type
+           AND (
+             fingerprint = :fp
+             OR (:tail IS NOT NULL AND sourcePkg = :pkg AND priceCents = :cents AND orderTail = :tail)
+@@ -81,6 +84,7 @@
+         fp: String,
+         pkg: String,
+         cents: Long,
++        type: String,
+         tail: String?,
+         since: Long,
+     ): Int
+@@ -88,6 +92,16 @@
+     @Insert
+     suspend fun insert(entity: BillEntity): Long
+ 
++    @Update
++    suspend fun update(entity: BillEntity): Int
++
++    @Query("SELECT * FROM bills WHERE id = :id")
++    suspend fun byId(id: Long): BillEntity?
++
++    /** 撤销只尝试恢复原 id；冲突时绝不覆盖其他记录。 */
++    @Insert(onConflict = OnConflictStrategy.IGNORE)
++    suspend fun restoreDeleted(entity: BillEntity): Long
++
+     /** 备份用：一次取全量（不含 Flow，避免恢复时和界面互相打架） */
+     @Query("SELECT * FROM bills ORDER BY timeMillis ASC")
+     suspend fun allOnce(): List<BillEntity>
+
+--- /tmp/autobook-core-before/app/src/main/java/com/example/autobook/ui/SettingsScreen.kt	2026-10-21 22:54:08.905621415 +0800
++++ app/src/main/java/com/example/autobook/ui/SettingsScreen.kt	2026-10-22 09:51:45.772571651 +0800
+@@ -804,8 +804,10 @@
+         if (busy) return
+         busy = true
+         scope.launch {
+-            val n = runCatching { count() }.getOrDefault(0)
+-            message = if (n > 0) "已导出 $n 条" else "这个范围没有记录"
++            message = runCatching { count() }.fold(
++                onSuccess = { n -> if (n > 0) "已导出 $n 条" else "这个范围没有记录" },
++                onFailure = { error -> error.message ?: "导出失败，请重试" },
++            )
+             busy = false
+         }
+     }
+
+--- /tmp/autobook-core-before/app/src/main/java/com/example/autobook/ui/StatsScreen.kt	2026-10-21 20:48:47.061379170 +0800
++++ app/src/main/java/com/example/autobook/ui/StatsScreen.kt	2026-10-22 09:52:07.293250789 +0800
+@@ -62,12 +62,12 @@
+     val month = remember(bills, from, to) { bills.filter { it.timeMillis in from until to } }
+ 
+     val expense = month.filter { it.type == "EXPENSE" }
+-    val income = month.filter { it.type == "INCOME" }
+     // 转账既不是支出也不是收入（转给「储蓄卡」这种账户互转，计入任一边都会重复）。
+     // 之前这里只 filter 两种，转账在统计页彻底消失；现在单列一块金额 + 笔数。
+     val transfers = month.filter { it.type == "TRANSFER" }
+-    val expenseTotal = expense.sumOf { it.priceCents }
+-    val incomeTotal = income.sumOf { it.priceCents }
++    val totals = ledgerTotals(month)
++    val expenseTotal = totals.expense
++    val incomeTotal = totals.income
+     val transferTotal = transfers.sumOf { it.priceCents }
+ 
+     var mode by rememberSaveable { mutableIntStateOf(0) }
+@@ -119,7 +119,7 @@
+                     ) {
+                         TotalCell("支出", formatAmount(expenseTotal), p.label, Modifier.weight(1f))
+                         TotalCell("收入", formatAmount(incomeTotal), p.green, Modifier.weight(1f))
+-                        val net = incomeTotal - expenseTotal
++                        val net = totals.balance
+                         TotalCell(
+                             "结余",
+                             if (net < 0) "−" + formatAmount(-net) else formatAmount(net),
+@@ -129,6 +129,19 @@
+                     }
+                 }
+             }
++
++            item(key = "refunds") {
++                InsetGroup {
++                    Row(
++                        Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xl, vertical = AbSpacing.m),
++                        horizontalArrangement = Arrangement.SpaceBetween,
++                        verticalAlignment = Alignment.CenterVertically,
++                    ) {
++                        Text("退款（抵减支出，不计收入）", style = AbType.caption1, color = p.secondaryLabel)
++                        Text(formatAmount(totals.refund), style = AbType.amountRow, color = p.label)
++                    }
++                }
++            }
+ 
+             if (transfers.isNotEmpty()) {
+                 // 转账单独一行：不进支出也不进收入，但必须让用户看见它没被丢掉。
+
+--- /tmp/autobook-core-before/app/src/main/java/com/example/autobook/ui/SummaryCard.kt	2026-10-21 16:10:51.030180446 +0800
++++ app/src/main/java/com/example/autobook/ui/SummaryCard.kt	2026-10-22 09:52:07.292995900 +0800
+@@ -40,9 +40,10 @@
+     }
+ 
+     val month = remember(bills, from, to) { bills.filter { it.timeMillis in from until to } }
+-    val expense = month.filter { it.type == "EXPENSE" }.sumOf { it.priceCents }
+-    val income = month.filter { it.type == "INCOME" }.sumOf { it.priceCents }
+-    val balance = income - expense
++    val totals = ledgerTotals(month)
++    val expense = totals.expense
++    val income = totals.income
++    val balance = totals.balance
+ 
+     Column(
+         modifier = Modifier
+@@ -67,6 +68,8 @@
+             HorizontalDivider(thickness = 0.5.dp, color = p.separator)
+         }
+ 
++        Text("本月 ${month.size} 笔", style = AbType.caption1, color = p.secondaryLabel)
++
+         Row(
+             Modifier.fillMaxWidth(),
+             horizontalArrangement = Arrangement.spacedBy(AbSpacing.l),
+@@ -78,7 +81,7 @@
+                 tint = if (balance < 0) p.red else p.label,
+                 modifier = Modifier.weight(1f),
+             )
+-            SummaryStat("笔数", "${month.size}", p.label, Modifier.weight(1f))
++            SummaryStat("退款", formatAmount(totals.refund), p.label, Modifier.weight(1f))
+         }
+     }
+ }
+
+--- /tmp/autobook-core-before/app/src/main/java/com/example/autobook/ui/ConfirmSheet.kt	2026-10-22 09:51:34.672791335 +0800
++++ app/src/main/java/com/example/autobook/ui/ConfirmSheet.kt	2026-10-22 09:54:36.395997643 +0800
+@@ -15,6 +15,8 @@
+ import androidx.compose.foundation.layout.fillMaxSize
+ import androidx.compose.foundation.layout.fillMaxWidth
+ import androidx.compose.foundation.layout.height
++import androidx.compose.foundation.layout.heightIn
++import androidx.compose.foundation.layout.imePadding
+ import androidx.compose.foundation.layout.navigationBarsPadding
+ import androidx.compose.foundation.layout.offset
+ import androidx.compose.foundation.layout.padding
+@@ -31,6 +33,7 @@
+ import androidx.compose.runtime.mutableStateOf
+ import androidx.compose.runtime.remember
+ import androidx.compose.runtime.rememberCoroutineScope
++import androidx.compose.runtime.saveable.rememberSaveable
+ import androidx.compose.runtime.setValue
+ import androidx.compose.ui.Alignment
+ import androidx.compose.ui.Modifier
+@@ -43,6 +46,7 @@
+ import androidx.compose.ui.text.input.KeyboardType
+ import androidx.compose.ui.unit.dp
+ import com.example.autobook.data.LedgerConfig
++import com.example.autobook.export.CostCsv
+ import com.example.autobook.ui.design.AbIcons
+ import com.example.autobook.ui.design.AbMotion
+ import com.example.autobook.ui.design.AbRadius
+@@ -85,26 +89,40 @@
+     onSave: (BillDraft) -> Unit,
+     onImport: (BillDraft) -> Unit,
+     onDiscard: () -> Unit,
++    editableDetails: Boolean = false,
++    saveLabel: String = "记一笔",
++    discardLabel: String = "忽略",
++    showImport: Boolean = true,
++    saving: Boolean = false,
++    errorMessage: String? = null,
+ ) {
+     val p = LocalAbPalette.current
+-    val groups = remember(draft.type) { LedgerConfig.groupsFor(draft.type) }
++    var type by rememberSaveable { mutableStateOf(draft.type) }
++    var merchant by rememberSaveable { mutableStateOf(draft.merchant.orEmpty()) }
++    var submitted by rememberSaveable { mutableStateOf(false) }
++    var importError by remember { mutableStateOf<String?>(null) }
++    val groups = remember(type) { LedgerConfig.groupsFor(type) }
+     val accounts = remember { LedgerConfig.accounts }
+ 
+     // 金额一律按 Locale.US 格式化：默认 Locale 的小数点可能是逗号（19,99），
+     // 显示出来再 toDoubleOrNull() 会解析失败、静默回退成原值。
+-    var amountText by remember { mutableStateOf(formatForInput(draft.priceCents)) }
+-    var category by remember { mutableStateOf(draft.category) }
+-    var subCategory by remember { mutableStateOf(draft.subCategory) }
+-    var account by remember { mutableStateOf(draft.account) }
+-    var note by remember { mutableStateOf(draft.note.orEmpty()) }
++    var amountText by rememberSaveable { mutableStateOf(formatForInput(draft.priceCents)) }
++    var category by rememberSaveable { mutableStateOf(draft.category) }
++    var subCategory by rememberSaveable { mutableStateOf(draft.subCategory) }
++    var account by rememberSaveable { mutableStateOf(draft.account) }
++    var note by rememberSaveable { mutableStateOf(draft.note.orEmpty()) }
+ 
+     val subs = remember(category, groups) {
+         groups.firstOrNull { it.name == category }?.subs.orEmpty()
+     }
+ 
+-    fun currentDraft(): BillDraft {
++    val validAmount = parseAmountCents(amountText)
++    fun currentDraft(): BillDraft? {
++        val cents = validAmount ?: return null
+         return draft.copy(
+-            priceCents = parseAmountCents(amountText) ?: draft.priceCents,
++            priceCents = cents,
++            type = type,
++            merchant = merchant.trim().ifBlank { null },
+             category = category,
+             subCategory = subCategory,
+             account = account,
+@@ -120,13 +138,14 @@
+     val density = LocalDensity.current
+     val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
+     val offsetY = remember { Animatable(screenHeightPx) }
+-    var dragging by remember { mutableStateOf(false) }
++    var dragging by rememberSaveable { mutableStateOf(false) }
+ 
+     LaunchedEffect(Unit) {
+         offsetY.animateTo(0f, spring(dampingRatio = 0.86f, stiffness = 420f))
+     }
+ 
+     fun closeAnimated() {
++        if (saving || submitted) return
+         haptic.warn()
+         scope.launch {
+             offsetY.animateTo(
+@@ -159,7 +178,9 @@
+                 .offset { IntOffset(0, offsetY.value.roundToInt()) }
+                 .clip(RoundedCornerShape(topStart = AbRadius.sheet, topEnd = AbRadius.sheet))
+                 .background(p.cardBg)
+-                .navigationBarsPadding(),
++                .imePadding()
++                .navigationBarsPadding()
++                .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.92f),
+         ) {
+             Box(
+                 Modifier
+@@ -212,14 +233,14 @@
+                     )
+                     Column(Modifier.weight(1f)) {
+                         Text(
+-                            draft.merchant ?: typeLabel(draft.type),
++                            merchant.ifBlank { typeLabel(type) },
+                             style = AbType.headline,
+                             color = p.label,
+                             maxLines = 1,
+                         )
+                         Text(
+                             buildString {
+-                                append(typeLabel(draft.type))
++                                append(typeLabel(type))
+                                 draft.method?.let { append(" · ").append(it) }
+                                 append(" · ")
+                                 append(
+@@ -233,7 +254,7 @@
+                         )
+                     }
+                     Text(
+-                        "忽略",
++                        discardLabel,
+                         style = AbType.body,
+                         color = p.secondaryLabel,
+                         modifier = Modifier
+@@ -241,7 +262,7 @@
+                             .clickable(
+                                 interactionSource = remember { MutableInteractionSource() },
+                                 indication = null,
+-                                onClick = onDiscard,
++                                onClick = { if (!saving && !submitted) onDiscard() },
+                             )
+                             .padding(horizontal = 8.dp, vertical = 6.dp),
+                     )
+@@ -257,7 +278,7 @@
+                         androidx.compose.foundation.text.BasicTextField(
+                             value = amountText,
+                             onValueChange = {
+-                                amountText = it.filter { c -> c.isDigit() || c == '.' }
++                                amountText = it
+                             },
+                             singleLine = true,
+                             textStyle = AbType.amountEntry.copy(color = p.label),
+@@ -268,6 +289,24 @@
+                     }
+                 }
+ 
++                if (validAmount == null) {
++                    Text("请输入大于0且不超过一百万元的有效金额", color = p.red, style = AbType.caption1)
++                }
++                if (editableDetails) {
++                    SectionLabel("类型")
++                    ChipFlow(
++                        items = BillType.entries.map(::typeLabel),
++                        selected = typeLabel(type),
++                        onToggle = { label ->
++                            val next = BillType.entries.first { typeLabel(it) == label }
++                            if (type != next) { type = next; category = null; subCategory = null }
++                            importError = null
++                        },
++                    )
++                    InsetGroup {
++                        InputRow(label = "商户", value = merchant, onValueChange = { merchant = it }, placeholder = "可留空")
++                    }
++                }
+                 InsetDivider()
+ 
+                 // ---- 分类 ----
+@@ -310,7 +349,7 @@
+ 
+                 // ---- 抓取元信息 ----
+                 InsetGroup {
+-                    ListRow(title = "商户", subtitle = draft.merchant ?: "—")
++                    ListRow(title = "商户", subtitle = merchant.ifBlank { "—" })
+                     InsetDivider()
+                     ListRow(
+                         title = "支付方式",
+@@ -329,11 +368,19 @@
+                 Spacer(Modifier.height(AbSpacing.xs))
+ 
+                 // ---- 动作 ----
++                (errorMessage ?: importError)?.let {
++                    Text(it, color = p.red, style = AbType.footnote)
++                }
+                 PrimaryButton(
+-                    text = "记一笔",
++                    text = if (saving) "保存中…" else saveLabel,
++                    enabled = validAmount != null && !saving && !submitted,
+                     onClick = {
+-                        haptic.confirm()
+-                        onSave(currentDraft())
++                        val edited = currentDraft()
++                        if (edited != null && !saving && !submitted) {
++                            if (!editableDetails) submitted = true
++                            haptic.confirm()
++                            onSave(edited)
++                        }
+                     },
+                     modifier = Modifier.fillMaxWidth(),
+                 )
+@@ -341,16 +388,29 @@
+                     Modifier.fillMaxWidth(),
+                     horizontalArrangement = Arrangement.spacedBy(AbSpacing.m),
+                 ) {
+-                    SecondaryButton(
++                    if (showImport) SecondaryButton(
+                         text = "导入 iCost",
+                         onClick = {
+-                            haptic.select()
+-                            onImport(currentDraft())
++                            val edited = currentDraft()
++                            when {
++                                saving || submitted -> Unit
++                                edited == null -> importError = "请输入有效金额后再导入"
++                                edited.type == BillType.REFUND -> importError = CostCsv.REFUND_UNSUPPORTED
++                                else -> {
++                                    haptic.select()
++                                    try {
++                                        onImport(edited)
++                                        submitted = true
++                                    } catch (error: IllegalArgumentException) {
++                                        importError = error.message ?: "无法导入，请检查账单"
++                                    }
++                                }
++                            }
+                         },
+                         modifier = Modifier.weight(1f),
+                     )
+                     SecondaryButton(
+-                        text = "忽略",
++                        text = discardLabel,
+                         onClick = { closeAnimated() },
+                         modifier = Modifier.weight(1f),
+                         tint = p.red,
+@@ -424,4 +484,5 @@
+     BillType.EXPENSE -> "支出"
+     BillType.INCOME -> "收入"
+     BillType.TRANSFER -> "转账"
++    BillType.REFUND -> "退款"
+ }
+
+--- /tmp/autobook-core-before/app/src/main/java/com/example/autobook/ui/BillsScreen.kt	2026-10-22 09:51:34.672741549 +0800
++++ app/src/main/java/com/example/autobook/ui/BillsScreen.kt	2026-10-22 09:55:58.299208123 +0800
+@@ -1,6 +1,9 @@
+ package com.example.autobook.ui
+ 
++import android.widget.Toast
+ import androidx.compose.foundation.background
++import androidx.compose.foundation.clickable
++import androidx.compose.foundation.layout.Box
+ import androidx.compose.foundation.layout.Arrangement
+ import androidx.compose.foundation.layout.Column
+ import androidx.compose.foundation.layout.PaddingValues
+@@ -12,20 +15,27 @@
+ import androidx.compose.foundation.shape.RoundedCornerShape
+ import androidx.compose.material3.SwipeToDismissBox
+ import androidx.compose.material3.SwipeToDismissBoxValue
++import androidx.compose.material3.Snackbar
++import androidx.compose.material3.TextButton
+ import androidx.compose.material3.Text
+ import androidx.compose.material3.rememberSwipeToDismissBoxState
+ import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.setValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.collectAsState
++import androidx.compose.runtime.key
++import androidx.compose.runtime.saveable.rememberSaveable
+ import androidx.compose.runtime.remember
+-import androidx.compose.runtime.rememberCoroutineScope
+ import androidx.compose.ui.Alignment
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.draw.clip
+ import androidx.compose.ui.platform.LocalContext
+ import androidx.compose.ui.unit.dp
+-import com.example.autobook.data.AppDb
+ import com.example.autobook.data.BillEntity
++import com.example.autobook.data.BillWriter
++import com.example.autobook.ui.design.PrimaryButton
+ import com.example.autobook.ui.design.AbIcons
+-import com.example.autobook.ui.design.AbRadius
+ import com.example.autobook.ui.design.AbSpacing
+ import com.example.autobook.ui.design.AbType
+ import com.example.autobook.ui.design.sectionHeader
+@@ -38,8 +48,6 @@
+ import com.example.autobook.ui.design.PageScaffold
+ import com.example.autobook.ui.design.SwipeDeleteBackground
+ import com.example.autobook.ui.design.formatAmount
+-import kotlinx.coroutines.Dispatchers
+-import kotlinx.coroutines.launch
+ import java.time.Instant
+ import java.time.LocalDate
+ import java.time.ZoneId
+@@ -56,6 +64,25 @@
+ fun BillsScreen(bills: List<BillEntity>) {
+     val p = LocalAbPalette.current
+     val listState = rememberLazyListState()
++    val app = LocalContext.current.applicationContext
++    var editingId by rememberSaveable { mutableStateOf<Long?>(null) }
++    var newSource by rememberSaveable { mutableStateOf<String?>(null) }
++    var newTime by rememberSaveable { mutableStateOf(0L) }
++    val undoItems by BillWriter.pendingUndo.collectAsState()
++    fun addBill() {
++        editingId = null
++        newTime = System.currentTimeMillis()
++        newSource = "com.example.autobook.manual.${java.util.UUID.randomUUID()}"
++    }
++    val original = editingId?.let { id -> bills.firstOrNull { it.id == id } }
++    if (newSource != null || original != null) {
++        key(newSource, editingId) {
++            BillEditorDialog(original, newSource.orEmpty(), newTime) {
++                newSource = null
++                editingId = null
++            }
++        }
++    }
+ 
+     // 按「日期」分组，而不是按格式化后的字符串 —— 否则跨年的同月日会被并到一组。
+     val days = remember(bills) {
+@@ -67,21 +94,7 @@
+         listState = listState,
+         subtitle = if (bills.isEmpty()) null else "共 ${bills.size} 笔",
+     ) { padding ->
+-        if (bills.isEmpty()) {
+-            Column(
+-                Modifier.fillMaxWidth().padding(padding).padding(AbSpacing.page),
+-            ) {
+-                InsetGroup {
+-                    EmptyState(
+-                        icon = AbIcons.Note,
+-                        title = "还没有账单",
+-                        message = "开启识别后，付款完成会自动出现确认卡；也可以在确认卡里手动记账。",
+-                    )
+-                }
+-            }
+-            return@PageScaffold
+-        }
+-
++        Box(Modifier.fillMaxWidth()) {
+         LazyColumn(
+             state = listState,
+             modifier = Modifier.fillMaxWidth(),
+@@ -93,27 +106,65 @@
+             ),
+             verticalArrangement = Arrangement.spacedBy(AbSpacing.xs),
+         ) {
++            item(key = "add") {
++                PrimaryButton(text = "记一笔", onClick = { addBill() }, modifier = Modifier.fillMaxWidth())
++            }
++            if (bills.isEmpty()) item(key = "empty") {
++                InsetGroup {
++                    EmptyState(icon = AbIcons.Note, title = "还没有账单", message = "点「记一笔」手动添加，或开启识别后自动生成确认卡。")
++                }
++            }
+             days.forEach { (day, dayBills) ->
+                 item(key = "h-$day") {
+                     DayHeader(
+                         day = dayLabel(day),
+                         expense = dayBills.filter { it.type == "EXPENSE" }.sumOf { it.priceCents },
+                         income = dayBills.filter { it.type == "INCOME" }.sumOf { it.priceCents },
++                        refund = dayBills.filter { it.type == "REFUND" }.sumOf { it.priceCents },
+                     )
+                 }
+                 item(key = "g-$day") {
+                     InsetGroup {
+                         dayBills.forEachIndexed { index, bill ->
+                             if (index > 0) InsetDivider(inset = 62.dp)
+-                            SwipeableBillRow(bill)
++                            key(bill.id) {
++                                SwipeableBillRow(
++                                    bill,
++                                    onEdit = { editingId = bill.id; newSource = null },
++                                    onDelete = {
++                                        BillWriter.deleteUndoably(app, bill.id) {
++                                            Toast.makeText(app, it, Toast.LENGTH_LONG).show()
++                                        }
++                                    },
++                                )
++                            }
+                         }
+                     }
+                 }
+             }
+             item(key = "footer") {
+-                GroupFooter("左滑可删除  ·  数据仅存本机")
++                GroupFooter("点账单编辑  ·  左滑删除后5秒内可撤销  ·  数据仅存本机")
++            }
++        }
++        Column(
++            Modifier.align(Alignment.BottomCenter).padding(horizontal = AbSpacing.page)
++                .padding(bottom = padding.calculateBottomPadding()),
++            verticalArrangement = Arrangement.spacedBy(4.dp),
++        ) {
++            undoItems.forEach { item ->
++                key(item.bill.id) {
++                    Snackbar(action = {
++                        TextButton(onClick = {
++                            BillWriter.undoDelete(app, item.bill.id) { result ->
++                                val message = result.fold({ "已撤销删除" }, { it.message ?: "撤销失败" })
++                                Toast.makeText(app, message, Toast.LENGTH_SHORT).show()
++                            }
++                        }) { Text("撤销") }
++                    }) { Text("已删除 ${item.bill.merchant ?: formatAmount(item.bill.priceCents)}") }
++                }
+             }
+         }
++        }
+     }
+ }
+ 
+@@ -125,7 +176,7 @@
+ }
+ 
+ @Composable
+-private fun DayHeader(day: String, expense: Long, income: Long) {
++private fun DayHeader(day: String, expense: Long, income: Long, refund: Long) {
+     val p = LocalAbPalette.current
+     Row(
+         Modifier.fillMaxWidth().padding(start = AbSpacing.xs, end = AbSpacing.xs, top = AbSpacing.m),
+@@ -138,6 +189,7 @@
+                 if (expense > 0) append("支出 ").append(formatAmount(expense))
+                 if (expense > 0 && income > 0) append("   ")
+                 if (income > 0) append("收入 ").append(formatAmount(income))
++                if (refund > 0) { if (isNotEmpty()) append("   "); append("退款 ").append(formatAmount(refund)) }
+             },
+             style = AbType.caption1,
+             color = p.tertiaryLabel,
+@@ -148,16 +200,13 @@
+ /** 左滑删除：滑过阈值即删库，条目随列表刷新消失。 */
+ @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+ @Composable
+-private fun SwipeableBillRow(bill: BillEntity) {
+-    val context = LocalContext.current
+-    val scope = rememberCoroutineScope()
++private fun SwipeableBillRow(bill: BillEntity, onEdit: () -> Unit, onDelete: () -> Unit) {
+     val state = rememberSwipeToDismissBoxState(
+         confirmValueChange = { value ->
+             if (value == SwipeToDismissBoxValue.EndToStart) {
+-                scope.launch(Dispatchers.IO) {
+-                    AppDb.get(context).bills().delete(bill.id)
+-                }
+-                true
++                onDelete()
++                // 等数据库流移除行；失败时原行仍可继续操作。
++                false
+             } else false
+         },
+     )
+@@ -174,7 +223,7 @@
+                 .clip(RoundedCornerShape(0.dp))
+                 .background(LocalAbPalette.current.cardBg),
+         ) {
+-            BillListRow(bill)
++            BillListRow(bill, modifier = Modifier.clickable(onClick = onEdit))
+         }
+     }
+ }
+
+--- /tmp/autobook-core-before/app/src/main/java/com/example/autobook/capture/ConfirmDelivery.kt	2026-10-21 20:13:23.913277705 +0800
++++ app/src/main/java/com/example/autobook/capture/ConfirmDelivery.kt	2026-10-22 09:51:45.772735609 +0800
+@@ -145,6 +145,7 @@
+ 
+         val typeLabel = when (draft.type.name) {
+             "INCOME" -> "收入"
++            "REFUND" -> "退款"
+             "TRANSFER" -> "转账"
+             else -> "支出"
+         }
+
+--- /tmp/autobook-core-before/app/src/main/java/com/example/autobook/capture/BillAccessibilityService.kt	2026-10-21 20:14:17.983161628 +0800
++++ app/src/main/java/com/example/autobook/capture/BillAccessibilityService.kt	2026-10-22 09:51:47.148101486 +0800
+@@ -124,11 +124,12 @@
+         }
+         retried = false
+ 
+-        val items = collector.collect(root)
++        val collected = collector.collectResult(root)
+         val snapshot = UiSnapshot(
+             packageName = pkg,
+             activityClass = pendingClass,
+-            items = items,
++            items = collected.items,
++            truncated = collected.truncated,
+             source = UiSnapshot.Source.ACCESSIBILITY,
+         )
+ 
+
+--- /tmp/autobook-core-before/app/src/main/java/com/example/autobook/root/RootWatcher.kt	2026-10-21 20:14:33.563716986 +0800
++++ app/src/main/java/com/example/autobook/root/RootWatcher.kt	2026-10-22 09:51:20.506640971 +0800
+@@ -36,17 +36,6 @@
+     private const val OCR_COOLDOWN_MS = 3_000L
+     private const val STATUS_BAR_DP = 24
+ 
+-    /**
+-     * 熄屏/锁屏时的长睡间隔。
+-     *
+-     * 之前是死循环每 1.2s 无条件跑一轮，息屏时也一样：每轮至少一次 `su dumpsys window`。
+-     * 熄屏时人不可能在记账，所以直接睡 30s —— 夜里 8 小时从约 24000 次 su 降到 960 次。
+-     */
+-    private const val IDLE_SLEEP_MS = 30_000L
+-
+-    /** 稳态页面的退避间隔：页面内容没变、或上一屏不是账单页时，没必要 1.2s 一次 */
+-    private const val RELAXED_INTERVAL_MS = 3_000L
+-
+     /** 给设置页看的一行状态：最近一轮发生了什么 */
+     data class Status(
+         val running: Boolean = false,
+@@ -60,12 +49,9 @@
+     private val source = RootUiDumpSource()
+ 
+     private var job: Job? = null
+-    private var lastHash: Int = 0
++    private var lastHash: Int? = null
+     private var lastOcrAt: Long = 0
+ 
+-    /** 上一轮是否"白跑"（非白名单 / 页面没变化 / 不是账单页），用来决定退避 */
+-    private var idleTick = false
+-
+     private val _status = MutableStateFlow(Status())
+     val status: StateFlow<Status> = _status.asStateFlow()
+ 
+@@ -79,7 +65,7 @@
+         stop()
+         appContext = context.applicationContext
+         // 换来源/换白名单后旧的哈希会误判为"没变化"，重启轮询时清掉
+-        lastHash = 0
++        lastHash = null
+         val app = appContext ?: return
+         job = scope.launch {
+             update { it.copy(running = true, lastResult = "运行中") }
+@@ -88,13 +74,16 @@
+                 if (!interactive) {
+                     // 熄屏：什么都不做，长睡。醒来第一轮把 lastHash 清掉，
+                     // 否则解锁后停在原页面会被判成"页面未变化"而漏抓。
+-                    lastHash = 0
++                    lastHash = null
+                     update { it.copy(lastResult = "息屏休眠中") }
+-                    delay(IDLE_SLEEP_MS)
++                    delay(RootPollPolicy.delayMs(RootPollPolicy.Tick.ASLEEP, intervalMs))
+                     continue
+                 }
+-                runCatching { tick(app, settings) }
+-                delay(if (idleTick) maxOf(intervalMs, RELAXED_INTERVAL_MS) else intervalMs)
++                val tick = runCatching { tick(app, settings) }.getOrElse {
++                    update { status -> status.copy(lastResult = "采集失败：${it.message.orEmpty()}") }
++                    RootPollPolicy.Tick.IDLE
++                }
++                delay(RootPollPolicy.delayMs(tick, intervalMs))
+             }
+         }
+     }
+@@ -124,35 +113,38 @@
+         _status.value = block(_status.value)
+     }
+ 
+-    private suspend fun tick(context: Context, settings: Settings) {
++    private suspend fun tick(context: Context, settings: Settings): RootPollPolicy.Tick {
+         if (!settings.enabled) {
++            lastHash = null
+             update { it.copy(lastResult = "识别已关闭") }
+-            return
++            return RootPollPolicy.Tick.IDLE
+         }
+ 
+         val fg = source.foreground() ?: run {
++            lastHash = null
+             update { it.copy(lastResult = "拿不到前台应用") }
+-            return
++            return RootPollPolicy.Tick.IDLE
+         }
+         if (!BillKit.isAccepted(fg.packageName)) {
++            lastHash = null
+             update { it.copy(lastPackage = fg.packageName, lastResult = "非白名单 ${fg.packageName}") }
+-            return
++            return RootPollPolicy.Tick.IDLE
+         }
+ 
+         // 前台已经查过了，直接传进去，省一次 dumpsys window
+         val snapshot = source.dump(fg) ?: run {
+             update { it.copy(lastPackage = fg.packageName, lastResult = "dump 失败") }
+-            return
++            return RootPollPolicy.Tick.IDLE
+         }
+         if (snapshot.packageName != fg.packageName) {
+             update { it.copy(lastPackage = fg.packageName, lastResult = "前台已切换") }
+-            return
++            return RootPollPolicy.Tick.IDLE
+         }
+ 
+-        val hash = snapshot.items.joinToString("|").hashCode()
++        val hash = listOf(snapshot.packageName, snapshot.activityClass, snapshot.items, snapshot.truncated).hashCode()
+         if (hash == lastHash) {
+             update { it.copy(lastPackage = fg.packageName, lastResult = "页面未变化") }
+-            return
++            return RootPollPolicy.Tick.IDLE
+         }
+         lastHash = hash
+         update { it.copy(lastPackage = fg.packageName, lastTickAt = System.currentTimeMillis(), tickCount = it.tickCount + 1) }
+@@ -164,21 +156,25 @@
+         }
+         update { it.copy(lastResult = label) }
+ 
+-        if (!outcome.needsOcr || !BillKit.currentConfig().ocrEnabled) return
+-        if (System.currentTimeMillis() - lastOcrAt < OCR_COOLDOWN_MS) return
++        var result = if (outcome is com.example.billkit.BillPipeline.Outcome.Draft)
++            RootPollPolicy.Tick.ACTIVE else RootPollPolicy.Tick.IDLE
++        if (!outcome.needsOcr || !BillKit.currentConfig().ocrEnabled) return result
++        if (System.currentTimeMillis() - lastOcrAt < OCR_COOLDOWN_MS) return result
+ 
+         lastOcrAt = System.currentTimeMillis()
+-        val bitmap = RootScreenshot.capture() ?: return
++        val bitmap = RootScreenshot.capture() ?: return result
+         try {
+             val statusBarPx = (STATUS_BAR_DP * context.resources.displayMetrics.density).toInt()
+-            BillKit.offerOcr(
++            val ocrOutcome = BillKit.offerOcr(
+                 packageName = fg.packageName,
+                 activityClass = fg.activityClass,
+                 screenshot = bitmap,
+                 statusBarPx = statusBarPx,
+             )
++            if (ocrOutcome is com.example.billkit.BillPipeline.Outcome.Draft) result = RootPollPolicy.Tick.ACTIVE
+         } finally {
+             if (!bitmap.isRecycled) bitmap.recycle()
+         }
++        return result
+     }
+ }
+
+--- /tmp/autobook-core-before/app/src/main/java/com/example/autobook/ui/design/BillRow.kt	2026-10-21 15:59:10.087837026 +0800
++++ app/src/main/java/com/example/autobook/ui/design/BillRow.kt	2026-10-22 09:51:43.744275375 +0800
+@@ -35,6 +35,7 @@
+     return when (type) {
+         "INCOME" -> "+$body"
+         "TRANSFER" -> body
++        "REFUND" -> "退款 $body"
+         else -> "-$body"
+     }
+ }
+@@ -90,6 +91,7 @@
+             )
+             Text(
+                 text = listOfNotNull(
++                    if (bill.type == "REFUND") "退款" else null,
+                     bill.category?.let { cat ->
+                         bill.subCategory?.let { "$cat · $it" } ?: cat
+                     } ?: "未分类",
+
+--- /tmp/autobook-core-before/app/src/test/java/com/example/autobook/CostCsvTest.kt	2026-10-21 11:42:23.000000000 +0800
++++ app/src/test/java/com/example/autobook/CostCsvTest.kt	2026-10-22 09:52:42.831539072 +0800
+@@ -40,6 +40,15 @@
+     private fun cells(csv: String) = rows(csv)[1].split(",")
+ 
+     @Test
++    fun `包含退款时明确拒绝整个导出而非伪装收入或丢行`() {
++        val error = runCatching {
++            CostCsv.build(listOf(bill(), bill(type = BillType.REFUND)))
++        }.exceptionOrNull()
++        assertTrue(error is IllegalArgumentException)
++        assertTrue(error?.message.orEmpty().contains("不支持退款"))
++    }
++
++    @Test
+     fun `表头与模板完全一致`() {
+         assertEquals(
+             "日期,类型,金额,一级分类,二级分类,账户1,账户2,备注,货币,标签",
+
+--- /tmp/autobook-core-before/app/src/test/java/com/example/autobook/BackupTest.kt	2026-10-21 20:27:34.679657565 +0800
++++ app/src/test/java/com/example/autobook/BackupTest.kt	2026-10-22 09:52:42.831274907 +0800
+@@ -56,6 +56,16 @@
+     )
+ 
+     @Test
++    fun `退款备份往返保留类型正金额及独立指纹`() {
++        val draft = com.example.billkit.BillDraft(1999, com.example.billkit.BillType.REFUND,
++            1_700_000_000_000L, null, null, "456789", "com.tencent.mm", "refund")
++        val original = bill().copy(type = "REFUND", fingerprint = draft.fingerprint)
++        assertEquals(original, Backup.decode(Backup.encode(snapshot(listOf(original)))).bills.single())
++        val raw = Backup.encode(snapshot(listOf(original))).replace("\"fp\":\"${draft.fingerprint}\",", "")
++        assertEquals(draft.fingerprint, Backup.decode(raw).bills.single().fingerprint)
++    }
++
++    @Test
+     fun `完整快照往返不丢字段`() {
+         val src = snapshot(listOf(bill()))
+         val back = Backup.decode(Backup.encode(src))
+
+--- /tmp/autobook-core-before/billkit/src/main/java/com/example/billkit/AmountParser.kt	2026-10-21 17:32:19.376880507 +0800
++++ billkit/src/main/java/com/example/billkit/AmountParser.kt	2026-10-22 09:55:49.935669692 +0800
+@@ -69,13 +69,32 @@
+         "收款成功", "充值成功", "还款成功", "提现成功", "购买成功", "下单成功",
+         "拼单成功", "已收钱", "已收款", "已领取", "已存入零钱", "交易完成",
+     )
+-    private val failedWords = listOf("支付失败", "付款失败", "交易失败", "退款失败")
++    private val failedWords = listOf("支付失败", "付款失败", "交易失败", "退款失败", "退款未成功", "退款不成功")
+     private val cancelledWords = listOf("已取消", "已关闭", "已撤销", "交易已关闭", "订单已取消")
+     private val pendingWords = listOf(
+-        "正在校验", "正在付款", "正在支付", "支付中", "处理中", "计算中",
++        "待退款", "退款待入账", "等待商家退款", "未退款", "退款申请中", "退款申请已提交", "已提交退款申请", "已申请退款", "退款处理中", "退款中", "等待退款", "退款审核", "退款待处理", "正在校验", "正在付款", "正在支付", "支付中", "处理中", "计算中",
+         "请输入支付密码", "请验证指纹", "人脸检测中", "正在加载",
+     )
+ 
++    /** 必须是明确已完成的退款；“退回”可能只是转账退回，不能泛化。 */
++    fun isCompletedRefund(items: List<String>): Boolean = items.any { line ->
++        !listOf("时间", "预计", "尚未", "未退款", "申请").any { line.contains(it) } &&
++        listOf("退款成功", "退款完成", "退款已完成", "已退款", "已全额退款", "已部分退款", "退款到账", "退款已到账").any { line.contains(it) }
++    }
++
++    /** 退款页可能同时展示原付款，优先取退款金额。 */
++    fun findRefundAmount(items: List<String>): AmountHit? {
++        for ((index, line) in items.withIndex()) {
++            if (!line.contains("退款金额") && !line.contains("已退金额")) continue
++            findAmount(listOf(line))?.let { return it }
++            items.getOrNull(index + 1)?.let { next ->
++                findAmount(listOf("金额", next))?.let { return it }
++            }
++        }
++        if (items.any { it.contains("退款金额") || it.contains("已退金额") }) return null
++        return findAmount(items)
++    }
++
+     // ---------- 金额 ----------
+ 
+     /** "@¥1,234.5" -> 123450（分）。解析失败返回 null。 */
+@@ -169,6 +188,15 @@
+ 
+     // ---------- 时间 ----------
+ 
++    fun findRefundTime(items: List<String>): Long? {
++        for ((index, line) in items.withIndex()) {
++            if (!listOf("退款时间", "到账时间", "退款到账时间").any { line.contains(it) }) continue
++            findTime(listOf(line))?.let { return it }
++            items.getOrNull(index + 1)?.let { next -> findTime(listOf(next))?.let { return it } }
++        }
++        return findTime(items)
++    }
++
+     fun findTime(items: List<String>, now: LocalDateTime = LocalDateTime.now()): Long? {
+         for (item in items) {
+             for (pattern in timePatterns) {
+@@ -203,12 +231,24 @@
+ 
+     // ---------- 状态 ----------
+ 
++    /** “申请退款”常是正常账单上的按钮，只有出现在状态字段或退款详情中才表示未完成。 */
++    private fun refundApplicationIsStatus(items: List<String>): Boolean {
++        val refundPage = items.any { it.trim() in listOf("退款详情", "退款申请", "退款进度") }
++        return items.withIndex().any { (index, line) ->
++            (line.contains("申请退款") || line.contains("退款申请")) &&
++                (refundPage || line.contains("状态") ||
++                    items.getOrNull(index - 1)?.let { it.contains("当前状态") || it.contains("退款状态") } == true)
++        }
++    }
++
+     fun status(items: List<String>): Status {
+         val joined = items.joinToString(" ")
+         return when {
+             failedWords.any { joined.contains(it) } -> Status.FAILED
++            listOf("取消退款", "退款取消", "退款已取消", "退款关闭").any { joined.contains(it) } -> Status.CANCELLED
++            pendingWords.any { joined.contains(it) } || refundApplicationIsStatus(items) -> Status.PENDING
++            isCompletedRefund(items) -> Status.SUCCESS
+             cancelledWords.any { joined.contains(it) } -> Status.CANCELLED
+-            pendingWords.any { joined.contains(it) } -> Status.PENDING
+             successWords.any { joined.contains(it) } -> Status.SUCCESS
+             else -> Status.UNKNOWN
+         }
+
+--- /tmp/autobook-core-before/billkit/src/main/java/com/example/billkit/BillPipeline.kt	2026-10-21 17:32:28.547931528 +0800
++++ billkit/src/main/java/com/example/billkit/BillPipeline.kt	2026-10-22 09:53:49.205274381 +0800
+@@ -36,15 +36,17 @@
+             AmountParser.Status.SUCCESS -> Unit
+         }
+ 
+-        val hit = AmountParser.findAmount(snapshot.items)
++        val refund = AmountParser.isCompletedRefund(snapshot.items)
++        val hit = (if (refund) AmountParser.findRefundAmount(snapshot.items) else AmountParser.findAmount(snapshot.items))
+             ?: return Outcome.Skipped("no-amount:${match.strategy}")
+         if (hit.cents <= 0) return Outcome.Skipped("zero-amount")
+ 
+         val fields = FieldExtractor.extract(snapshot.items)
+         val draft = BillDraft(
+             priceCents = hit.cents,
+-            type = detectType(snapshot.items, match.kind, hit.sign),
+-            timeMillis = AmountParser.findTime(snapshot.items) ?: now,
++            type = if (refund) BillType.REFUND else detectType(snapshot.items, match.kind, hit.sign),
++            timeMillis = (if (refund) AmountParser.findRefundTime(snapshot.items)
++                else AmountParser.findTime(snapshot.items)) ?: now,
+             merchant = fields.merchant
+                 ?: FieldExtractor.merchantFromRemark(snapshot.items)
+                 ?: fields.counterParty
+@@ -72,7 +74,7 @@
+         // 注意：故意不含泛化的"收款"（会误命中"收款方"）
+         val incomeStrong = listOf(
+             "收入", "已收钱", "你已收款", "收款成功", "收款到账", "已到账",
+-            "已存入零钱", "入账", "退款", "已退款", "退回", "收益",
++            "已存入零钱", "入账", "收益",
+         )
+         if (incomeStrong.any { joined.contains(it) }) return BillType.INCOME
+ 
+
+--- /tmp/autobook-core-before/billkit/src/main/java/com/example/billkit/Bill.kt	2026-10-21 11:41:29.000000000 +0800
++++ billkit/src/main/java/com/example/billkit/Bill.kt	2026-10-22 09:52:42.825274907 +0800
+@@ -1,7 +1,7 @@
+ package com.example.billkit
+ 
+-/** 支出 / 收入 / 转账 */
+-enum class BillType { EXPENSE, INCOME, TRANSFER }
++/** 支出 / 收入 / 转账 / 退款（金额均为正） */
++enum class BillType { EXPENSE, INCOME, TRANSFER, REFUND }
+ 
+ /**
+  * 一条待确认的账单草稿。库只负责产出它，落库/导出/通知全部由宿主实现
+@@ -31,6 +31,7 @@
+             append(priceCents).append('|')
+             append(timeMillis / 60_000)
+             orderTail?.let { append('|').append(it) }
++            if (type == BillType.REFUND) append("|REFUND")
+         }
+ 
+     val amountYuan: Double get() = priceCents / 100.0
+
+--- /tmp/autobook-core-before/billkit/src/main/java/com/example/billkit/BillKit.kt	2026-10-21 20:13:59.311718880 +0800
++++ billkit/src/main/java/com/example/billkit/BillKit.kt	2026-10-22 09:51:47.148249091 +0800
+@@ -111,16 +111,16 @@
+     private fun dispatch(outcome: BillPipeline.Outcome, snapshot: UiSnapshot, now: Long) {
+         when (outcome) {
+             is BillPipeline.Outcome.Skipped -> {
+-                DebugBus.publish(snapshot, "skip:${outcome.reason}")
++                DebugBus.publish(snapshot, snapshot.diagnostic("skip:${outcome.reason}"))
+             }
+ 
+             is BillPipeline.Outcome.Draft -> {
+                 if (now - lastAcceptedAt < config.minIntervalMs) {
+-                    DebugBus.publish(snapshot, "skip:throttled")
++                    DebugBus.publish(snapshot, snapshot.diagnostic("skip:throttled"))
+                     return
+                 }
+                 if (isDuplicate(outcome.draft.fingerprint, now)) {
+-                    DebugBus.publish(snapshot, "skip:duplicate")
++                    DebugBus.publish(snapshot, snapshot.diagnostic("skip:duplicate"))
+                     return
+                 }
+                 lastAcceptedAt = now
+
+--- /tmp/autobook-core-before/billkit/src/main/java/com/example/billkit/OcrNormalizer.kt	2026-10-21 11:09:40.000000000 +0800
++++ billkit/src/main/java/com/example/billkit/OcrNormalizer.kt	2026-10-22 09:53:25.687971550 +0800
+@@ -23,13 +23,21 @@
+     private val noiseOnly = Regex("""^[^\p{L}\p{N}¥￥]+$""")
+     private val currencyOnly = Regex("""^[¥￥]$""")
+ 
+-    fun normalize(raw: List<String>, maxItems: Int = 200, maxChars: Int = 2000): List<String> {
+-        val out = ArrayList<String>(raw.size)
+-        var chars = 0
++    fun normalize(raw: List<String>, maxItems: Int = 200, maxChars: Int = 2000): List<String> =
++        normalizeResult(raw, maxItems, maxChars).items
++
++    fun normalizeResult(
++        raw: List<String>, maxItems: Int = 200, maxChars: Int = 2000, maxVisited: Int = 5_000,
++    ): CollectedText {
++        val out = ArrayList<String>(minOf(raw.size, maxItems.coerceAtLeast(0)))
++        val budget = TextCaptureBudget(maxItems, maxChars)
+         var i = 0
+ 
+         while (i < raw.size) {
+-            if (out.size >= maxItems || chars >= maxChars) break
++            if (i >= maxVisited) {
++                budget.markTruncated()
++                break
++            }
+ 
+             val position = i
+             var line = raw[i].trim()
+@@ -40,12 +48,19 @@
+             if (position <= 1 && (clockOnly.matches(line) || batteryOrSignal.containsMatchIn(line))) continue
+ 
+             // 2) 推荐位之后全部丢弃
+-            if (stopSections.any { line.startsWith(it) || line.contains(it) }) break
++            if (stopSections.any { line.startsWith(it) || line.contains(it) }) {
++                budget.markTruncated()
++                break
++            }
+ 
+             // 3) 孤立币种与下一行数字合并（OCR 最常见的拆行）
+             if (currencyOnly.matches(line)) {
+                 val next = raw.getOrNull(i)?.trim().orEmpty()
+                 if (next.isNotEmpty() && next.first().isDigit()) {
++                    if (i >= maxVisited) {
++                        budget.markTruncated()
++                        break
++                    }
+                     line += next
+                     i++
+                 } else {
+@@ -59,9 +74,9 @@
+             // 连续重复去重
+             if (out.lastOrNull() == line) continue
+ 
++            if (!budget.add(line)) break
+             out += line
+-            chars += line.length
+         }
+-        return out
++        return CollectedText(out, budget.truncated)
+     }
+ }
+
+--- /tmp/autobook-core-before/billkit/src/main/java/com/example/billkit/UiSnapshot.kt	2026-10-21 11:09:40.000000000 +0800
++++ billkit/src/main/java/com/example/billkit/UiSnapshot.kt	2026-10-22 09:51:47.148372912 +0800
+@@ -13,7 +13,36 @@
+ ) {
+     enum class Source { ACCESSIBILITY, ROOT_DUMP, ROOT_OCR }
+ 
++    fun diagnostic(description: String): String = description + if (truncated) " [截断]" else ""
++
+     /** 便于日志与规则调试：整屏文本（不含换行噪音） */
+     fun joined(limit: Int = 2000): String =
+         items.joinToString("\n").take(limit)
+ }
++
++/** Capture metadata shared by tree, XML and OCR collectors. */
++data class CollectedText(val items: List<String>, val truncated: Boolean)
++
++/** Strict item/character budget. Filtering and sorting remain source specific. */
++class TextCaptureBudget(private val maxItems: Int, private val maxChars: Int) {
++    private val values = ArrayList<String>()
++    private var chars = 0
++    var truncated: Boolean = false
++        private set
++
++    init { require(maxItems >= 0 && maxChars >= 0) }
++
++    /** False means the value could not fit; no over-budget text is retained. */
++    fun add(value: String): Boolean {
++        if (values.size >= maxItems || value.length > maxChars - chars) {
++            markTruncated()
++            return false
++        }
++        values += value
++        chars += value.length
++        return true
++    }
++
++    fun markTruncated() { truncated = true }
++    fun result(): CollectedText = CollectedText(values.toList(), truncated)
++}
+
+--- /tmp/autobook-core-before/billkit/src/main/java/com/example/billkit/TextCollector.kt	2026-10-21 11:09:40.000000000 +0800
++++ billkit/src/main/java/com/example/billkit/TextCollector.kt	2026-10-22 09:53:03.269174978 +0800
+@@ -16,47 +16,75 @@
+     private val maxItems: Int = 200,
+     private val maxChars: Int = 2000,
+     private val rowBucketPx: Int = 24,
++    private val maxVisited: Int = 5_000,
+ ) {
+ 
+     private class Row(val text: String, val top: Int, val left: Int, val order: Int)
+ 
+-    fun collect(root: AccessibilityNodeInfo?): List<String> {
+-        if (root == null) return emptyList()
++    fun collect(root: AccessibilityNodeInfo?): List<String> = collectResult(root).items
++
++    /** Platform-independent seam for traversal limits and privacy regression tests. */
++    interface Node {
++        val editable: Boolean
++        val value: String
++        val top: Int
++        val left: Int
++        val childCount: Int
++        fun childAt(index: Int): Node?
++    }
++
++    private class AccessibilityNode(private val node: AccessibilityNodeInfo) : Node {
++        private val bounds by lazy { Rect().also { node.getBoundsInScreen(it) } }
++        override val editable get() = node.isEditable
++        override val value get() = node.text?.toString()?.trim().orEmpty()
++            .ifEmpty { node.contentDescription?.toString()?.trim().orEmpty() }
++        override val top get() = bounds.top
++        override val left get() = bounds.left
++        override val childCount get() = node.childCount
++        override fun childAt(index: Int): Node? = node.getChild(index)?.let { AccessibilityNode(it) }
++    }
++
++    fun collectResult(root: AccessibilityNodeInfo?): CollectedText =
++        collectNodes(root?.let { AccessibilityNode(it) })
++
++    fun collectNodes(root: Node?): CollectedText {
++        if (root == null) return CollectedText(emptyList(), false)
+ 
+         val rows = ArrayList<Row>(64)
+-        var chars = 0
++        val budget = TextCaptureBudget(maxItems, maxChars)
+         var order = 0
+-        val stack = ArrayDeque<AccessibilityNodeInfo>()
++        val stack = ArrayDeque<Node>()
+         stack.addLast(root)
+         var visited = 0
+ 
+-        while (stack.isNotEmpty() && visited++ < 5_000) {
+-            if (rows.size >= maxItems || chars >= maxChars) break
++        while (stack.isNotEmpty()) {
++            if (visited++ >= maxVisited) {
++                budget.markTruncated()
++                break
++            }
+             val node = stack.removeLast()
+ 
+-            if (node.isEditable) continue // 输入框整棵子树都不看
++            if (node.editable) continue // 输入框整棵子树都不看
+ 
+-            val text = node.text?.toString()?.trim().orEmpty()
+-            val desc = node.contentDescription?.toString()?.trim().orEmpty()
+-            val value = text.ifEmpty { desc }
++            val value = node.value
+ 
++            if (value.length > 120) budget.markTruncated()
+             if (value.isNotEmpty() && value.length <= 120) {
+                 val duplicateOfPrev = rows.lastOrNull()?.text == value
+                 if (!duplicateOfPrev) {
+-                    val r = Rect()
+-                    node.getBoundsInScreen(r)
+-                    rows += Row(value, r.top, r.left, order++)
+-                    chars += value.length
++                    if (!budget.add(value)) break
++                    rows += Row(value, node.top, node.left, order++)
+                 }
+             }
+ 
+             for (i in node.childCount - 1 downTo 0) {
+-                node.getChild(i)?.let { stack.addLast(it) }
++                node.childAt(i)?.let { stack.addLast(it) }
+             }
+         }
+ 
+-        return rows
+-            .sortedWith(compareBy({ it.top / rowBucketPx }, { it.left }, { it.order }))
+-            .map { it.text }
++        return CollectedText(
++            rows.sortedWith(compareBy({ it.top / rowBucketPx }, { it.left }, { it.order })).map { it.text },
++            budget.truncated,
++        )
+     }
+ }
+
+--- /tmp/autobook-core-before/billkit/src/main/java/com/example/billkit/root/RootUiDumpSource.kt	2026-10-21 19:00:13.446963688 +0800
++++ billkit/src/main/java/com/example/billkit/root/RootUiDumpSource.kt	2026-10-22 09:52:04.061509924 +0800
+@@ -1,6 +1,8 @@
+ package com.example.billkit.root
+ 
+ import com.example.billkit.UiSnapshot
++import com.example.billkit.CollectedText
++import com.example.billkit.TextCaptureBudget
+ import org.xmlpull.v1.XmlPullParser
+ import org.xmlpull.v1.XmlPullParserFactory
+ import java.io.StringReader
+@@ -20,6 +22,7 @@
+     private val maxItems: Int = 200,
+     private val maxChars: Int = 2000,
+     private val rowBucketPx: Int = 24,
++    private val maxVisited: Int = 5_000,
+ ) {
+ 
+     data class Foreground(val packageName: String, val activityClass: String?)
+@@ -53,13 +56,15 @@
+         ).output
+         if (xml.isBlank() || !xml.trimStart().startsWith("<?xml")) return null
+ 
+-        val items = parse(xml)
++        val collected = parseResult(xml)
++        val items = collected.items
+         if (items.isEmpty()) return null
+ 
+         return UiSnapshot(
+             packageName = fg.packageName,
+             activityClass = fg.activityClass,
+             items = items,
++            truncated = collected.truncated,
+             source = UiSnapshot.Source.ROOT_DUMP,
+         )
+     }
+@@ -75,9 +80,12 @@
+ 
+     private class Row(val text: String, val top: Int, val left: Int, val order: Int)
+ 
+-    private fun parse(xml: String): List<String> {
++    /** Pure XML parsing entry point, also useful for saved capture regression fixtures. */
++    fun parseResult(xml: String): CollectedText {
+         val rows = ArrayList<Row>(64)
+-        var chars = 0
++        val budget = TextCaptureBudget(maxItems, maxChars)
++        var visited = 0
++        var editableDepth = -1
+         var order = 0
+ 
+         val parser = XmlPullParserFactory.newInstance().newPullParser()
+@@ -85,20 +93,27 @@
+ 
+         var event = parser.eventType
+         while (event != XmlPullParser.END_DOCUMENT) {
++            if (event == XmlPullParser.END_TAG && parser.depth == editableDepth) editableDepth = -1
+             if (event == XmlPullParser.START_TAG && parser.name == "node") {
++                if (visited++ >= maxVisited) {
++                    budget.markTruncated()
++                    break
++                }
+                 val cls = parser.getAttributeValue(null, "class").orEmpty()
+-                val editable = cls.endsWith("EditText") // 与原路径一致：不碰输入框
++                val editable = cls.endsWith("EditText") || parser.getAttributeValue(null, "editable") == "true"
++                if (editable && editableDepth == -1) editableDepth = parser.depth
+ 
+-                if (!editable && rows.size < maxItems && chars < maxChars) {
++                if (editableDepth == -1) {
+                     val text = parser.getAttributeValue(null, "text")?.trim().orEmpty()
+                     val desc = parser.getAttributeValue(null, "content-desc")?.trim().orEmpty()
+                     val value = text.ifEmpty { desc }
+ 
++                    if (value.length > 120) budget.markTruncated()
+                     if (value.isNotEmpty() && value.length <= 120) {
+                         val (top, left) = parseBounds(parser.getAttributeValue(null, "bounds"))
+                         if (rows.lastOrNull()?.text != value) {
++                            if (!budget.add(value)) break
+                             rows += Row(value, top, left, order++)
+-                            chars += value.length
+                         }
+                     }
+                 }
+@@ -106,9 +121,10 @@
+             event = parser.next()
+         }
+ 
+-        return rows
+-            .sortedWith(compareBy({ it.top / rowBucketPx }, { it.left }, { it.order }))
+-            .map { it.text }
++        return CollectedText(
++            rows.sortedWith(compareBy({ it.top / rowBucketPx }, { it.left }, { it.order })).map { it.text },
++            budget.truncated,
++        )
+     }
+ 
+     /** "[0,120][1080,260]" -> (120, 0) */
+
+--- /tmp/autobook-core-before/billkit/src/main/java/com/example/billkit/ocr/OcrFallback.kt	2026-10-21 11:09:57.000000000 +0800
++++ billkit/src/main/java/com/example/billkit/ocr/OcrFallback.kt	2026-10-22 09:51:47.147942650 +0800
+@@ -36,13 +36,15 @@
+             if (cropped !== screenshot && cropped !== scaled) cropped.recycle()
+         }
+ 
+-        val items = OcrNormalizer.normalize(lines)
++        val collected = OcrNormalizer.normalizeResult(lines)
++        val items = collected.items
+         if (items.size < 3) return null
+ 
+         return UiSnapshot(
+             packageName = packageName,
+             activityClass = activityClass,
+             items = items,
++            truncated = collected.truncated,
+             source = UiSnapshot.Source.ROOT_OCR,
+         )
+     }

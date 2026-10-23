@@ -1,0 +1,75 @@
+# ============================================================
+# AutoBook .gitignore
+# 原则：源码、文档、构建脚本、图标源图、验证证据（文本类）入库；
+#       构建产物、缓存、本机配置、密钥、大体积二进制与个人媒体不入库。
+# ============================================================
+
+# ---------- 1. 构建产物 ----------
+build/
+*/build/
+.gradle/
+.kotlin/
+captures/
+*.hprof
+
+# 打包产物（安装包不入库，历史交付放 runs/deliverables 本地留档）
+*.apk
+*.aab
+*.ap_
+*.zip
+*.jar
+# 例外：Gradle Wrapper 的 jar 必须入库，否则别人无法用 ./gradlew
+!gradle/wrapper/gradle-wrapper.jar
+# 例外：本地预置 AAR（上游未发布到 Maven，构建必需）
+!app/libs/*.aar
+
+# dist 下只保留目录本身，安装包不入库
+dist/*
+!dist/.gitkeep
+
+# ---------- 2. 本机配置 ----------
+# 含本机 SDK 绝对路径，每台机器不同
+local.properties
+# 签名口令与密钥，绝不入库
+keystore.properties
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+.env
+.env.*
+
+# ---------- 3. 缓存与临时文件 ----------
+*.pyc
+__pycache__/
+*.tmp
+*.bak
+*.orig
+*.rej
+*~
+.DS_Store
+Thumbs.db
+
+# ---------- 4. IDE / 工具 ----------
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+
+# ---------- 5. 体积大且与源码无关的材料 ----------
+# 第三方 App / Root 工具的安装包，仅本地参考
+iCost.apk
+tmp/
+
+# 个人截图与录屏（含交易页面，避免隐私外泄；如作规则样本请先脱敏）
+截图/
+
+# ---------- 6. 可选：进一步瘦身 ----------
+# 下面的记录体积较大（runs 约 28MB 截图/日志，deliverables 约 5MB 预览图）。
+# README / TEST_REPORT / DEPLOYMENT 中有指向 runs 内验证文件的链接，
+# 默认保留文本证据。若你更看重仓库轻量，可取消注释整体忽略：
+# runs/
+# deliverables/

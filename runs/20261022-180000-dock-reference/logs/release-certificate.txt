@@ -1,0 +1,4 @@
+Signer #1 certificate DN: CN=AutoBook, OU=Personal, O=AutoBook, L=Local, ST=Local, C=CN
+Signer #1 certificate SHA-256 digest: bedb36b7527aa4759262d8b737d7031b57f1db191c68eab4d55829f0598a5ed6
+Signer #1 certificate SHA-1 digest: 73d1543a2fada7562d553d827fb5bca550379fd4
+Signer #1 certificate MD5 digest: f45e49a38cf133b042c91e7ad204a6bb

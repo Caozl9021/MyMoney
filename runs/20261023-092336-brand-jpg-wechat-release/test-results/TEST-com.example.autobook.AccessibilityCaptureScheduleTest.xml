@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.autobook.AccessibilityCaptureScheduleTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-10-23T01:25:16.914Z" hostname="CaoZL" time="0.006">
+  <properties/>
+  <testcase name="contentCannotPostponeWindowDeadline" classname="com.example.autobook.AccessibilityCaptureScheduleTest" time="0.002"/>
+  <testcase name="completionAllowsLaterUpdatesAsNewBatch" classname="com.example.autobook.AccessibilityCaptureScheduleTest" time="0.0"/>
+  <testcase name="disableOrStopClearsEverything" classname="com.example.autobook.AccessibilityCaptureScheduleTest" time="0.0"/>
+  <testcase name="windowAcceleratesContentBatch" classname="com.example.autobook.AccessibilityCaptureScheduleTest" time="0.0"/>
+  <testcase name="packageChangeDropsOldDeadlineAndRetry" classname="com.example.autobook.AccessibilityCaptureScheduleTest" time="0.0"/>
+  <testcase name="contentStormHasOneSecondUpperBound" classname="com.example.autobook.AccessibilityCaptureScheduleTest" time="0.001"/>
+  <testcase name="rootRetryIsOnceAndEventsCannotPostponeOrReplenishIt" classname="com.example.autobook.AccessibilityCaptureScheduleTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

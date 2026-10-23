@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.autobook.LocalRulesTest" tests="18" skipped="0" failures="0" errors="0" timestamp="2026-10-23T00:54:54.353Z" hostname="CaoZL" time="0.167">
+  <properties/>
+  <testcase name="explicit meal precedes time and coffee stays coffee" classname="com.example.autobook.LocalRulesTest" time="0.001"/>
+  <testcase name="codec roundtrip preserves all rule configuration" classname="com.example.autobook.LocalRulesTest" time="0.103"/>
+  <testcase name="account learning needs same method and never crosses type" classname="com.example.autobook.LocalRulesTest" time="0.001"/>
+  <testcase name="normalization removes only explicit parenthesized branch suffix" classname="com.example.autobook.LocalRulesTest" time="0.0"/>
+  <testcase name="three accepts promote but two do not" classname="com.example.autobook.LocalRulesTest" time="0.0"/>
+  <testcase name="deleted taxonomy is ignored and disabled learned ignored" classname="com.example.autobook.LocalRulesTest" time="0.001"/>
+  <testcase name="manual meal is pinned over time and stays strong" classname="com.example.autobook.LocalRulesTest" time="0.0"/>
+  <testcase name="manual one time category changes take effect independently of account" classname="com.example.autobook.LocalRulesTest" time="0.001"/>
+  <testcase name="specific actual matched text wins stable ties" classname="com.example.autobook.LocalRulesTest" time="0.0"/>
+  <testcase name="manual override bundled learned builtin resolve independently" classname="com.example.autobook.LocalRulesTest" time="0.0"/>
+  <testcase name="bill time defines lunch and night boundaries" classname="com.example.autobook.LocalRulesTest" time="0.0"/>
+  <testcase name="historical edits do not add frequency accepts" classname="com.example.autobook.LocalRulesTest" time="0.001"/>
+  <testcase name="changed accepted result resets consecutive count" classname="com.example.autobook.LocalRulesTest" time="0.0"/>
+  <testcase name="old backup leaves optional rule configuration absent" classname="com.example.autobook.LocalRulesTest" time="0.0"/>
+  <testcase name="weak meals do not become pinned lunch" classname="com.example.autobook.LocalRulesTest" time="0.001"/>
+  <testcase name="explicit manual three meals and JSON takeout survive time" classname="com.example.autobook.LocalRulesTest" time="0.0"/>
+  <testcase name="meal validation rejects invalid overlapping equal windows" classname="com.example.autobook.LocalRulesTest" time="0.055"/>
+  <testcase name="missing merchant and disabled learning have no effect" classname="com.example.autobook.LocalRulesTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
