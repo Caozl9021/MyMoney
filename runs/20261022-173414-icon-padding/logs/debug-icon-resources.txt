@@ -1,8 +1,0 @@
-resource 0x7f050040 color/ic_launcher_background
-      () #ffffffff
-resource 0x7f0c0001 mipmap/ic_launcher_foreground
-      (mdpi) (file) res/mipmap-mdpi-v4/ic_launcher_foreground.png type=PNG
-      (hdpi) (file) res/mipmap-hdpi-v4/ic_launcher_foreground.png type=PNG
-      (xhdpi) (file) res/mipmap-xhdpi-v4/ic_launcher_foreground.png type=PNG
-      (xxhdpi) (file) res/mipmap-xxhdpi-v4/ic_launcher_foreground.png type=PNG
-      (xxxhdpi) (file) res/mipmap-xxxhdpi-v4/ic_launcher_foreground.png type=PNG

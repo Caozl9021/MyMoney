@@ -1,8 +1,0 @@
-{
-  "color_foreground_white_pixels_retained": 14251,
-  "same_white_pixels_transparent_in_monochrome": 13999,
-  "colored_border_and_glyph_pixels_retained_in_monochrome": 26932,
-  "monochrome_has_distinct_interior_negative_space": true,
-  "monochrome_validation_target": "independent near-white-negative-space mask, not colored foreground alpha",
-  "white_fuzz_percent": 10
-}

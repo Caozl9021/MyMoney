@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.example.autobook.RootPollPolicyTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-10-23T00:54:54.546Z" hostname="CaoZL" time="0.001">
-  <properties/>
-  <testcase name="active idle and asleep have independent delays" classname="com.example.autobook.RootPollPolicyTest" time="0.001"/>
-  <testcase name="idle backs off without shortening longer user intervals" classname="com.example.autobook.RootPollPolicyTest" time="0.0"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>
