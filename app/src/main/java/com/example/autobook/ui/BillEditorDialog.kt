@@ -26,6 +26,7 @@ import com.example.autobook.ui.design.LocalReduceMotion
 import com.example.autobook.ui.design.LocalAbPalette
 import com.example.autobook.ui.design.AbType
 import com.example.autobook.ui.design.formatAmount
+import com.example.autobook.ui.design.rememberAbHaptic
 import androidx.compose.ui.unit.lerp
 import com.example.autobook.data.BillEntity
 import com.example.autobook.data.BillWriter
@@ -37,6 +38,7 @@ import com.example.billkit.BillType
 fun BillEditorDialog(original: BillEntity?, newSource: String, newTime: Long, sourceAmountBounds: Rect? = null, onClose: () -> Unit) {
     val context = LocalContext.current
     val app = context.applicationContext
+    val haptic = rememberAbHaptic()
     val draft = remember(original?.id, newSource) {
         original?.let(BillWriter::toDraft) ?: BillDraft(
             priceCents = 0, type = BillType.EXPENSE, timeMillis = newTime,
@@ -48,9 +50,18 @@ fun BillEditorDialog(original: BillEntity?, newSource: String, newTime: Long, so
     val operation = remember(operationKey) { EditorSaveOperations.getOrPut(operationKey) { EditorSaveOperation() } }
     val saving = operation.saving
     val error = operation.error
-    LaunchedEffect(operation.completed) { if (operation.completed) onClose() }
-    DisposableEffect(operationKey) {
-        onDispose { if (!operation.saving) EditorSaveOperations.remove(operationKey) }
+    LaunchedEffect(operation.completed) {
+        if (operation.completed) {
+            onClose()
+        }
+    }
+    DisposableEffect(operationKey, haptic) {
+        val feedbackHaptic: () -> Unit = { haptic.confirm() }
+        operation.onStored = feedbackHaptic
+        onDispose {
+            if (operation.onStored === feedbackHaptic) operation.onStored = null
+            if (!operation.saving) EditorSaveOperations.remove(operationKey)
+        }
     }
     val reduceMotion = LocalReduceMotion.current
     val p = LocalAbPalette.current
@@ -76,13 +87,14 @@ fun BillEditorDialog(original: BillEntity?, newSource: String, newTime: Long, so
             errorMessage = error,
             onSave = { edited ->
                 // 同步立刻置位；快速双击无法排入两个数据库写操作。
-                if (!operation.saving) {
+                if (!operation.saving && !operation.completed) {
                     operation.saving = true
                     operation.error = null
                     BillWriter.saveFromEditor(app, edited, original) { result ->
                         operation.saving = false
                         result.fold(
                             onSuccess = {
+                                operation.onStored?.invoke()
                                 Toast.makeText(app, if (original == null) "已记一笔" else "已保存修改", Toast.LENGTH_SHORT).show()
                                 operation.completed = true
                             },
@@ -118,5 +130,6 @@ private class EditorSaveOperation {
     var saving by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
     var completed by mutableStateOf(false)
+    var onStored: (() -> Unit)? = null
 }
 private val EditorSaveOperations = mutableMapOf<String, EditorSaveOperation>()

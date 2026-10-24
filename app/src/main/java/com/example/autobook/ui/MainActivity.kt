@@ -10,12 +10,9 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -23,10 +20,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
@@ -42,7 +39,6 @@ import com.example.autobook.R
 import com.example.autobook.capture.CaptureModeManager
 import com.example.autobook.data.AppDb
 import com.example.autobook.ui.design.AbIcons
-import com.example.autobook.ui.design.AbMotion
 import com.example.autobook.ui.design.AbSize
 import com.example.autobook.ui.design.LocalAbPalette
 import com.example.autobook.ui.design.LiquidTabBar
@@ -67,6 +63,23 @@ import kotlinx.coroutines.launch
  * （详见 `ui/design/LiquidGlassTabBar.kt` 的类注释）。
  */
 class MainActivity : ComponentActivity() {
+
+    private val foregroundRefreshRate by lazy { ForegroundRefreshRate(window) }
+
+    override fun onResume() {
+        super.onResume()
+        foregroundRefreshRate.resume()
+    }
+
+    override fun onPause() {
+        foregroundRefreshRate.pause()
+        super.onPause()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        foregroundRefreshRate.focusChanged(hasFocus)
+    }
 
     /** Tab 索引提到 Activity 层级：内容 ComposeView 与玻璃上的图标 ComposeView 共享它 */
     private val tabState = mutableIntStateOf(0)
@@ -98,6 +111,9 @@ class MainActivity : ComponentActivity() {
             ),
         )
         super.onCreate(savedInstanceState)
+        // ConfirmSheet handles IME insets inside the edge-to-edge viewport. Do not
+        // let the platform also pan the entire window when an editor takes focus.
+        window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         CaptureModeManager.init(this)
         tabState.intValue = savedInstanceState?.getInt("selectedTab", 0)?.coerceIn(tabs.indices) ?: 0
         requestAdd.intValue = savedInstanceState?.getInt("requestAdd", 0) ?: 0
@@ -255,15 +271,10 @@ private fun AppContent(tabState: MutableIntState, requestAdd: Int, onEditorVisib
     val reduceMotion = com.example.autobook.ui.design.LocalReduceMotion.current
     val tab = tabState.intValue
     val tabStates = rememberSaveableStateHolder()
-    val captureState by CaptureModeManager.state.collectAsStateWithLifecycle()
-
-    // 上一次切换方向：向右点 = 新页从右进；向左点 = 新页从左进。
-    var forward by remember { mutableStateOf(true) }
-    var lastTab by remember { mutableStateOf(tab) }
-    if (tab != lastTab) {
-        forward = tab > lastTab
-        lastTab = tab
+    var captureSettingsDestination by androidx.compose.runtime.saveable.rememberSaveable {
+        mutableStateOf<CaptureSettingsDestination?>(null)
     }
+    val captureState by CaptureModeManager.state.collectAsStateWithLifecycle()
 
     val bills by remember { AppDb.get(context).bills().observeRecent() }
         .collectAsStateWithLifecycle(initialValue = emptyList())
@@ -280,15 +291,10 @@ private fun AppContent(tabState: MutableIntState, requestAdd: Int, onEditorVisib
         AnimatedContent(
             targetState = tab,
             transitionSpec = {
-                val dir = if (forward) 1 else -1
-                val spec = tween<androidx.compose.ui.unit.IntOffset>(
-                    durationMillis = if (reduceMotion) 0 else AbMotion.normal,
-                    easing = FastOutSlowInEasing,
-                )
-                (slideInHorizontally(spec) { w -> dir * w / 6 } +
-                    fadeIn(tween(if (reduceMotion) 0 else AbMotion.normal))) togetherWith
-                    (slideOutHorizontally(spec) { w -> -dir * w / 6 } +
-                        fadeOut(tween(if (reduceMotion) 0 else AbMotion.fast)))
+                // Moving two full pages also invalidates the glass sampling source.
+                // A brief fade keeps tab state/semantics without full-page translation.
+                fadeIn(tween(if (reduceMotion) 0 else 200)) togetherWith
+                    fadeOut(tween(if (reduceMotion) 0 else 160))
             },
             label = "tabSwitch",
             modifier = Modifier.fillMaxSize(),
@@ -299,11 +305,11 @@ private fun AppContent(tabState: MutableIntState, requestAdd: Int, onEditorVisib
                         bills = bills,
                         onEditorVisibilityChanged = { editorChanged(0, it) },
                         onSeeAll = { tabState.intValue = 1 },
-                        onOpenSettings = { tabState.intValue = 3 },
+                        onOpenSettings = { destination -> captureSettingsDestination = destination; tabState.intValue = 3 },
                     )
-                    1 -> BillsScreen(bills = bills, requestAdd = requestAdd, onEditorVisibilityChanged = { editorChanged(1, it) })
-                    2 -> StatsScreen(bills = bills)
-                    else -> SettingsScreen()
+                    1 -> BillsScreen(requestAdd = requestAdd, onEditorVisibilityChanged = { editorChanged(1, it) })
+                    2 -> StatsScreen()
+                    else -> SettingsScreen(destination = captureSettingsDestination, onDestinationHandled = { captureSettingsDestination = null })
                 }
             }
         }

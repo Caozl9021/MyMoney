@@ -50,6 +50,8 @@ object BillKit {
 
     private val lastSeen = LinkedHashMap<String, Long>()
     private var lastAcceptedAt = 0L
+    private var pageSessionProvider: ((UiSnapshot) -> String)? = null
+    private var lastDraftToken: String? = null
 
     /**
      * 最近一次出草稿的那一屏（包名 + 有序文本，不含时间）。
@@ -64,8 +66,10 @@ object BillKit {
         config: BillKitConfig = BillKitConfig(),
         sink: BillSink,
         ocrEngine: OcrEngine? = null,
+        pageSessionProvider: ((UiSnapshot) -> String)? = null,
     ) {
         this.config = config
+        this.pageSessionProvider = pageSessionProvider
         this.sink = sink
         this.ocrFallback = ocrEngine?.let { OcrFallback(it) }
         reset()
@@ -79,10 +83,12 @@ object BillKit {
 
     fun isAccepted(packageName: String): Boolean = packageName in config.acceptedPackages
 
+    @Synchronized
     fun reset() {
         lastSeen.clear()
         lastAcceptedAt = 0L
         lastDraftPage = null
+        lastDraftToken = null
     }
 
     /** 主入口：一屏文本进去，命中草稿就回调 [sink]。返回值可直接用于调试展示。 */
@@ -118,7 +124,11 @@ object BillKit {
         return outcome
     }
 
+    @Synchronized
     private fun dispatch(outcome: BillPipeline.Outcome, snapshot: UiSnapshot, now: Long) {
+        // Keep diagnostics for direct callers offering an unknown package; only accepted
+        // capture sources participate in durable page continuity.
+        val sessionId = if (isAccepted(snapshot.packageName)) pageSessionProvider?.invoke(snapshot) else null
         val page = listOf(snapshot.packageName, snapshot.items)
         if (page != lastDraftPage) lastDraftPage = null
         when (outcome) {
@@ -127,6 +137,8 @@ object BillKit {
             }
 
             is BillPipeline.Outcome.Draft -> {
+                val draft = outcome.draft.copy(captureSessionId = sessionId)
+                val dedupeKey = deliveryKey(draft)
                 if (page == lastDraftPage) {
                     DebugBus.publish(snapshot, snapshot.diagnostic("skip:same-page"))
                     return
@@ -135,14 +147,16 @@ object BillKit {
                     DebugBus.publish(snapshot, snapshot.diagnostic("skip:throttled"))
                     return
                 }
-                if (isDuplicate(outcome.draft.fingerprint, now)) {
+                if (isDuplicate(dedupeKey, now)) {
                     lastDraftPage = page
+                    lastDraftToken = dedupeKey
                     DebugBus.publish(snapshot, snapshot.diagnostic("skip:duplicate"))
                     return
                 }
                 lastDraftPage = page
                 lastAcceptedAt = now
-                lastSeen[outcome.draft.fingerprint] = now
+                lastSeen[dedupeKey] = now
+                lastDraftToken = dedupeKey
                 prune(now)
 
                 // 截断时在结论后面标一下：规则没命中时，第一件要确认的事就是
@@ -154,9 +168,33 @@ object BillKit {
                     if (snapshot.truncated) append(" [截断]")
                 }
                 DebugBus.publish(snapshot, description)
-                sink?.onDraft(outcome.draft)
+                try {
+                    sink?.onDraft(draft)
+                } catch (error: Exception) {
+                    retryFailedDraft(draft)
+                    throw error
+                }
             }
         }
+    }
+
+    /** Release only the failed delivery's reservation; keep throttling and other drafts intact. */
+    @Synchronized
+    fun retryFailedDraft(draft: BillDraft) {
+        val token = deliveryKey(draft)
+        lastSeen.remove(token)
+        if (lastDraftToken == token) {
+            lastDraftPage = null
+            lastDraftToken = null
+        }
+    }
+
+    private fun deliveryKey(draft: BillDraft): String = when {
+        pageSessionProvider == null -> draft.fingerprint // preserve standalone library compatibility
+        draft.transactionKey != null -> "order:${draft.transactionKey}"
+        draft.hasExplicitTime -> listOf(draft.sourcePkg, draft.type.name, draft.priceCents,
+            draft.timeMillis, draft.merchant, draft.method).joinToString("|")
+        else -> draft.captureSessionId ?: draft.fingerprint
     }
 
     private fun isDuplicate(fingerprint: String, now: Long): Boolean {

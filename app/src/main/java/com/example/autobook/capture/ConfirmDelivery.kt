@@ -13,7 +13,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.example.autobook.R
 import com.example.autobook.systems.BrandIcons
-import com.example.autobook.data.PendingStore
+import com.example.autobook.data.RecognitionStore
+import com.example.autobook.data.RecognitionStatus
 import com.example.autobook.overlay.ConfirmOverlay
 import com.example.autobook.overlay.OverlayAnchor
 import com.example.billkit.BillDraft
@@ -45,9 +46,11 @@ object ConfirmDelivery {
     private const val LAUNCH_TIMEOUT_MS = 1_500L
 
     /** 返回值直接进调试面板，方便一眼看出"到底有没有送到用户面前" */
-    fun deliver(context: Context, draft: BillDraft, autoConfirm: Boolean): String {
+    suspend fun deliver(context: Context, incoming: BillDraft, autoConfirm: Boolean): String {
+        val record = RecognitionStore.record(incoming)
+        if (record.status != RecognitionStatus.PENDING) return "history-${record.status.lowercase()}"
+        val draft = record.toDraft()
         if (!autoConfirm) {
-            PendingStore.add(draft)
             return "pending-only"
         }
 
@@ -69,7 +72,6 @@ object ConfirmDelivery {
             return if (foreground) "confirm" else "confirm-bg"
         }
 
-        PendingStore.add(draft)
         // 没授通知权限时必须和"通知被系统静音"区分开，否则排查时只会看到 pending，
         // 不知道到底是 BAL 拦了还是根本发不出去通知。
         if (!hasNotificationPermission(app)) return "pending-no-notify"
@@ -85,7 +87,7 @@ object ConfirmDelivery {
      * @param waitReceipt 主线程上不能阻塞等回执（会把 UI 卡住 1.5s），只有后台线程才等
      */
     private fun launchConfirm(context: Context, draft: BillDraft, waitReceipt: Boolean): Boolean {
-        ConfirmLaunch.begin(draft.fingerprint)
+        ConfirmLaunch.begin(draft.historyId ?: draft.fingerprint)
         val started = try {
             context.startActivity(ConfirmIntents.intent(context, draft))
             true
@@ -94,7 +96,7 @@ object ConfirmDelivery {
         }
         if (!started) return false
         if (!waitReceipt || Looper.myLooper() == Looper.getMainLooper()) return true
-        return ConfirmLaunch.awaitLaunched(draft.fingerprint, LAUNCH_TIMEOUT_MS)
+        return ConfirmLaunch.awaitLaunched(draft.historyId ?: draft.fingerprint, LAUNCH_TIMEOUT_MS)
     }
 
     /** 无障碍服务被系统绑定时，后台 startActivity 才有豁免（仅作辅助判断） */
@@ -140,7 +142,7 @@ object ConfirmDelivery {
 
         val pendingIntent = PendingIntent.getActivity(
             context,
-            draft.fingerprint.hashCode(),
+            (draft.historyId ?: draft.fingerprint).hashCode(),
             ConfirmIntents.intent(context, draft),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -162,7 +164,7 @@ object ConfirmDelivery {
             .build()
 
         return try {
-            notifications.notify(draft.fingerprint.hashCode(), notification)
+            notifications.notify((draft.historyId ?: draft.fingerprint).hashCode(), notification)
             true
         } catch (e: SecurityException) {
             false // 没给 POST_NOTIFICATIONS 权限

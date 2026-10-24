@@ -25,6 +25,10 @@ class BillPipeline(
     }
 
     fun process(snapshot: UiSnapshot, now: Long = System.currentTimeMillis()): Outcome {
+        return processNormalized(snapshot.copy(items = PaymentResultParser.normalize(snapshot.items)), now)
+    }
+
+    private fun processNormalized(snapshot: UiSnapshot, now: Long): Outcome {
         val match = classifier.classify(snapshot)
             ?: return Outcome.Skipped("not-a-bill-page")
 
@@ -37,16 +41,34 @@ class BillPipeline(
         }
 
         val refund = AmountParser.isCompletedRefund(snapshot.items)
-        val hit = (if (refund) AmountParser.findRefundAmount(snapshot.items) else AmountParser.findAmount(snapshot.items))
+        val paymentResult = match.kind == PageKind.ALIPAY_PAY &&
+            snapshot.packageName == Packages.ALIPAY
+        // Result pages with competing transaction directions are not safely attributable to a payment.
+        if (paymentResult && (refund || snapshot.items.any { row ->
+                listOf("退款", "转账", "收入", "收益", "入账", "到账", "收款成功", "已收款", "已收钱").any(row::contains)
+            })) return Outcome.Skipped("ambiguous-result-direction:${match.strategy}")
+        val hit = (if (paymentResult) {
+            PaymentResultParser.findMainAmount(snapshot.items)?.let {
+                AmountParser.AmountHit(it.cents, it.source, 0)
+            }
+        } else if (refund) AmountParser.findRefundAmount(snapshot.items) else AmountParser.findAmount(snapshot.items))
             ?: return Outcome.Skipped("no-amount:${match.strategy}")
         if (hit.cents <= 0) return Outcome.Skipped("zero-amount")
 
         val fields = FieldExtractor.extract(snapshot.items)
+        val type = if (refund) BillType.REFUND else detectType(snapshot.items, match.kind, hit.sign)
+        val pageTime = if (refund) AmountParser.findRefundTime(snapshot.items) else AmountParser.findTime(snapshot.items)
+        val transactionKey = fields.orderId?.takeIf { it.isNotBlank() }?.let { orderId ->
+            java.security.MessageDigest.getInstance("SHA-256")
+                .digest("${snapshot.packageName}|${type.name}|$orderId".toByteArray(Charsets.UTF_8))
+                .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        }
         val draft = BillDraft(
             priceCents = hit.cents,
-            type = if (refund) BillType.REFUND else detectType(snapshot.items, match.kind, hit.sign),
-            timeMillis = (if (refund) AmountParser.findRefundTime(snapshot.items)
-                else AmountParser.findTime(snapshot.items)) ?: now,
+            type = type,
+            timeMillis = pageTime ?: now,
+            hasExplicitTime = pageTime != null,
+            transactionKey = transactionKey,
             merchant = fields.merchant
                 ?: FieldExtractor.merchantFromRemark(snapshot.items)
                 ?: fields.counterParty

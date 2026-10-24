@@ -16,7 +16,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.SideEffect
@@ -56,6 +55,11 @@ class LiquidGlassTabBar(
 
     private val glass = LiquidGlassView(activity)
 
+    // The bundled AAR's setters each post updateParameters(), which records the
+    // source and invalidates the glass even for identical values. Apply only changes.
+    private var appliedTint: androidx.compose.ui.graphics.Color? = null
+    private var appliedTintAlpha: Float? = null
+
     private val overlay = ComposeView(activity).apply { id = R.id.dock_tabs }
 
     private val density = resources.displayMetrics.density
@@ -84,7 +88,9 @@ class LiquidGlassTabBar(
         glass.setRefractionHeight(16f * density)
         glass.setRefractionOffset(12f * density)
         glass.setDispersion(0.16f)
-        glass.setBlurRadius(5f)
+        // The AAR accepts physical pixels. Bound the density-adapted radius;
+        // set once, without adding per-frame sampling or bitmap work.
+        glass.setBlurRadius((8f * density).coerceAtMost(32f))
         glass.setTintColorRed(1f)
         glass.setTintColorGreen(1f)
         glass.setTintColorBlue(1f)
@@ -125,10 +131,16 @@ class LiquidGlassTabBar(
                         layoutParams = params
                         glass.setCornerRadius(height / 2f)
                     }
-                    glass.setTintColorRed(tint.red)
-                    glass.setTintColorGreen(tint.green)
-                    glass.setTintColorBlue(tint.blue)
-                    glass.setTintAlpha(if (dark) 0.28f else 0.10f)
+                    val previousTint = appliedTint
+                    if (previousTint?.red != tint.red) glass.setTintColorRed(tint.red)
+                    if (previousTint?.green != tint.green) glass.setTintColorGreen(tint.green)
+                    if (previousTint?.blue != tint.blue) glass.setTintColorBlue(tint.blue)
+                    appliedTint = tint
+                    val alpha = if (dark) 0.28f else 0.10f
+                    if (appliedTintAlpha != alpha) {
+                        glass.setTintAlpha(alpha)
+                        appliedTintAlpha = alpha
+                    }
                 }
                 LiquidTabCells(
                     items = items,

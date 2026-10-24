@@ -1,6 +1,9 @@
 package com.example.autobook.capture
 
 import android.accessibilityservice.AccessibilityService
+import android.content.Intent
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.os.Handler
 import android.os.Looper
@@ -26,6 +29,8 @@ class BillAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val TAG = "AutoBook"
+        private val mutableBound = MutableStateFlow(false)
+        val bound = mutableBound.asStateFlow()
         @Volatile
         var instance: BillAccessibilityService? = null
             private set
@@ -48,6 +53,7 @@ class BillAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
+        mutableBound.value = true
         settings = Settings(this)
         refreshServiceInfo()
 
@@ -156,10 +162,15 @@ class BillAccessibilityService : AccessibilityService() {
         clearPending()
     }
 
+    override fun onUnbind(intent: Intent?): Boolean {
+        if (instance === this) { instance = null; mutableBound.value = false }
+        return super.onUnbind(intent)
+    }
+
     override fun onDestroy() {
         clearPending()
         worker.shutdownNow()
-        if (instance === this) instance = null
+        if (instance === this) { instance = null; mutableBound.value = false }
         super.onDestroy()
     }
 }

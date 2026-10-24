@@ -6,6 +6,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import com.example.autobook.ui.design.*
 import androidx.compose.ui.platform.LocalDensity
@@ -71,8 +72,16 @@ fun AutoBookTheme(
         "DARK" -> true
         else -> isSystemInDarkTheme()
     }
-    val textScale = runCatching { Appearance.TextSize.valueOf(prefs.getString("text_size", "STANDARD")!!).multiplier }.getOrDefault(1f)
-    val reduceMotion = prefs.getBoolean("reduce_motion", false) || android.provider.Settings.Global.getFloat(context.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+    val textScale = remember(prefs, revision) {
+        runCatching { Appearance.TextSize.valueOf(prefs.getString("text_size", "STANDARD")!!).multiplier }.getOrDefault(1f)
+    }
+    // appearanceRevision observes this system setting as well as preferences.
+    // Avoid a ContentResolver/Binder read on unrelated UI recompositions.
+    val reduceMotion = remember(context, prefs, revision) {
+        prefs.getBoolean("reduce_motion", false) || android.provider.Settings.Global.getFloat(
+            context.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f,
+        ) == 0f
+    }
     val density = LocalDensity.current
     // 跟随系统强调色（Android 12+ 从壁纸取色）；取不到就用品牌薄荷绿。
     // 只换 accent / onAccent / 玻璃描边，中性色和 Tab 选中块不动。
@@ -82,7 +91,7 @@ fun AutoBookTheme(
     }
 
     val view = androidx.compose.ui.platform.LocalView.current
-    androidx.compose.runtime.SideEffect {
+    DisposableEffect(context, view, dark) {
         var owner: android.content.Context? = context
         while (owner is android.content.ContextWrapper && owner !is android.app.Activity) owner = owner.baseContext
         (owner as? android.app.Activity)?.let { activity ->
@@ -91,17 +100,24 @@ fun AutoBookTheme(
                 isAppearanceLightNavigationBars = !dark
             }
         }
+        onDispose { }
     }
     val reduce = reduceTransparency ?: false
+    val scaledDensity = remember(density.density, density.fontScale, textScale) {
+        Density(density.density, density.fontScale * textScale)
+    }
+    val colorScheme = remember(palette, dark) {
+        if (dark) palette.toDarkScheme() else palette.toLightScheme()
+    }
 
     CompositionLocalProvider(
         LocalAbPalette provides palette,
         LocalReduceMotion provides reduceMotion,
-        LocalDensity provides Density(density.density, density.fontScale * textScale),
+        LocalDensity provides scaledDensity,
         LocalReduceTransparency provides reduce,
     ) {
         MaterialTheme(
-            colorScheme = if (dark) palette.toDarkScheme() else palette.toLightScheme(),
+            colorScheme = colorScheme,
             content = content,
         )
     }

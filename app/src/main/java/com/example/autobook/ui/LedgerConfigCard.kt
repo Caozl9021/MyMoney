@@ -65,6 +65,7 @@ fun LedgerConfigPage(
     var openGroup by rememberSaveable { mutableStateOf<String?>(null) } // 非空 = 在二级页
     var version by remember { mutableStateOf(0) }               // 强制重读清单
     var newGroup by rememberSaveable { mutableStateOf("") }
+    var resetConfirm by rememberSaveable { mutableStateOf(false) }
     var sorting by rememberSaveable { mutableStateOf(false) }   // 排序模式：行尾出现上移/下移
 
     val groups = remember(version, tab) {
@@ -72,9 +73,14 @@ fun LedgerConfigPage(
     }
     val type = if (tab == 0) BillType.EXPENSE else BillType.INCOME
 
+    if (resetConfirm) RestoreLedgerDefaultsDialog(
+        onDismiss = { resetConfirm = false },
+        onConfirm = { LedgerConfig.resetToDefault(); version++; resetConfirm = false },
+    )
     val current = groups.firstOrNull { it.name == openGroup }
 
     if (current != null) {
+        androidx.activity.compose.BackHandler { openGroup = null }
         SubCategoryPage(
             group = current,
             type = type,
@@ -161,10 +167,8 @@ fun LedgerConfigPage(
                     ListRow(
                         title = "恢复默认清单",
                         destructive = true,
-                        onClick = {
-                            LedgerConfig.resetToDefault()
-                            version++
-                        },
+                        subtitle = "替换支出、收入分类和账户；保留账单、历史与备注模板",
+                        onClick = { resetConfirm = true },
                     )
                 }
             }
@@ -433,4 +437,16 @@ private fun SortableAccounts(version: Int, onChanged: () -> Unit) {
             )
         }
     }
+}
+
+/** All UI entry points explain the same bounded operation before any write. */
+@Composable
+internal fun RestoreLedgerDefaultsDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("恢复默认清单？") },
+        text = { Text("将替换全部支出分类、收入分类和账户清单。已记账的账单、识别历史、备注模板、识别设置和权限均保留。") },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = onConfirm) { Text("恢复默认清单") } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("取消") } },
+    )
 }

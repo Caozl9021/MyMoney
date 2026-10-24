@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.autobook.data.BillEntity
@@ -67,10 +68,35 @@ fun iconForCategory(category: String?): ImageVector {
     }
 }
 
+/** 缺失或全空白都算没有：不把 `""` 当成一个可显示的值。 */
+internal fun displayOrNull(value: String?): String? = value?.takeIf { it.isNotBlank() }
+
 /**
- * 一行账单：左图标 / 中间商户 + 次级信息 / 右金额。
+ * 行标题：merchant → note → 「未命名账单」。
  *
- * 首页和明细页共用唯一的形态，避免两处排版漂移。
+ * 第三条**不能**回退到 `strategy`：那是识别管线的技术串（`wechat-minimal` 之类），
+ * 露在账本里既看不懂又是内部实现细节。
+ */
+internal fun billRowTitle(merchant: String?, note: String?): String =
+    displayOrNull(merchant) ?: displayOrNull(note) ?: "未命名账单"
+
+/** 行副标题：分类（含二级）与时间，缺的分量整个省掉，不留孤立分隔符。 */
+internal fun billRowSubtitle(category: String?, subCategory: String?, time: String?, refund: Boolean): String =
+    listOfNotNull(
+        if (refund) "退款" else null,
+        when (val cat = displayOrNull(category)) {
+            null -> "未分类"
+            else -> displayOrNull(subCategory)?.let { "$cat · $it" } ?: cat
+        },
+        time,
+    ).joinToString(" · ")
+
+/**
+ * 一行账单：左图标 / 中间商户 + 次级信息 / 右金额与账户。
+ *
+ * 首页和明细页共用唯一的形态，避免两处排版漂移。右侧不是固定 45% 的窄列：
+ * 金额按内容取宽、余量让给标题，账户独立成第二行右对齐；账户缺失就整行不画，
+ * 不从 method 之类的字段猜一个「微信零钱」出来。
  */
 @Composable
 fun BillListRow(
@@ -82,44 +108,68 @@ fun BillListRow(
 ) {
     val p = LocalAbPalette.current
     val accent = swatchFor(bill.category ?: "未分类")
-    val isIncome = bill.type == "INCOME"
+    val time = if (showTime) timeOfDay(bill.timeMillis) else null
+    val account = displayOrNull(bill.account)
+    val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
 
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 62.dp)
-            .padding(horizontal = AbSpacing.l, vertical = 10.dp),
+            .heightIn(min = 78.dp)
+            .padding(horizontal = AbSpacing.l, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(AbSpacing.m),
     ) {
-        IconBadge(icon = iconForCategory(bill.category), tint = accent)
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        IconBadge(icon = iconForCategory(bill.category), tint = accent, size = 38.dp)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
-                text = bill.merchant ?: bill.note ?: bill.strategy.ifBlank { "未命名" },
+                text = billRowTitle(bill.merchant, bill.note),
                 style = AbType.body,
                 color = p.label,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = listOfNotNull(
-                    if (bill.type == "REFUND") "退款" else null,
-                    bill.category?.let { cat ->
-                        bill.subCategory?.let { "$cat · $it" } ?: cat
-                    } ?: "未分类",
-                    if (showTime) timeOfDay(bill.timeMillis) else null,
-                ).joinToString("  ·  "),
+                text = billRowSubtitle(bill.category, bill.subCategory, time, bill.type == "REFUND"),
                 style = AbType.caption1,
                 color = p.secondaryLabel,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Box(Modifier.fillMaxWidth(0.45f).onGloballyPositioned { onAmountBounds?.invoke(it.boundsInRoot()) }) {
-            AmountText(formatAmount(bill.priceCents, signed = true, type = bill.type), AbType.amountRow,
-                if (hideAmount) Color.Transparent else if (isIncome) p.green else p.label)
+        // 右列按内容取宽：金额短时收窄把余量让给标题，长金额最多占 168dp（随字号放大），
+        // 不做「无论金额多短都固定 45%」的分栏。
+        Column(
+            modifier = Modifier
+                .widthIn(min = (76f * fontScale).dp, max = (168f * fontScale).dp)
+                .onGloballyPositioned { onAmountBounds?.invoke(it.boundsInRoot()) },
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            AmountText(
+                formatAmount(bill.priceCents, signed = true, type = bill.type),
+                AbType.amountRow.copy(textAlign = TextAlign.End),
+                if (hideAmount) Color.Transparent else amountTint(p, bill.type),
+                minFontSize = 14f,
+            )
+            if (account != null) Text(
+                text = account,
+                style = AbType.caption2,
+                color = p.tertiaryLabel,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.End,
+            )
         }
     }
+}
+
+/** 金额语义色：支出珊瑚、收入绿、退款青、转账中性；不做「只有颜色」的类型提示。 */
+internal fun amountTint(p: AbPalette, type: String): Color = when (type) {
+    "INCOME" -> p.income
+    "REFUND" -> p.refund
+    "TRANSFER" -> p.label
+    else -> p.expense
 }
 
 /** 左滑露出的删除底衬（红底 + 白字）。 */
@@ -141,10 +191,19 @@ fun SwipeDeleteBackground(modifier: Modifier = Modifier, progress: Float = 1f) {
 
 /** Only amounts fit their available width; ordinary content retains the user's full text scale. */
 @Composable
-fun AmountText(value: String, style: TextStyle, color: Color, modifier: Modifier = Modifier) {
+fun AmountText(
+    value: String,
+    style: TextStyle,
+    color: Color,
+    modifier: Modifier = Modifier,
+    minFontSize: Float = 10f,
+) {
     val fontScale = LocalDensity.current.fontScale
     BoxWithConstraints(modifier) {
         val fitted = minOf(style.fontSize.value, maxWidth.value / (value.length.coerceAtLeast(1) * 0.66f * fontScale))
-        Text(value, style = style.copy(fontSize = fitted.coerceAtLeast(10f).sp), color = color, maxLines = 1)
+        // 不 fillMaxWidth：文本按自身宽度落位，右列的「靠右」交给外层 Column 的
+        // horizontalAlignment 完成。否则金额会把右列撑到最大宽度，左侧副信息被压窄。
+        Text(value,
+            style = style.copy(fontSize = fitted.coerceAtLeast(minFontSize).sp), color = color, maxLines = 1)
     }
 }

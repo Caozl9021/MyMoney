@@ -58,9 +58,10 @@ object SystemAccent {
     fun apply(context: Context, palette: AbPalette, dark: Boolean): AbPalette {
         val tones = tones(context.applicationContext) ?: return palette
         // 浅色用 400（够深、白底可读），深色用 200（够亮、黑底可读）
-        val accent = Color(if (dark) tones.c200 else tones.c400)
-        // onAccent 一律用 0 档（白），压在 accent 上都够对比
-        val onAccent = Color(tones.c0)
+        val accentArgb = if (dark) tones.c200 else tones.c400
+        val accent = Color(accentArgb)
+        // OEM tones vary. Choose by actual luminance, especially for pale dark-theme accents.
+        val onAccent = Color(contrastingForeground(accentArgb))
         // 玻璃上沿描边掺一点 accent 的浅档，让玻璃边缘也带系统色
         val strokeTint = Color(if (dark) tones.c700 else tones.c100)
         return palette.copy(
@@ -101,5 +102,18 @@ object SystemAccent {
         val g = AndroidColor.green(color)
         val b = AndroidColor.blue(color)
         return maxOf(r, g, b) - minOf(r, g, b) >= 24
+    }
+
+    /** Pure sRGB contrast calculation; the higher-contrast black/white choice is always >= 4.5:1. */
+    internal fun contrastingForeground(argb: Int): Int {
+        fun linear(channel: Int): Double {
+            val c = channel / 255.0
+            return if (c <= 0.04045) c / 12.92 else Math.pow((c + 0.055) / 1.055, 2.4)
+        }
+        val luminance = 0.2126 * linear((argb ushr 16) and 255) +
+            0.7152 * linear((argb ushr 8) and 255) + 0.0722 * linear(argb and 255)
+        val blackContrast = (luminance + 0.05) / 0.05
+        val whiteContrast = 1.05 / (luminance + 0.05)
+        return if (blackContrast >= whiteContrast) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
     }
 }

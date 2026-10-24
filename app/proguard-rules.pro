@@ -7,3 +7,6 @@
 -keepclasseswithmembers class * {
     public void handleLoadPackage(...);
 }
+
+# Shared system-server handshake and provider entry point.
+-keep class com.example.autobook.lsp.** { *; }

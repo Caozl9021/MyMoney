@@ -58,6 +58,24 @@ object PendingStore {
         persist(emptyList())
     }
 
+    /** Strict migration read: one bad entry leaves the original preferences untouched. */
+    internal fun readForMigration(): List<BillDraft> {
+        ensureInit()
+        val raw = prefs.getString(KEY, null) ?: return emptyList()
+        val array = JSONArray(raw)
+        return (0 until array.length()).map { index ->
+            val item = array.optJSONObject(index) ?: error("旧待确认数据不是对象")
+            BillType.valueOf(item.getString("type"))
+            require(item.getLong("priceCents") > 0) { "旧待确认金额无效" }
+            fromJson(item) ?: error("旧待确认数据第${index + 1}条损坏，已保留原数据")
+        }
+    }
+
+    internal fun clearAfterMigration() {
+        check(prefs.edit().remove(KEY).commit()) { "旧待确认队列迁移清理失败，请重试" }
+        _items.value = emptyList()
+    }
+
     private fun ensureInit() {
         check(::prefs.isInitialized) { "PendingStore.init(context) 未调用" }
     }

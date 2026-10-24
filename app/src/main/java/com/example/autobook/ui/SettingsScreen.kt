@@ -112,12 +112,20 @@ private enum class SettingsPage(val title: String) {
     RULES("本地规则"),
     APPS("支持的应用"),
     PERMISSIONS("权限"),
-    MODE("自动记账模式"),
+    MODE("识别模式"),
     ROOT_MODE("Root 状态"),
+    PENDING("待确认"),
     EXPORT("导出"),
     BACKUP("备份与恢复"),
     APPEARANCE("外观"),
-    DEBUG("诊断"),
+    HELP("帮助"),
+    DEBUG("识别排查"),
+}
+
+private fun captureSettingsPage(destination: CaptureSettingsDestination): SettingsPage = when (destination) {
+    CaptureSettingsDestination.MODE -> SettingsPage.MODE
+    CaptureSettingsDestination.ROOT_STATUS -> SettingsPage.ROOT_MODE
+    CaptureSettingsDestination.SUPPORTED_APPS -> SettingsPage.APPS
 }
 
 /**
@@ -127,13 +135,29 @@ private enum class SettingsPage(val title: String) {
  * 明细都收进子页（D3 决策）。
  */
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinationHandled: () -> Unit = {}) {
     val context = LocalContext.current
     val settings = remember { Settings(context) }
     val p = LocalAbPalette.current
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
 
-    var page by rememberSaveable { mutableStateOf(SettingsPage.ROOT) }
+    var pagePath by rememberSaveable { mutableStateOf(listOf(SettingsPage.ROOT)) }
+    val page = pagePath.last()
+    fun navigate(target: SettingsPage) { pagePath = pagePath + target }
+    fun returnToParent() { pagePath = pagePath.dropLast(1).ifEmpty { listOf(SettingsPage.ROOT) } }
+    LaunchedEffect(destination) {
+        destination?.let {
+            pagePath = listOf(SettingsPage.ROOT, captureSettingsPage(it))
+            onDestinationHandled()
+        }
+    }
+    val healthInput = rememberCaptureHealthInput()
+    val health = captureHealth(healthInput)
+    fun handleHealthAction(action: CaptureAction) {
+        performCaptureAction(context, action, { target ->
+            navigate(captureSettingsPage(target))
+        }, { navigate(SettingsPage.PENDING) })
+    }
 
     // 贯穿整棵设置树的共享状态
     val captureState by CaptureModeManager.state.collectAsStateWithLifecycle()
@@ -143,7 +167,7 @@ fun SettingsScreen() {
     var autoConfirm by remember { mutableStateOf(settings.autoConfirm) }
     var ocrFallback by remember { mutableStateOf(settings.ocrFallback) }
     var whitelist by remember { mutableStateOf(settings.whitelist) }
-    var serviceBound by remember { mutableStateOf(isAccessibilityEnabled(context)) }
+    val serviceBound = healthInput.accessibilityAuthorized && healthInput.accessibilityBound
     var overlayGranted by remember { mutableStateOf(OverlayAnchor.canShow(context)) }
     var notifyGranted by remember { mutableStateOf(ConfirmDelivery.hasNotificationPermission(context)) }
     var rootGranted by remember { mutableStateOf<Boolean?>(null) }
@@ -153,7 +177,6 @@ fun SettingsScreen() {
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                serviceBound = isAccessibilityEnabled(context)
                 overlayGranted = OverlayAnchor.canShow(context)
                 notifyGranted = ConfirmDelivery.hasNotificationPermission(context)
             }
@@ -186,9 +209,9 @@ fun SettingsScreen() {
     }
 
     // 系统返回/侧滑：先退子页，再交给 MainActivity 处理 tab，不再直接退出 App
-    BackHandler(enabled = page != SettingsPage.ROOT) { page = SettingsPage.ROOT }
+    BackHandler(enabled = page != SettingsPage.ROOT) { returnToParent() }
 
-    val back: () -> Unit = { page = SettingsPage.ROOT }
+    val back: () -> Unit = { returnToParent() }
 
     val reduceMotion = com.example.autobook.ui.design.LocalReduceMotion.current
     val pageStates = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
@@ -216,167 +239,85 @@ fun SettingsScreen() {
                 ),
                 verticalArrangement = Arrangement.spacedBy(AbSpacing.xs),
             ) {
-                item { StatusHeader(enabled, mode, serviceBound, rootStatus) }
+                item { StatusHeader(health, ::handleHealthAction) }
 
-                item { GroupHeader("自动记账") }
+                item { GroupHeader("识别") }
                 item {
                     InsetGroup {
-                        ListRow(
-                            title = "启用识别",
-                            subtitle = when {
-                                !enabled -> "已暂停采集"
-                                mode == CaptureMode.ROOT && !rootStatus.running -> "已启用，等待 Root 授权或服务启动"
-                                mode == CaptureMode.ACCESSIBILITY && !serviceBound -> "已启用，等待无障碍服务"
-                                mode == null -> "已启用，请选择自动记账模式"
-                                else -> "正在监听账单页面"
-                            },
-                            trailing = {
-                                AbSwitch(enabled) {
-                                    CaptureModeManager.setEnabled(context, it)
-                                }
-                            },
-                            onClick = {
-                                CaptureModeManager.setEnabled(context, !enabled)
-                            },
-                        )
-                        InsetDivider()
-                        ListRow(
-                            title = "识别后自动弹确认卡",
-                            subtitle = "关闭后只进待确认队列",
-                            dividerAbove = true,
-                            trailing = {
-                                AbSwitch(autoConfirm) {
-                                    autoConfirm = it
-                                    settings.autoConfirm = it
-                                }
-                            },
-                            onClick = {
-                                autoConfirm = !autoConfirm
-                                settings.autoConfirm = autoConfirm
-                            },
-                        )
+                        ListRow(title = "启用识别", subtitle = health.title,
+                            leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Check, p.accent) },
+                            trailing = { AbSwitch(enabled) { CaptureModeManager.setEnabled(context, it) } },
+                            onClick = { CaptureModeManager.setEnabled(context, !enabled) })
+                        InsetDivider(inset = 62.dp)
+                        ListRow(title = "识别后弹出确认卡", subtitle = "关闭后保存在待确认中",
+                            leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Note, p.accent) },
+                            trailing = { AbSwitch(autoConfirm) { autoConfirm = it; settings.autoConfirm = it } },
+                            onClick = { autoConfirm = !autoConfirm; settings.autoConfirm = autoConfirm })
                         if (mode == CaptureMode.ROOT) {
-                            InsetDivider()
-                            ListRow(
-                                title = "截图 OCR 兜底",
-                                subtitle = "Root 页面文字读取不足时截图识别",
-                                dividerAbove = true,
-                                trailing = {
-                                    AbSwitch(ocrFallback) {
-                                        ocrFallback = it
-                                        settings.ocrFallback = it
-                                        applyKit()
-                                    }
-                                },
-                                onClick = {
-                                    ocrFallback = !ocrFallback
-                                    settings.ocrFallback = ocrFallback
-                                    applyKit()
-                                },
-                            )
+                            InsetDivider(inset = 62.dp)
+                            ListRow(title = "截图识别", subtitle = "仅 Root：页面文字不足时使用",
+                                leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Ocr, p.accent) },
+                                trailing = { AbSwitch(ocrFallback) { ocrFallback = it; settings.ocrFallback = it; applyKit() } },
+                                onClick = { ocrFallback = !ocrFallback; settings.ocrFallback = ocrFallback; applyKit() })
                         }
+                        InsetDivider(inset = 62.dp)
+                        ListRow(title = "识别模式", subtitle = captureModeLabel(mode),
+                            leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Accessibility, p.accent) }, chevron = true,
+                            onClick = { navigate(SettingsPage.MODE) })
+                        InsetDivider(inset = 62.dp)
+                        ListRow(title = "支持的应用", subtitle = "已选 ${whitelist.size} 个",
+                            leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Store, p.accent) }, chevron = true,
+                            onClick = { navigate(SettingsPage.APPS) })
+                        InsetDivider(inset = 62.dp)
+                        ListRow(title = "权限", subtitle = when (mode) {
+                            CaptureMode.ROOT -> "Root 授权、悬浮窗与通知"
+                            CaptureMode.ACCESSIBILITY -> if (serviceBound) "无障碍已连接" else "无障碍未连接"
+                            null -> "请先选择识别模式"
+                        }, leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Shield, p.accent) }, chevron = true,
+                            onClick = { navigate(SettingsPage.PERMISSIONS) })
+                        InsetDivider(inset = 62.dp)
+                        ListRow(title = "本地规则", subtitle = "导入规则、餐段与学习",
+                            leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Filter, p.accent) }, chevron = true,
+                            onClick = { navigate(SettingsPage.RULES) })
                     }
                 }
-                item {
-                    GroupFooter("规则只在本机运行，不上传页面内容。")
-                }
-
                 item { GroupHeader("数据") }
                 item {
                     InsetGroup {
-                        ListRow(
-                            title = "本地规则",
-                            subtitle = "餐段、学习与规则文件",
-                            chevron = true,
-                            onClick = { page = SettingsPage.RULES },
-                        )
+                        ListRow(title = "待确认", subtitle = "查看尚未记账的识别结果",
+                            leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Clock, p.accent) }, chevron = true,
+                            onClick = { navigate(SettingsPage.PENDING) })
                         InsetDivider(inset = 62.dp)
-                        ListRow(
-                            title = "分类与账户",
-                            subtitle = "导出到 iCost 用的清单",
-                            leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Tag, p.accent) },
-                            chevron = true,
-                            onClick = { page = SettingsPage.CATEGORIES },
-                        )
+                        ListRow(title = "分类与账户", leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Tag, p.accent) },
+                            chevron = true, onClick = { navigate(SettingsPage.CATEGORIES) })
                         InsetDivider(inset = 62.dp)
-                        ListRow(
-                            title = "备注模板",
-                            subtitle = LedgerConfig.noteTemplate,
-                            leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Note, p.accent) },
-                            chevron = true,
-                            dividerAbove = true,
-                            onClick = { page = SettingsPage.NOTE },
-                        )
+                        ListRow(title = "备注模板", leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Note, p.accent) },
+                            chevron = true, onClick = { navigate(SettingsPage.NOTE) })
                         InsetDivider(inset = 62.dp)
-                        ListRow(
-                            title = "外观",
-                            subtitle = "主题、文字大小与动效",
-                            leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Layers, p.accent) },
-                            chevron = true,
-                            dividerAbove = true,
-                            onClick = { page = SettingsPage.APPEARANCE },
-                        )
-                        InsetDivider(inset = 62.dp)
-                        ListRow(
-                            title = "导出",
-                            subtitle = "官方 10 列 CSV",
-                            leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Export, p.accent) },
-                            chevron = true,
-                            dividerAbove = true,
-                            onClick = { page = SettingsPage.EXPORT },
-                        )
+                        ListRow(title = "备份与恢复", subtitle = "保存账单、识别历史和配置",
+                            leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Layers, p.accent) }, chevron = true,
+                            onClick = { navigate(SettingsPage.BACKUP) })
                     }
                 }
-
-                item { GroupHeader("采集") }
-                item {
-                    InsetGroup {
-                        ListRow(
-                            title = "自动记账模式",
-                            subtitle = captureModeLabel(mode),
-                            leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Layers, p.accent) },
-                            chevron = true,
-                            onClick = { page = SettingsPage.MODE },
-                        )
-                        InsetDivider(inset = 62.dp)
-                        ListRow(
-                            title = "支持的应用",
-                            subtitle = "已选 ${whitelist.size} 个",
-                            leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Layers, p.accent) },
-                            chevron = true,
-                            onClick = { page = SettingsPage.APPS },
-                        )
-                        InsetDivider(inset = 62.dp)
-                        ListRow(
-                            title = "权限",
-                            subtitle = when (mode) {
-                                CaptureMode.ROOT -> "Root 授权、悬浮窗与通知"
-                                CaptureMode.ACCESSIBILITY -> if (serviceBound) "无障碍已连接" else "无障碍未连接"
-                                null -> "请先选择自动记账模式"
-                            },
-                            leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Shield, p.accent) },
-                            chevron = true,
-                            dividerAbove = true,
-                            onClick = { page = SettingsPage.PERMISSIONS },
-                        )
-
-                    }
-                }
-
-                item { GroupHeader("诊断") }
-                item {
-                    InsetGroup {
-                        ListRow(
-                            title = "最近一次抓取",
-                            subtitle = "看结论、复制页面文本",
-                            chevron = true,
-                            onClick = { page = SettingsPage.DEBUG },
-                        )
-                    }
-                }
-                item {
-                    GroupFooter("所有数据仅保存在本机；本 App 不联网、不上传。")
-                }
+                item { GroupHeader("外观") }
+                item { InsetGroup {
+                    ListRow(title = "主题与显示", subtitle = "主题、文字大小与动效",
+                        leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Settings, p.accent) }, chevron = true,
+                        onClick = { navigate(SettingsPage.APPEARANCE) })
+                } }
+                item { GroupHeader("导出") }
+                item { InsetGroup {
+                    ListRow(title = "导出到 iCost", subtitle = "选择账单范围，生成 CSV",
+                        leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Export, p.accent) }, chevron = true,
+                        onClick = { navigate(SettingsPage.EXPORT) })
+                } }
+                item { GroupHeader("帮助") }
+                item { InsetGroup {
+                    ListRow(title = "识别帮助", subtitle = "识别排查与使用说明",
+                        leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Search, p.accent) }, chevron = true,
+                        onClick = { navigate(SettingsPage.HELP) })
+                } }
+                item { GroupFooter("数据和识别规则仅保存在本机；本 App 不联网、不上传页面内容。") }
             }
         }
 
@@ -414,7 +355,7 @@ fun SettingsScreen() {
             mode = mode,
             rootGranted = rootGranted,
             onCheckRoot = { checkRoot() },
-            onRootStatus = { page = SettingsPage.ROOT_MODE },
+            onRootStatus = { navigate(SettingsPage.ROOT_MODE) },
             serviceBound = serviceBound,
             overlayGranted = overlayGranted,
             notifyGranted = notifyGranted,
@@ -432,7 +373,7 @@ fun SettingsScreen() {
 
         SettingsPage.EXPORT -> ExportPage(
             onBack = back,
-            onOpenBackup = { page = SettingsPage.BACKUP },
+            onOpenBackup = { navigate(SettingsPage.BACKUP) },
         )
 
         SettingsPage.BACKUP -> BackupPage(
@@ -447,7 +388,11 @@ fun SettingsScreen() {
             },
         )
 
+        SettingsPage.HELP -> HelpPage(onBack = back, onDebug = { navigate(SettingsPage.DEBUG) },
+            onMode = { navigate(SettingsPage.MODE) }, onPermissions = { navigate(SettingsPage.PERMISSIONS) },
+            onApps = { navigate(SettingsPage.APPS) }, onPending = { navigate(SettingsPage.PENDING) })
         SettingsPage.DEBUG -> DebugPage(onBack = back)
+        SettingsPage.PENDING -> RecognitionHistoryScreen(onBack = back, initialFilter = com.example.autobook.data.RecognitionStatus.PENDING)
     }
     }
     }
@@ -462,7 +407,7 @@ internal fun captureModeLabel(mode: CaptureMode?): String = when (mode) {
 @Composable
 private fun CaptureModeSettingsPage(mode: CaptureMode?, onBack: () -> Unit, onSave: (CaptureMode) -> Unit) {
     var selected by rememberSaveable { mutableStateOf(mode) }
-    SubPageScaffold(title = "自动记账模式", onBack = onBack) { padding ->
+    SubPageScaffold(title = "识别模式", onBack = onBack) { padding ->
         CaptureModeChoice(
             mode = selected,
             onSelect = { selected = it },
@@ -478,46 +423,8 @@ private fun CaptureModeSettingsPage(mode: CaptureMode?, onBack: () -> Unit, onSa
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun StatusHeader(enabled: Boolean, mode: CaptureMode?, serviceBound: Boolean, status: RootWatcher.Status) {
-    val p = LocalAbPalette.current
-    val ok = enabled && (if (mode == CaptureMode.ROOT) status.running else mode == CaptureMode.ACCESSIBILITY && serviceBound)
-    InsetGroup(Modifier.padding(top = AbSpacing.s)) {
-        Row(
-            Modifier.fillMaxWidth().padding(AbSpacing.l),
-            horizontalArrangement = Arrangement.spacedBy(AbSpacing.m),
-            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-        ) {
-            com.example.autobook.ui.design.IconBadge(
-                icon = if (ok) AbIcons.Check else AbIcons.Clock,
-                tint = if (ok) p.green else p.tertiaryLabel,
-                size = 44.dp,
-            )
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    when {
-                        !enabled -> "识别已暂停"
-                        mode == null -> "请选择自动记账模式"
-                        mode == CaptureMode.ROOT && !status.running -> "Root 采集未运行"
-                        mode == CaptureMode.ACCESSIBILITY && !serviceBound -> "等待无障碍服务"
-                        else -> "正在自动记账 · ${captureModeLabel(mode)}"
-                    },
-                    style = AbType.headline,
-                    color = p.label,
-                )
-                Text(
-                    when {
-                        !enabled -> "打开上方开关即可恢复监听"
-                        mode == null -> "在「自动记账模式」中选择 Root 或无障碍"
-                        mode == CaptureMode.ROOT -> status.lastResult
-                        !serviceBound -> "去「权限」里开启无障碍服务"
-                        else -> "识别到账单页会弹出确认卡"
-                    },
-                    style = AbType.footnote,
-                    color = p.secondaryLabel,
-                )
-            }
-        }
-    }
+private fun StatusHeader(health: CaptureHealth, onAction: (CaptureAction) -> Unit) {
+    InsetGroup(Modifier.padding(top = AbSpacing.s)) { CaptureHealthCard(health, onAction) }
 }
 
 // ---------------------------------------------------------------------------
@@ -716,8 +623,8 @@ private fun PermissionsPage(
         if (!granted) openNotificationChannelSettings(context)
     }
 
-    // LSP 模块状态：三档，不把"看到框架"说成"模块已启用"
-    val xposedState by com.example.autobook.capture.XposedModuleDetector.state.collectAsStateWithLifecycle()
+    // Current authenticated system-server report; refresh on resume and expire stale reports.
+    val xposedDetail by XposedModuleDetector.detail.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) {
         com.example.autobook.capture.XposedModuleDetector.detect(context)
     }
@@ -730,6 +637,7 @@ private fun PermissionsPage(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 keepAlive = AccessibilityEnhancer.getStatus(context)
+                XposedModuleDetector.detect(context)
             }
         }
         keepAliveOwner.lifecycle.addObserver(observer)
@@ -742,7 +650,7 @@ private fun PermissionsPage(
                 .padding(padding).padding(horizontal = AbSpacing.page),
             verticalArrangement = Arrangement.spacedBy(AbSpacing.xs),
         ) {
-            GroupHeader("采集权限")
+            GroupHeader("识别权限")
             InsetGroup {
                 if (mode == CaptureMode.ROOT) {
                     ListRow(
@@ -807,7 +715,7 @@ private fun PermissionsPage(
                 when (mode) {
                     CaptureMode.ROOT -> "Root 用于读取账单页面，无需开启无障碍。"
                     CaptureMode.ACCESSIBILITY -> "无障碍用于读取账单页面文字，无需 Root。"
-                    null -> "请先在「自动记账模式」中选择采集方式。"
+                    null -> "请先在「识别模式」中选择识别方式。"
                 } +
                     "悬浮窗是「识别完立刻弹卡」的前提：" +
                     "有它才能不经通知、不启动 Activity 直接把确认卡盖在对方 App 上，" +
@@ -841,6 +749,7 @@ private fun PermissionsPage(
                                 openAccessibilitySettings(context)
                             }
                             keepAlive = AccessibilityEnhancer.getStatus(context)
+                XposedModuleDetector.detect(context)
                         },
                     )
                     InsetDivider()
@@ -905,23 +814,16 @@ private fun PermissionsPage(
                 InsetGroup {
                     ListRow(
                         title = "LSP 增强模块",
-                        subtitle = when (xposedState) {
-                            XposedModuleDetector.HookState.MODULE_CONFIRMED ->
-                                "✅ 已确认 — 模块 Hook 已在系统框架生效"
-                            XposedModuleDetector.HookState.FRAMEWORK_PRESENT ->
-                                "⚠️ 检测到 Xposed 框架，但未确认 AutoBook 模块已启用"
-                            XposedModuleDetector.HookState.NOT_DETECTED ->
-                                "未检测到 — 未安装 LSPosed，或未启用 AutoBook 模块"
-                        },
+                        subtitle = xposedDetail,
                         chevron = false,
-                        onClick = { },
+                        onClick = { XposedModuleDetector.detect(context) },
                     )
                 }
                 GroupFooter(
-                    "LSP 模块只做两件事：阻止系统解绑/移除无障碍服务、拦住针对本 App 的 killApplication。" +
-                        "它**不会**改电池优化策略，也拦不住低内存回收。" +
-                        "「已确认」需要模块成功写入系统属性才会出现，普通权限下常常写不进去，" +
-                        "所以显示「未确认」不等于模块没生效 —— 以 LSPosed 里的启用状态和真实日志为准。",
+                    "解绑与撤权目前仅监测，未提供解绑拦截，尚不能确认解决掉权限。" +
+                        "仅对本 App 当前用户仍授权且连接存活的 background restriction 终止提供有限保护；未知原因放行。" +
+                        "不会阻止用户撤权、强行停止或包更新，不防低内存回收。" +
+                        "安装升级后系统框架仍运行旧模块，需重启系统才能加载新版；点击状态可重新检测。",
                 )
             }
 
@@ -962,7 +864,7 @@ private fun RootModePage(
                 )
                 InsetDivider()
                 ListRow(
-                    title = "采集状态",
+                    title = "识别状态",
                     subtitle = if (!enabled) "识别总开关已暂停" else if (status.running) "后台轮询运行中" else "未运行，请检查 Root 授权",
                 )
             }
@@ -986,7 +888,7 @@ private fun RootModePage(
                 "Root 模式开启识别后通知栏会有一条常驻通知，退出 AutoBook 也继续监听。" +
                     "root 路径没有后台启动豁免，所以更需要悬浮窗权限——有权限时确认卡直接浮在页面上，" +
                     "没有就只能落待确认队列 + 通知。" +
-                    "如需改用无障碍，请返回「自动记账模式」切换。",
+                    "如需改用无障碍，请返回「识别模式」切换。",
             )
             Spacer(Modifier.height(AbSpacing.xl))
         }
@@ -1223,7 +1125,7 @@ private fun BackupPage(onBack: () -> Unit, onRestored: (Backup.SettingsSnapshot?
             InsetGroup {
                 ListRow(
                     title = "导出备份文件",
-                    subtitle = if (busy) "处理中…" else "JSON，含账单 + 分类账户清单 + 关键设置",
+                    subtitle = if (busy) "处理中…" else "JSON，含账单 + 全部识别历史与处理状态 + 分类账户清单 + 关键设置",
                     chevron = true,
                     onClick = {
                         if (!busy) createLauncher.launch(BackupStore.fileName())
@@ -1244,7 +1146,7 @@ private fun BackupPage(onBack: () -> Unit, onRestored: (Backup.SettingsSnapshot?
                     onClick = { if (!busy) openLauncher.launch(arrayOf("*/*")) },
                 )
             }
-            GroupFooter("默认按「合并」处理：已存在的账单不会重复导入。覆盖恢复会先清空现有账单。")
+            GroupFooter("默认合并账单与识别历史，不重复导入，也不将已记账历史变成待处理。新版覆盖会替换账单和历史；旧备份不含历史时保留本机历史。")
 
             if (message != null) {
                 Spacer(Modifier.height(AbSpacing.s))
@@ -1273,11 +1175,14 @@ private fun BackupPage(onBack: () -> Unit, onRestored: (Backup.SettingsSnapshot?
             text = {
                 Text(
                     if (confirmReplace) {
-                        "覆盖恢复会先删除现有的全部账单，再导入这 ${snap.bills.size} 条。此操作不可撤销，确定吗？"
+                        "覆盖恢复会替换现有的全部账单，导入 ${snap.bills.size} 条账单。" +
+                            (if (snap.history != null) "同时替换全部识别历史，导入 ${snap.history.size} 条历史。" else "这是不含历史的旧备份：保留现有识别历史，失效的账单关联会解除，已记账状态保留。") +
+                            "如备份含分类账户和设置，也会恢复这些配置。此操作不可撤销，确定吗？"
                     } else {
                         "备份时间：${whenText}\n账单：${snap.bills.size} 条\n" +
+                            "识别历史：${snap.history?.let { "${it.size} 条" } ?: "旧格式未包含，保留本机历史"}\n" +
                             "分类账户清单：${if (snap.ledger != null) "有" else "无"}\n" +
-                            "默认合并导入，已存在的记录会跳过。"
+                            "默认合并账单与历史，已有已记账状态保留；分类账户和设置按备份恢复。"
                     },
                     style = AbType.body,
                     color = p.secondaryLabel,
@@ -1294,7 +1199,7 @@ private fun BackupPage(onBack: () -> Unit, onRestored: (Backup.SettingsSnapshot?
                                 BackupStore.restore(context, json, BackupStore.Mode.REPLACE)
                             }
                             message = result.fold(
-                                onSuccess = { "已覆盖导入 ${it.bills} 条" },
+                                onSuccess = { "已覆盖导入账单 ${it.bills} 条、识别历史 ${it.history} 条${if (snap.history == null) "（本机历史已保留）" else ""}" },
                                 onFailure = { "恢复失败：${it.message}" },
                             )
                             result.getOrNull()?.let { onRestored(it.settings) }
@@ -1310,7 +1215,7 @@ private fun BackupPage(onBack: () -> Unit, onRestored: (Backup.SettingsSnapshot?
                                 BackupStore.restore(context, json, BackupStore.Mode.MERGE)
                             }
                             message = result.fold(
-                                onSuccess = { "已合并导入 ${it.bills} 条（重复的已跳过）" },
+                                onSuccess = { "已合并导入账单 ${it.bills} 条、识别历史 ${it.history} 条（已有记录不重复导入）" },
                                 onFailure = { "恢复失败：${it.message}" },
                             )
                             result.getOrNull()?.let { onRestored(it.settings) }
@@ -1344,13 +1249,52 @@ private fun BackupPage(onBack: () -> Unit, onRestored: (Backup.SettingsSnapshot?
 // ---------------------------------------------------------------------------
 
 @Composable
+private fun HelpPage(
+    onBack: () -> Unit, onDebug: () -> Unit, onMode: () -> Unit,
+    onPermissions: () -> Unit, onApps: () -> Unit, onPending: () -> Unit,
+) {
+    val p = LocalAbPalette.current
+    SubPageScaffold(title = "帮助", onBack = onBack) { padding ->
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+            .padding(padding).padding(horizontal = AbSpacing.page),
+            verticalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
+            GroupHeader("识别排查")
+            InsetGroup {
+                ListRow(title = "识别排查", subtitle = "查看最近结论、页面文字与诊断样本",
+                    leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Search, p.accent) },
+                    chevron = true, onClick = onDebug)
+                InsetDivider(inset = 62.dp)
+                ListRow(title = "识别模式", leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Accessibility, p.accent) }, chevron = true, onClick = onMode)
+                InsetDivider(inset = 62.dp)
+                ListRow(title = "权限", leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Shield, p.accent) }, chevron = true, onClick = onPermissions)
+                InsetDivider(inset = 62.dp)
+                ListRow(title = "支持的应用", leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Store, p.accent) }, chevron = true, onClick = onApps)
+                InsetDivider(inset = 62.dp)
+                ListRow(title = "待确认", leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Clock, p.accent) }, chevron = true, onClick = onPending)
+            }
+            GroupHeader("使用说明")
+            InsetGroup {
+                ListRow(title = "识别后需要确认", subtitle = "确认保存后才写入账本；关闭弹卡后可在待确认中处理。")
+                InsetDivider()
+                ListRow(title = "页面没有识别到？", subtitle = "先检查模式、支持的应用和权限，再打开支付结果或账单详情。仍有问题时先保存该页诊断样本，再切换页面。")
+                InsetDivider()
+                ListRow(title = "截图识别", subtitle = "仅 Root 模式支持，页面文字不足时使用；无障碍模式读取页面文字。")
+                InsetDivider()
+                ListRow(title = "诊断样本分享前请检查", subtitle = "页面文字可能含商户、订单等信息，请先脱敏。")
+            }
+            Spacer(Modifier.height(AbSpacing.xl))
+        }
+    }
+}
+
+@Composable
 private fun DebugPage(onBack: () -> Unit) {
     val context = LocalContext.current
     val p = LocalAbPalette.current
     val debug by DebugBus.state.collectAsStateWithLifecycle()
     var sampleSaved by remember { mutableStateOf<String?>(null) }
 
-    SubPageScaffold(title = "诊断", onBack = onBack) { padding ->
+    SubPageScaffold(title = "识别排查", onBack = onBack) { padding ->
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState())
                 .padding(padding).padding(horizontal = AbSpacing.page),
@@ -1359,11 +1303,11 @@ private fun DebugPage(onBack: () -> Unit) {
             if (debug == null) {
                 EmptyState(
                     icon = AbIcons.Search,
-                    title = "还没有抓到页面",
+                    title = "还没有识别到页面",
                     message = "打开一个账单详情页，识别结果会出现在这里。",
                 )
             } else {
-                GroupHeader("最近一次抓取")
+                GroupHeader("最近一次识别")
                 InsetGroup {
                     ListRow(title = "应用", subtitle = debug!!.packageName)
                     InsetDivider()

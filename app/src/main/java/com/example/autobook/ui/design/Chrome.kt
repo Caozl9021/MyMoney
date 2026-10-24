@@ -3,7 +3,6 @@ package com.example.autobook.ui.design
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -25,11 +24,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.ui.unit.Dp
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -41,14 +36,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.structuralEqualityPolicy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -72,6 +67,7 @@ import androidx.compose.ui.unit.sp
  *
  * @param scrollOffset 已滚动像素
  * @param collapseAt   完全收起所需的像素
+ * @param compact      直接以收起态渲染（没有大标题块）。统计页用它腾出首屏高度。
  */
 @Composable
 fun LargeTitleBar(
@@ -80,11 +76,12 @@ fun LargeTitleBar(
     modifier: Modifier = Modifier,
     collapseAt: Float = 140f,
     subtitle: String? = null,
+    compact: Boolean = false,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     val p = LocalAbPalette.current
     val reduce = LocalReduceTransparency.current
-    val progress = if (collapseAt <= 0f) 1f else (scrollOffset / collapseAt).coerceIn(0f, 1f)
+    val progress = if (compact) 1f else if (collapseAt <= 0f) 1f else (scrollOffset / collapseAt).coerceIn(0f, 1f)
 
     // 标题在中间区间完成交叉淡入淡出，避免两行字同时清晰
     val largeAlpha = ((0.62f - progress) / 0.47f).coerceIn(0f, 1f)
@@ -219,9 +216,16 @@ fun LiquidTabCells(
     if (items.isEmpty()) return
     val haptic = rememberAbHaptic()
 
-    // 点击区域与内容保持等分网格；选中块以原中心向四周外扩 3dp。
-    BoxWithConstraints(modifier.fillMaxSize().selectableGroup().drawBehind {
-        // Thin, non-interactive edge: highlight above, faint shade below; no opaque rim.
+    val reduceMotion = LocalReduceMotion.current
+    // Keep the animation state unread until drawing: the dock grid never needs
+    // a new composition/measurement for an indicator animation frame.
+    val position = animateFloatAsState(
+        targetValue = selected.toFloat(),
+        animationSpec = if (reduceMotion) snap() else spring(dampingRatio = 0.92f, stiffness = 480f),
+        label = "tabIndicatorPosition",
+    )
+    val inset = 6.dp
+    Box(modifier.fillMaxSize().selectableGroup().drawBehind {
         val stroke = 0.65.dp.toPx()
         drawRoundRect(
             brush = Brush.verticalGradient(listOf(
@@ -234,34 +238,23 @@ fun LiquidTabCells(
             cornerRadius = CornerRadius(size.height / 2),
             style = Stroke(stroke),
         )
+        val cellW = ((size.width - inset.toPx() * 2) / items.size).coerceAtLeast(1.dp.toPx())
+        val cellH = (size.height - inset.toPx() * 2).coerceAtLeast(1.dp.toPx())
+        val pos = if (reduceMotion) selected.toFloat() else position.value
+        // One spring drives both translation and deformation; the previous second
+        // spring retargeted on every position frame and also changed layout sizes.
+        val stretch = abs(selected - pos).coerceIn(0f, 1f)
+        val indicatorW = cellW + 6.dp.toPx() + 8.dp.toPx() * stretch
+        val indicatorH = cellH + 6.dp.toPx() - 2.dp.toPx() * stretch
+        val indicatorX = (inset.toPx() + cellW * pos - 3.dp.toPx() - 4.dp.toPx() * stretch)
+            .coerceIn(3.dp.toPx(), (size.width - 3.dp.toPx() - indicatorW).coerceAtLeast(3.dp.toPx()))
+        drawRoundRect(
+            color = p.tabIndicator,
+            topLeft = Offset(indicatorX, (size.height - indicatorH) / 2),
+            size = Size(indicatorW, indicatorH),
+            cornerRadius = CornerRadius(indicatorH / 2),
+        )
     }) {
-        val inset = 6.dp
-        val cellW = ((maxWidth - inset * 2) / items.size).coerceAtLeast(1.dp)
-        val cellH = (maxHeight - inset * 2).coerceAtLeast(1.dp)
-        val pos by animateFloatAsState(
-            targetValue = selected.toFloat(),
-            animationSpec = if (LocalReduceMotion.current) snap() else spring(dampingRatio = 0.92f, stiffness = 480f),
-            label = "tabIndicatorPosition",
-        )
-        // Distance drives a small deformation. Retargeting preserves position/velocity;
-        // only the background changes shape, never the independent icons or labels.
-        val stretch by animateFloatAsState(
-            targetValue = abs(selected - pos).coerceIn(0f, 1f),
-            animationSpec = if (LocalReduceMotion.current) snap() else spring(dampingRatio = 1f, stiffness = 700f),
-            label = "tabIndicatorStretch",
-        )
-        val indicatorW = cellW + 6.dp + 8.dp * stretch
-        val indicatorH = cellH + 6.dp - 2.dp * stretch
-        val indicatorX = (inset + cellW * pos - 3.dp - 4.dp * stretch)
-            .coerceIn(3.dp, (maxWidth - 3.dp - indicatorW).coerceAtLeast(3.dp))
-        Box(
-            Modifier
-                .offset { IntOffset(indicatorX.roundToPx(), ((maxHeight - indicatorH) / 2).roundToPx()) }
-                .width(indicatorW)
-                .height(indicatorH)
-                .clip(RoundedCornerShape(percent = 50))
-                .background(p.tabIndicator),
-        )
         Row(Modifier.fillMaxSize().padding(horizontal = inset)) {
             items.forEachIndexed { index, item ->
                 TabCell(
@@ -292,9 +285,11 @@ private fun TabCell(
     onSelect: () -> Unit,
 ) {
     // 轻微放大，不改变格子和标签的布局。
-    val iconSize by animateDpAsState(
-        targetValue = if (active) 23.dp else 21.dp,
-        animationSpec = if (LocalReduceMotion.current) snap() else spring(dampingRatio = 1f, stiffness = 500f),
+    val reduceMotion = LocalReduceMotion.current
+    val targetScale = if (active) 1f else 21f / 23f
+    val iconScale = animateFloatAsState(
+        targetValue = targetScale,
+        animationSpec = if (reduceMotion) snap() else spring(dampingRatio = 1f, stiffness = 500f),
         label = "tabIconSize",
     )
     val fg by animateColorAsState(
@@ -318,7 +313,11 @@ private fun TabCell(
             Icon(
                 imageVector = item.icon,
                 contentDescription = null,
-                modifier = Modifier.size(iconSize),
+                modifier = Modifier.size(23.dp).graphicsLayer {
+                    val scale = if (reduceMotion) targetScale else iconScale.value
+                    scaleX = scale
+                    scaleY = scale
+                },
                 tint = fg,
             )
         }
@@ -349,23 +348,21 @@ fun PageScaffold(
     listState: androidx.compose.foundation.lazy.LazyListState,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
+    compact: Boolean = false,
     actions: @Composable RowScope.() -> Unit = {},
     content: @Composable (androidx.compose.foundation.layout.PaddingValues) -> Unit,
 ) {
-    // 首项已划走就直接满格；否则按首项偏移线性算
-    val offset = if (listState.firstVisibleItemIndex > 0) 1000f
-    else listState.firstVisibleItemScrollOffset.toFloat()
-
     // Tab 栏离屏幕底边的距离：导航条 inset + 视觉留白（别贴着右下角）。
     // 内容底部再额外留一档，滚到最后一行不会被胶囊压住。
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     Box(modifier.fillMaxSize()) {
         Column(Modifier.widthIn(max = 560.dp).fillMaxSize().align(Alignment.TopCenter)) {
-            LargeTitleBar(
+            ScrollingTitleBar(
                 title = title,
-                scrollOffset = offset,
+                listState = listState,
                 subtitle = subtitle,
+                compact = compact,
                 actions = actions,
             )
             content(
@@ -375,6 +372,24 @@ fun PageScaffold(
             )
         }
     }
+}
+
+/** Read scroll state in the title scope, leaving the page/list content untouched. */
+@Composable
+private fun ScrollingTitleBar(
+    title: String,
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    subtitle: String?,
+    compact: Boolean,
+    actions: @Composable RowScope.() -> Unit,
+) {
+    val offset by remember(listState) {
+        derivedStateOf(structuralEqualityPolicy()) {
+            if (listState.firstVisibleItemIndex > 0) 140f
+            else listState.firstVisibleItemScrollOffset.toFloat().coerceAtMost(140f)
+        }
+    }
+    LargeTitleBar(title = title, scrollOffset = offset, subtitle = subtitle, compact = compact, actions = actions)
 }
 
 /**

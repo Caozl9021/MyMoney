@@ -2,8 +2,6 @@ package com.example.autobook.data
 
 import android.content.Context
 import com.example.billkit.BillType
-import org.json.JSONArray
-import org.json.JSONObject
 
 /** 一级分类 + 它下面的二级分类（二级可为空） */
 data class CategoryGroup(
@@ -114,7 +112,7 @@ object LedgerConfig {
     fun moveSub(type: BillType, group: String, from: Int, to: Int) =
         writeGroups(type, groupsFor(type).map { if (it.name == group) it.copy(subs = Reorder.move(it.subs, from, to)) else it })
 
-    fun moveAccount(from: Int, to: Int) = writeStrings(KEY_ACCOUNTS, DEFAULT_ACCOUNTS, Reorder.move(accounts, from, to))
+    fun moveAccount(from: Int, to: Int) = writeStrings(KEY_ACCOUNTS, Reorder.move(accounts, from, to))
 
     fun subsOf(type: BillType, group: String?): List<String> =
         groupsFor(type).firstOrNull { it.name == group }?.subs.orEmpty()
@@ -124,10 +122,10 @@ object LedgerConfig {
     val accounts: List<String>
         get() = readStrings(KEY_ACCOUNTS, DEFAULT_ACCOUNTS)
 
-    fun addAccount(name: String) = writeStrings(KEY_ACCOUNTS, DEFAULT_ACCOUNTS, accounts + name.trim())
+    fun addAccount(name: String) = writeStrings(KEY_ACCOUNTS, accounts + name.trim())
 
     fun removeAccount(name: String) =
-        writeStrings(KEY_ACCOUNTS, DEFAULT_ACCOUNTS, accounts.filterNot { it == name })
+        writeStrings(KEY_ACCOUNTS, accounts.filterNot { it == name })
 
     // ---------- 备注模板 ----------
 
@@ -138,17 +136,17 @@ object LedgerConfig {
 
     // ---------- 备份恢复 ----------
 
-    /** 用备份文件里的清单整体覆盖（空列表视为"备份里没有"，保持现状） */
+    /** null 表示备份缺失该项；显式空列表表示用户保存的空清单。 */
     fun restore(
-        expense: List<CategoryGroup>,
-        income: List<CategoryGroup>,
-        accounts: List<String>,
-        noteTemplate: String,
+        expense: List<CategoryGroup>?,
+        income: List<CategoryGroup>?,
+        accounts: List<String>?,
+        noteTemplate: String?,
     ) {
-        if (expense.isNotEmpty()) writeGroups(BillType.EXPENSE, expense)
-        if (income.isNotEmpty()) writeGroups(BillType.INCOME, income)
-        if (accounts.isNotEmpty()) writeStrings(KEY_ACCOUNTS, DEFAULT_ACCOUNTS, accounts)
-        if (noteTemplate.isNotBlank()) this.noteTemplate = noteTemplate
+        expense?.let { writeGroups(BillType.EXPENSE, it) }
+        income?.let { writeGroups(BillType.INCOME, it) }
+        accounts?.let { writeStrings(KEY_ACCOUNTS, it) }
+        noteTemplate?.let { this.noteTemplate = it }
     }
 
     // ---------- 重置 ----------
@@ -162,50 +160,19 @@ object LedgerConfig {
 
     // ---------- 内部 ----------
 
-    private fun readGroups(key: String, fallback: List<CategoryGroup>): List<CategoryGroup> {
-        val raw = p().getString(key, null) ?: return fallback
-        return runCatching {
-            val array = JSONArray(raw)
-            (0 until array.length()).mapNotNull { index ->
-                val obj = array.optJSONObject(index) ?: return@mapNotNull null
-                val name = obj.optString("n").trim()
-                if (name.isEmpty()) return@mapNotNull null
-                val subs = obj.optJSONArray("s")?.let { arr ->
-                    (0 until arr.length()).map { arr.optString(it) }.filter { it.isNotBlank() }
-                }.orEmpty()
-                CategoryGroup(name, subs)
-            }.ifEmpty { fallback }
-        }.getOrDefault(fallback)
-    }
+    private fun readGroups(key: String, fallback: List<CategoryGroup>): List<CategoryGroup> =
+        LedgerListCodec.readGroups(runCatching { p().getString(key, null) }.getOrNull(), fallback)
 
     private fun writeGroups(type: BillType, groups: List<CategoryGroup>) {
         val key = if (type == BillType.INCOME) KEY_INCOME else KEY_EXPENSE
-        val fallback = if (type == BillType.INCOME) DEFAULT_INCOME else DEFAULT_EXPENSE
-        val cleaned = groups.filter { it.name.isNotBlank() }.distinctBy { it.name }
-            .ifEmpty { fallback }
-        val array = JSONArray()
-        cleaned.forEach { group ->
-            array.put(
-                JSONObject().apply {
-                    put("n", group.name)
-                    if (group.subs.isNotEmpty()) put("s", JSONArray(group.subs))
-                }
-            )
-        }
-        p().edit().putString(key, array.toString()).apply()
+        p().edit().putString(key, LedgerListCodec.encodeGroups(groups)).apply()
     }
 
-    private fun readStrings(key: String, fallback: List<String>): List<String> {
-        val raw = p().getString(key, null) ?: return fallback
-        return runCatching {
-            val array = JSONArray(raw)
-            (0 until array.length()).map { array.getString(it) }.filter { it.isNotBlank() }
-        }.getOrDefault(fallback)
-    }
+    private fun readStrings(key: String, fallback: List<String>): List<String> =
+        LedgerListCodec.readStrings(runCatching { p().getString(key, null) }.getOrNull(), fallback)
 
-    private fun writeStrings(key: String, fallback: List<String>, list: List<String>) {
-        val cleaned = list.map { it.trim() }.filter { it.isNotEmpty() }.distinct().ifEmpty { fallback }
-        p().edit().putString(key, JSONArray().apply { cleaned.forEach { put(it) } }.toString()).apply()
+    private fun writeStrings(key: String, list: List<String>) {
+        p().edit().putString(key, LedgerListCodec.encodeStrings(list)).apply()
     }
 
     /** 兼容上一版的扁平分类存储（v0.2 的 expense_categories） */

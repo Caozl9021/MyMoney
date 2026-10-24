@@ -40,6 +40,24 @@ data class AbPalette(
     val red: Color,
     val green: Color,
     val barTrack: Color,
+    /**
+     * 支出金额的柔和珊瑚色。只用于金额与图表，不替换 [red]：
+     * 删除、错误、失败提示仍走 [red]，两者语义不同，不能合并。
+     */
+    val expense: Color,
+    /** 收入金额（比 [green] 压暗一档，浅色小字号也过 4.5:1）。 */
+    val income: Color,
+    /** 退款金额与退款图表，独立于动态 accent，避免随壁纸变色。 */
+    val refund: Color,
+    /** 首页本月支出主卡：上浅下深的两档珊瑚底，避免整块强色。 */
+    val heroSurfaceTop: Color,
+    val heroSurfaceBottom: Color,
+    /** 主卡上的主数字：比正文更深一档的同色相墨色，不是纯黑。 */
+    val heroAmount: Color,
+    /** 主卡上的次级文字（收入/结余标签、今日辅助）。 */
+    val heroSecondaryLabel: Color,
+    /** 主卡描边：极淡的同色相，给浅底一点边缘。 */
+    val heroStroke: Color,
 )
 
 /** 浅色：纯白页面 + #F2F2F7 卡片以外的浅灰分组底（iOS systemGroupedBackground 反过来用）。 */
@@ -65,6 +83,17 @@ val LightPalette = AbPalette(
     red = Color(0xFFFF3B30),
     green = Color(0xFF34C759),
     barTrack = Color(0x1F767680),
+    // 珊瑚红：白底 5.13:1、#F7F7F7 上 4.78:1，满足正文对比度。
+    expense = Color(0xFFC63A47),
+    // 深绿：白底 5.07:1，避免 iOS 亮绿在白底小字号下偏淡。
+    income = Color(0xFF1B7F3B),
+    // 青蓝：白底 5.36:1，与收入和支出都能区分，且不随系统强调色漂移。
+    refund = Color(0xFF0E7490),
+    heroSurfaceTop = Color(0xFFFFF3EC),
+    heroSurfaceBottom = Color(0xFFFFE7E9),
+    heroAmount = Color(0xFF5C2A2E),
+    heroSecondaryLabel = Color(0xFF7A3B40),
+    heroStroke = Color(0x1FC63A47),
 )
 
 /** 深色：真黑页面（iOS 深色是 #000，不是 #121212）。 */
@@ -89,6 +118,15 @@ val DarkPalette = AbPalette(
     red = Color(0xFFFF453A),
     green = Color(0xFF30D158),
     barTrack = Color(0x2E767680),
+    // 深色下同一语义取各自亮档：这三档在 #1C1C1E 上均 ≥7:1。
+    expense = Color(0xFFFF8A8F),
+    income = Color(0xFF30D158),
+    refund = Color(0xFF4FC3E8),
+    heroSurfaceTop = Color(0xFF2B161A),
+    heroSurfaceBottom = Color(0xFF241014),
+    heroAmount = Color(0xFFFFD9D6),
+    heroSecondaryLabel = Color(0xFFE8B9B6),
+    heroStroke = Color(0x33FF8A8F),
 )
 
 object AbSpacing {
@@ -128,6 +166,11 @@ object AbSize {
 }
 
 object AbMotion {
+    /** 按压与选中反馈保持短促；布局展开更从容。减少动效时调用方使用0ms。 */
+    const val press = 120
+    const val selection = 150
+    const val detail = 200
+    const val pressedScale = 0.98f
     const val fast = 120
     const val normal = 220
     const val slow = 320

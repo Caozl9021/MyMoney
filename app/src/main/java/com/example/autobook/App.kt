@@ -6,7 +6,10 @@ import com.example.autobook.capture.ConfirmDelivery
 import com.example.autobook.data.CategorySuggester
 import com.example.autobook.data.LedgerConfig
 import com.example.autobook.data.NoteTemplate
-import com.example.autobook.data.PendingStore
+import com.example.autobook.data.RecognitionStore
+import com.example.autobook.capture.PageSessionStore
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 import com.example.autobook.data.Settings
 import com.example.autobook.ocr.MlKitOcrEngine
 import com.example.autobook.capture.CaptureModeManager
@@ -18,7 +21,7 @@ class App : Application() {
     override fun onCreate() {
         super.onCreate()
 
-        PendingStore.init(this)
+        RecognitionStore.init(this)
         LedgerConfig.init(this)
         com.example.autobook.data.LocalRuleStore.init(this)
         com.example.autobook.data.ExternalRuleStore.init(this)
@@ -30,24 +33,16 @@ class App : Application() {
         CaptureModeManager.init(this)
         val settings = Settings(this)
 
-        BillKit.install(
-            config = settings.toKitConfig(),
-            sink = { draft ->
-                // ① 自动分类/账户（只在用户清单里选）
-                val suggestion = CategorySuggester.suggest(draft, candidates = com.example.autobook.data.ExternalRuleStore.candidates())
-
-                // ② 备注按模板渲染（模板里可能引用分类/账户，所以要在上一句之后）
-                val withNames = draft.copy(
-                    category = suggestion.category,
-                    subCategory = suggestion.subCategory,
-                    account = suggestion.account,
-                )
-                val note = NoteTemplate.render(withNames).ifBlank { null }
-                val enriched = withNames.copy(note = note)
-
-                val delivery = ConfirmDelivery.deliver(this, enriched, settings.autoConfirm)
-                DebugBus.annotateOutcome(
-                    buildString {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val deliveries = Channel<Pair<com.example.billkit.BillDraft, DebugBus.State?>>(Channel.UNLIMITED)
+        scope.launch {
+            for ((draft, diagnostic) in deliveries) {
+                try {
+                    val suggestion = CategorySuggester.suggest(draft, candidates = com.example.autobook.data.ExternalRuleStore.candidates())
+                    val named = draft.copy(category = suggestion.category, subCategory = suggestion.subCategory, account = suggestion.account)
+                    val enriched = named.copy(note = NoteTemplate.render(named).ifBlank { null })
+                    val delivery = ConfirmDelivery.deliver(this@App, enriched, settings.autoConfirm)
+                    if (DebugBus.state.value == diagnostic) DebugBus.annotateOutcome(buildString {
                         append(" → ").append(delivery)
                         suggestion.categoryHit?.let { append(" 分类依据：").append(it.explanation) }
                         suggestion.accountHit?.let { append(" 账户依据：").append(it.explanation) }
@@ -57,10 +52,20 @@ class App : Application() {
                             append(']')
                         }
                         suggestion.account?.let { append(" (").append(it).append(')') }
-                    }
-                )
-            },
+                    })
+                } catch (error: Exception) {
+                    BillKit.retryFailedDraft(draft)
+                    if (DebugBus.state.value == diagnostic) DebugBus.annotateOutcome(" → history-failed:可重试")
+                    android.util.Log.e("AutoBook", "识别历史或确认投递失败，可重试", error)
+                }
+            }
+        }
+        val pageSessions = PageSessionStore(this)
+        BillKit.install(
+            config = settings.toKitConfig(),
+            sink = { draft -> check(deliveries.trySend(draft to DebugBus.state.value).isSuccess) },
             ocrEngine = MlKitOcrEngine(),
+            pageSessionProvider = pageSessions::sessionFor,
         )
 
         CaptureModeManager.reconcile(this)

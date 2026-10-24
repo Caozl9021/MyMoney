@@ -23,6 +23,10 @@ data class BillDraft(
     /** 账户（同上） */
     val account: String? = null,
     val note: String? = null,
+    val historyId: String? = null,
+    val transactionKey: String? = null,
+    val hasExplicitTime: Boolean = false,
+    val captureSessionId: String? = null,
 ) {
     /** 去重指纹：包名 + 金额 + 分钟 + 单号尾号（容忍几秒内的重复回调） */
     val fingerprint: String

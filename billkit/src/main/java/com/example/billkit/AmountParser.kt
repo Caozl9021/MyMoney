@@ -257,13 +257,19 @@ object AmountParser {
     }
 
     fun status(items: List<String>): Status {
-        val joined = items.joinToString(" ")
+        val rows = PaymentResultParser.normalize(items)
+        val help = Regex("^(?:支付|付款|交易)失败怎么办[？?]?$" )
+        val statusLabels = setOf("状态", "当前状态", "交易状态", "支付状态", "退款状态", "处理状态")
+        val evidence = rows.filterIndexed { index, row ->
+            !help.matches(row) || rows.getOrNull(index - 1)?.trimEnd('：', ':') in statusLabels
+        }
+        val joined = evidence.joinToString(" ")
         return when {
             failedWords.any { joined.contains(it) } -> Status.FAILED
             listOf("取消退款", "退款取消", "退款已取消", "退款关闭").any { joined.contains(it) } -> Status.CANCELLED
-            pendingWords.any { word -> items.any { containsStatusWord(it, word) } } ||
-                refundApplicationIsStatus(items) -> Status.PENDING
-            isCompletedRefund(items) -> Status.SUCCESS
+            pendingWords.any { word -> evidence.any { containsStatusWord(it, word) } } ||
+                refundApplicationIsStatus(evidence) -> Status.PENDING
+            isCompletedRefund(evidence) -> Status.SUCCESS
             cancelledWords.any { joined.contains(it) } -> Status.CANCELLED
             successWords.any { joined.contains(it) } -> Status.SUCCESS
             else -> Status.UNKNOWN

@@ -99,11 +99,11 @@ class PageClassifier {
     private val dateRowRe = Regex("""^\d{1,2}月\d{1,2}日\s*\d{1,2}:\d{2}$""")
 
     fun classify(snapshot: UiSnapshot): PageMatch? {
-        val items = snapshot.items
+        val items = PaymentResultParser.normalize(snapshot.items)
         if (items.size < 3) return null
         if (looksLikeListPage(items) || looksLikeNonBillPage(items)) return null
 
-        ExternalPageRules.match(snapshot)?.let { return it }
+        ExternalPageRules.match(snapshot.copy(items = items))?.let { return it }
         val pkg = snapshot.packageName
         return when {
             pkg == Packages.WECHAT -> wechat(snapshot.activityClass, items)
@@ -224,6 +224,9 @@ class PageClassifier {
         }
         if (has(items, "账单管理") && has(items, "对此订单有疑问")) {
             return PageMatch(PageKind.ALIPAY_BILL, "支付宝账单管理")
+        }
+        if (PaymentResultParser.hasResultTitle(items) && PaymentResultParser.isTrustedResult(items)) {
+            return PageMatch(PageKind.ALIPAY_PAY, "支付宝结构化支付结果")
         }
         if (AmountParser.status(items) == AmountParser.Status.SUCCESS &&
             hasAny(items, "交易方式", "付款方式", "支付方式")

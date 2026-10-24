@@ -15,18 +15,10 @@ import android.view.KeyEvent
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.content.ContextCompat
@@ -38,12 +30,20 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.example.autobook.data.AppDb
 import com.example.autobook.data.BillWriter
-import com.example.autobook.data.PendingStore
+import com.example.autobook.data.RecognitionStore
+import kotlinx.coroutines.*
 import com.example.autobook.export.CostShare
 import com.example.autobook.ui.AutoBookTheme
+import com.example.autobook.ui.ConfirmResultSheet
+import com.example.autobook.ui.BillResultActivity
 import com.example.autobook.ui.ConfirmSheet
+import com.example.autobook.ui.ConfirmFeedback
+import com.example.autobook.ui.design.AbHaptic
+import android.widget.Toast
 import com.example.billkit.BillDraft
+import com.example.billkit.BillType
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -56,7 +56,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  * 就根本没有 BAL 这回事 —— 识别完成的一瞬间卡片就浮在支付宝/微信上面，
  * 不闪一下、不出通知、用户不需要点任何东西。这是唯一能做到"直接弹出"的路径。
  *
- * 生命周期：一次只允许一张卡；忽略 / 记一笔 / 导入 / 返回键 / 熄屏 都会撤掉窗口。
+ * 生命周期：一次只允许一张编辑卡；保存后原位显示结果，下一笔可立即替换结果。
+ * 返回键 / 熄屏关闭未保存草稿时保留待确认，关闭结果不改识别状态。
  * 没有悬浮窗权限时 [canShow] 为 false，调用方应退回 Activity 方案。
  */
 object ConfirmOverlay {
@@ -66,6 +67,7 @@ object ConfirmOverlay {
     /** 等主线程把窗口挂上的上限（调用方一般在后台采集线程） */
     private const val SHOW_TIMEOUT_MS = 800L
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val main = Handler(Looper.getMainLooper())
 
     @Volatile
@@ -108,18 +110,34 @@ object ConfirmOverlay {
     /** 撤掉确认卡（幂等，任意线程可调） */
     fun dismiss() {
         if (Looper.myLooper() == Looper.getMainLooper()) {
-            dismissOnMain()
+            session?.let { card -> appContext?.let { setAside(it, card) } }
         } else {
-            main.post { dismissOnMain() }
+            main.post { session?.let { card -> appContext?.let { setAside(it, card) } } }
         }
     }
 
     // ------------------------------------------------------------------
 
-    private fun showOnMain(app: Context, draft: BillDraft): Boolean {
-        // 同一时刻只留一张卡
-        dismissOnMain()
+    private class Session(val draft: BillDraft) {
+        var edited: BillDraft = draft
+        var result by mutableStateOf<BillWriter.SaveResult?>(null)
+        var sharing by mutableStateOf(false)
+        var shareMessage by mutableStateOf<String?>(null)
+        var saving by mutableStateOf(false)
+        var error by mutableStateOf<String?>(null)
+        var busyLabel by mutableStateOf("保存中…")
+        var pickerBackHandler: (() -> Boolean)? = null
+    }
+    private var session: Session? = null
 
+    private fun showOnMain(app: Context, draft: BillDraft): Boolean {
+        // Keep the existing editor intact; another draft remains durable and uses fallback delivery.
+        if (session != null) {
+            if (session?.result == null) return false
+            dismissOnMain()
+        }
+
+        val session = Session(draft)
         val wm = app.getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val owner = SheetOwner()
         val root = FrameLayout(app).apply {
@@ -127,7 +145,7 @@ object ConfirmOverlay {
             setOnKeyListener { _, keyCode, event ->
                 if (keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP) {
                     // 返回键 = 先放一边，不是丢弃
-                    setAside(app, draft)
+                    if (!session.saving && session.pickerBackHandler?.invoke() != true) setAside(app, session)
                     true
                 } else {
                     false
@@ -143,7 +161,7 @@ object ConfirmOverlay {
             setViewCompositionStrategy(
                 ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed,
             )
-            setContent { SheetContent(app, draft) }
+            setContent { SheetContent(app, session) }
         }
         root.addView(
             compose,
@@ -172,9 +190,10 @@ object ConfirmOverlay {
             windowManager = wm
             rootView = root
             this.owner = owner
+            this.session = session
             showing = true
-            registerScreenOff(app, draft)
-                com.example.autobook.capture.ConfirmDelivery.cancel(app, draft.fingerprint)
+            registerScreenOff(app, session)
+            com.example.autobook.capture.ConfirmDelivery.cancel(app, draft.historyId ?: draft.fingerprint)
             root.requestFocus()
             true
         } catch (e: Exception) {
@@ -191,6 +210,7 @@ object ConfirmOverlay {
         windowManager = null
         rootView = null
         showing = false
+        session = null
 
         if (root != null && wm != null) {
             runCatching { wm.removeView(root) }
@@ -202,63 +222,131 @@ object ConfirmOverlay {
     }
 
     @Composable
-    private fun SheetContent(app: Context, draft: BillDraft) {
+    private fun SheetContent(app: Context, card: Session) {
         AutoBookTheme {
-            var saving by remember { mutableStateOf(false) }
-            var saveError by remember { mutableStateOf<String?>(null) }
-            var visible by remember { mutableStateOf(false) }
-            LaunchedEffect(Unit) { visible = true }
-            val alpha by animateFloatAsState(
-                targetValue = if (visible) 1f else 0f,
-                animationSpec = tween(durationMillis = 140),
-                label = "confirm-sheet",
-            )
-            Box(Modifier.fillMaxSize().alpha(alpha)) {
-                ConfirmSheet(
-                    draft = draft,
-                    saving = saving,
-                    errorMessage = saveError,
-                    onSave = { edited ->
-                        if (!saving) {
-                            saving = true
-                            saveError = null
-                            BillWriter.save(app, edited, original = draft,
-                                onDone = { dismiss() },
-                                onError = { saving = false; saveError = it.message ?: "保存失败，请重试" })
-                        }
-                    },
-                    onImport = { edited ->
-                        if (!saving) {
-                            saving = true
-                            saveError = null
-                            BillWriter.save(app, edited, original = draft,
-                                onDone = { dismiss(); runCatching { CostShare.shareBills(app, listOf(edited), onlyTarget = true) } },
-                                onError = { saving = false; saveError = it.message ?: "保存失败，请重试" })
-                        }
-                    },
-                    onIgnore = { if (!saving) { PendingStore.remove(draft.fingerprint); dismiss() } },
-                    onDismiss = { if (!saving) setAside(app, draft) },
-                    noteSuggestions = com.example.autobook.ui.rememberNoteSuggestions(),
+            val result = card.result
+            if (result != null) {
+                ConfirmResultSheet(
+                    draft = result.bill?.let(BillWriter::toDraft) ?: card.edited,
+                    title = ConfirmFeedback.saved(result.inserted),
+                    detail = ConfirmFeedback.resultDetail(result),
+                    canView = result.bill != null,
+                    sharing = card.sharing,
+                    shareMessage = card.shareMessage,
+                    onDismiss = { if (session === card) dismissOnMain() },
+                    onView = { result.bill?.let { if (BillResultActivity.open(app, it.id) && session === card) dismissOnMain() } },
+                    onShare = if (result.bill != null && result.bill.type != BillType.REFUND.name)
+                        ({ share(app, card) }) else null,
                 )
+            } else ConfirmSheet(
+                draft = card.edited,
+                saving = card.saving,
+                errorMessage = card.error,
+                busyLabel = card.busyLabel,
+                onSave = { edited -> save(app, card, edited) },
+                onImport = { edited -> save(app, card, edited) },
+                onIgnore = {
+                    if (session === card && !card.saving) {
+                        updateHistory(card) { card.draft.historyId?.let { RecognitionStore.ignore(it) } }
+                    }
+                },
+                onDismiss = { edited -> card.edited = edited; setAside(app, card) },
+                onDraftChange = { card.edited = it },
+                onPickerBackHandler = { card.pickerBackHandler = it },
+                noteSuggestions = com.example.autobook.ui.rememberNoteSuggestions(),
+            )
+        }
+    }
+
+    private fun save(app: Context, card: Session, edited: BillDraft) {
+        if (session !== card || card.saving) return
+        // Native back and screen-off consult this same synchronous flag.
+        card.saving = true
+        card.error = null
+        card.busyLabel = "保存中…"
+        card.edited = edited
+        BillWriter.saveWithResult(app, edited, original = card.draft,
+            onDone = { stored ->
+                card.result = stored
+                card.saving = false
+                card.pickerBackHandler = null
+                if (session === card) rootView?.let { AbHaptic(it).confirm() }
+            },
+            onError = {
+                card.saving = false
+                card.error = it.message ?: "保存失败，请重试"
+                if (session !== card) {
+                    // A replaced card still needs a recoverable draft when its write fails.
+                    scope.launch { runCatching { RecognitionStore.preserve(edited) } }
+                    Toast.makeText(app, "保存失败，已放到待确认，可重试", Toast.LENGTH_LONG).show()
+                }
+            },
+        )
+    }
+
+    private fun share(app: Context, card: Session) {
+        val stored = card.result ?: return
+        val bill = stored.bill ?: return
+        if (session !== card || card.sharing || bill.type == BillType.REFUND.name) return
+        card.sharing = true
+        card.shareMessage = null
+        scope.launch {
+            try {
+                val current = withContext(Dispatchers.IO) { AppDb.get(app).bills().byId(bill.id) }
+                if (session !== card) return@launch
+                if (current == null) {
+                    card.result = stored.copy(bill = null)
+                    card.shareMessage = "本地记录已处理，但关联账单已删除，无法分享"
+                } else {
+                    val launched = runCatching { CostShare.shareBills(app, listOf(BillWriter.toDraft(current)), onlyTarget = true) }.getOrNull() != null
+                    val marked = runCatching { card.draft.historyId?.let { RecognitionStore.markShare(it, launched) } }.isSuccess
+                    card.shareMessage = ConfirmFeedback.shared(stored.inserted, launched) + if (marked) "" else "；分享状态保存失败"
+                    if (launched && session === card) {
+                        // The overlay must not cover the target app's own import confirmation.
+                        dismissOnMain()
+                        Toast.makeText(app, card.shareMessage, Toast.LENGTH_LONG).show()
+                    }
+                }
+            } catch (failure: Exception) {
+                card.shareMessage = "已保存到本地，分享失败，可重试"
+            } finally {
+                card.sharing = false
             }
         }
     }
 
-    /**
-     * 下滑 / 点空白 / 返回键 / 熄屏：用户没说"不要"，草稿回到待确认，首页可以补记。
-     * 只有顶部「忽略」才真正丢弃。
-     */
-    private fun setAside(app: Context, draft: BillDraft) {
-        if (!showing) return
-        PendingStore.add(draft)
-        dismiss()
-        main.post { android.widget.Toast.makeText(app, "已放到待确认，可在首页补记", android.widget.Toast.LENGTH_SHORT).show() }
+    /** User dismissal preserves the draft; an in-flight save owns it until its result. */
+    private fun setAside(app: Context, card: Session) {
+        if (session !== card || card.saving) return
+        if (card.result != null) {
+            dismissOnMain()
+            return
+        }
+        updateHistory(card) {
+            RecognitionStore.preserve(card.edited)
+            Toast.makeText(app, "已放到待确认，可在首页补记", Toast.LENGTH_SHORT).show()
+        }
     }
 
-    private fun registerScreenOff(app: Context, draft: BillDraft) {
+    private fun updateHistory(card: Session, action: suspend () -> Unit) {
+        if (session !== card || card.saving) return
+        card.saving = true
+        scope.launch {
+            try {
+                action()
+                if (session === card) dismissOnMain()
+            } catch (error: Exception) {
+                card.error = error.message ?: "更新失败，请重试"
+            } finally {
+                card.saving = false
+            }
+        }
+    }
+
+    private fun registerScreenOff(app: Context, card: Session) {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
-                if (intent?.action == Intent.ACTION_SCREEN_OFF) { PendingStore.add(draft); dismiss() }
+                if (intent?.action == Intent.ACTION_SCREEN_OFF) setAside(app, card)
             }
         }
         val ok = runCatching {

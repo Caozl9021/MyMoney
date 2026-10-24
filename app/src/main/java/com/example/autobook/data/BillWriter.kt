@@ -34,6 +34,8 @@ object BillWriter {
      */
     private const val DEDUPE_WINDOW_MS = 10 * 60 * 1000L
 
+    data class SaveResult(val inserted: Boolean, val bill: BillEntity?)
+
     /**
      * 保存一条草稿。重复（同指纹 10 分钟内已存在）时静默跳过，但仍会把草稿
      * 从待确认队列里移除 —— 用户点过「记一笔」，就不该再留在队列里。
@@ -41,51 +43,58 @@ object BillWriter {
      * @param onDone 落库结束后回调，`true` = 真的插入了；用于 UI 提示「这笔已经记过了」。
      *   回调在主线程执行。
      */
-    fun save(context: Context, draft: BillDraft, original: BillDraft? = null, onDone: ((Boolean) -> Unit)? = null, onError: ((Throwable) -> Unit)? = null) {
+    fun save(context: Context, draft: BillDraft, original: BillDraft? = null, onDone: ((Boolean) -> Unit)? = null, onError: ((Throwable) -> Unit)? = null) =
+        saveWithResult(context, draft, original, { onDone?.invoke(it.inserted) }, onError)
+
+    /** Returns the entity selected by the transaction, including an existing record's real identity. */
+    fun saveWithResult(context: Context, draft: BillDraft, original: BillDraft? = null,
+        onDone: ((SaveResult) -> Unit)? = null, onError: ((Throwable) -> Unit)? = null) {
         val app = context.applicationContext
         scope.launch {
             try {
-            val inserted = writeLock.withLock {
-                val db = AppDb.get(app)
-                db.withTransaction {
-                val since = System.currentTimeMillis() - DEDUPE_WINDOW_MS
-                val dup = db.bills().countRecentDuplicate(
-                    fp = draft.fingerprint,
-                    pkg = draft.sourcePkg,
-                    cents = draft.priceCents,
-                    type = draft.type.name,
-                    tail = draft.orderTail,
-                    since = since,
-                ) > 0
-                if (dup) {
-                    false
-                } else {
-                    db.bills().insert(
-                        BillEntity(
-                            priceCents = draft.priceCents,
-                            type = draft.type.name,
-                            timeMillis = draft.timeMillis,
-                            merchant = draft.merchant,
-                            method = draft.method,
-                            orderTail = draft.orderTail,
-                            sourcePkg = draft.sourcePkg,
-                            strategy = draft.strategy,
-                            fingerprint = draft.fingerprint,
-                            createdAt = System.currentTimeMillis(),
-                            category = draft.category,
-                            subCategory = draft.subCategory,
-                            account = draft.account,
-                            note = draft.note,
-                        )
-                    )
-                    true
+                val result = writeLock.withLock {
+                    val db = AppDb.get(app)
+                    db.withTransaction {
+                        val dao = db.bills()
+                        val history = draft.historyId?.let { id ->
+                            db.recognitions().byId(id) ?: error("识别记录不存在，请从历史重新打开")
+                        }
+                        if (history?.status == RecognitionStatus.RECORDED) {
+                            // A deleted association is deliberately not resurrected or guessed by amount.
+                            SaveResult(false, history.billId?.let { dao.byId(it) })
+                        } else {
+                            val since = System.currentTimeMillis() - DEDUPE_WINDOW_MS
+                            var existing = if (history != null) dao.byRecognitionId(history.id)
+                                ?: dao.legacyDuplicate(draft.fingerprint, draft.sourcePkg, draft.priceCents,
+                                    draft.type.name, draft.orderTail, since)
+                                else dao.recentDuplicate(draft.fingerprint, draft.sourcePkg, draft.priceCents,
+                                    draft.type.name, draft.orderTail, since)
+                            if (history != null && existing != null && existing.recognitionId == null) {
+                                existing = existing.copy(recognitionId = history.id)
+                                dao.update(existing)
+                            }
+                            val inserted = existing == null
+                            val bill = existing ?: BillEntity(priceCents = draft.priceCents, type = draft.type.name,
+                                timeMillis = draft.timeMillis, merchant = draft.merchant, method = draft.method,
+                                orderTail = draft.orderTail, sourcePkg = draft.sourcePkg, strategy = draft.strategy,
+                                fingerprint = draft.fingerprint, createdAt = System.currentTimeMillis(),
+                                category = draft.category, subCategory = draft.subCategory,
+                                account = draft.account, note = draft.note, recognitionId = history?.id).let {
+                                    it.copy(id = dao.insert(it))
+                                }
+                            history?.let {
+                                db.recognitions().update(RecognitionEntity.fromDraft(draft.copy(historyId = it.id), it.identityKey, it.recognizedAt)
+                                    .copy(status = RecognitionStatus.RECORDED, billId = bill.id,
+                                        updatedAt = System.currentTimeMillis(), shareState = it.shareState))
+                            }
+                            SaveResult(inserted, bill)
+                        }
+                    }
                 }
-                }
-            }
-            if (inserted) com.example.autobook.systems.SystemIntegration.refresh(app)
-            PendingStore.remove(original?.fingerprint ?: draft.fingerprint)
-            if (inserted && original != null) runCatching { LocalRuleStore.recordConfirmation(original, draft) }
-            withContext(Dispatchers.Main) { onDone?.invoke(inserted) }
+                if (result.inserted) com.example.autobook.systems.SystemIntegration.refresh(app)
+                if (draft.historyId == null) PendingStore.remove(original?.fingerprint ?: draft.fingerprint)
+                if (result.inserted && original != null) runCatching { LocalRuleStore.recordConfirmation(original, draft) }
+                withContext(Dispatchers.Main) { onDone?.invoke(result) }
             } catch (error: Exception) {
                 withContext(Dispatchers.Main) { onError?.invoke(error) }
             }

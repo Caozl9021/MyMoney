@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <permission android:name="com.example.autobook.permission.LSP_PROBE" android:protectionLevel="signature" />
+    <uses-permission android:name="com.example.autobook.permission.LSP_PROBE" />
+
     <!-- 记录类 App 不需要联网；如果以后要同步，再加 INTERNET -->
     <!-- 悬浮确认卡片（root 路径下唯一不受后台启动限制的弹窗方式） -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
@@ -43,16 +46,25 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.AutoBook">
 
+        <provider
+            android:name=".lsp.LspStatusProvider"
+            android:authorities="com.example.autobook.lsp.status"
+            android:exported="true"
+            android:grantUriPermissions="false" />
+
         <!-- Xposed 模块元数据（内置 LSP 增强功能） -->
         <meta-data
             android:name="xposedmodule"
             android:value="true" />
         <meta-data
             android:name="xposeddescription"
-            android:value="防止系统撤销无障碍权限，提升服务稳定性（可选功能）" />
+            android:value="系统连接诊断与有限后台终止保护（可选功能）" />
         <meta-data
             android:name="xposedminversion"
             android:value="93" />
+
+        <activity android:name=".ui.BillResultActivity" android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name=".ui.MainActivity"

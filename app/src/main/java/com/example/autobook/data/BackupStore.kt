@@ -1,6 +1,7 @@
 package com.example.autobook.data
 
 import android.content.Context
+import androidx.room.withTransaction
 import com.example.billkit.Packages
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -24,8 +25,10 @@ object BackupStore {
 
     /** 生成 JSON 文本（IO 线程；几千条账单大约几百毫秒） */
     suspend fun exportJson(context: Context): String = withContext(Dispatchers.IO) {
+        RecognitionStore.init(context)
+        RecognitionStore.awaitReady()
         val db = AppDb.get(context)
-        val rows = db.bills().allOnce()
+        val (rows, historyRows) = db.withTransaction { db.bills().allOnce() to db.recognitions().allOnce() }
         val settings = Settings(context)
         Backup.Snapshot(
             exportedAt = System.currentTimeMillis(),
@@ -45,8 +48,11 @@ object BackupStore {
                     subCategory = r.subCategory,
                     account = r.account,
                     note = r.note,
+                    recognitionId = r.recognitionId,
+                    id = r.id,
                 )
             },
+            history = historyRows,
             ledger = Backup.Ledger(
                 expense = LedgerConfig.expenseGroups,
                 income = LedgerConfig.incomeGroups,
@@ -71,46 +77,72 @@ object BackupStore {
     suspend fun restore(context: Context, json: String, mode: Mode): Backup.RestoreStats =
         withContext(Dispatchers.IO) {
             val snapshot = Backup.decode(json)
+            RecognitionStore.init(context)
+            RecognitionStore.awaitReady()
             val db = AppDb.get(context)
 
-            if (mode == Mode.REPLACE) db.bills().deleteAll()
-
-            // 合并模式下先查已有指纹：备份文件里同一条出现两次也要过滤掉
-            val existing = if (mode == Mode.MERGE) {
-                db.bills().allOnce().mapTo(HashSet()) { it.fingerprint }
-            } else {
-                HashSet()
+            val (billCount, historyCount) = db.withTransaction {
+                val historyDao = db.recognitions()
+                if (mode == Mode.REPLACE) {
+                    db.bills().deleteAll()
+                    if (snapshot.history != null) historyDao.deleteAll()
+                    else historyDao.allOnce().forEach { historyDao.update(it.copy(billId = null)) }
+                }
+                // Resolve stable UUIDs and strong identities before inserting linked bills.
+                val canonical = HashMap<String, String>()
+                val existingHistory = HashMap<String, RecognitionEntity?>()
+                snapshot.history.orEmpty().forEach { incoming ->
+                    val sameId = historyDao.byId(incoming.id)
+                    require(sameId == null || sameId.identityKey == incoming.identityKey) { "识别历史ID对应不同身份，未恢复" }
+                    val local = sameId ?: historyDao.byIdentity(incoming.identityKey)
+                    canonical[incoming.id] = local?.id ?: incoming.id
+                    existingHistory[incoming.id] = local
+                }
+                val idMap = HashMap<Long, Long>()
+                val recognitionBills = HashMap<String, Long>()
+                var inserted = 0
+                snapshot.bills.forEach { b ->
+                    val recognitionId = b.recognitionId?.let { canonical[it] ?: it }
+                    // Legacy backups have no stable UUID: keep their original fingerprint compatibility.
+                    val local = if (recognitionId != null) {
+                        db.bills().byRecognitionId(recognitionId)
+                            ?: db.bills().byFingerprint(b.fingerprint)?.takeIf { it.recognitionId == null }
+                    } else db.bills().byFingerprint(b.fingerprint)
+                    val billId = if (local != null) {
+                        if (recognitionId != null && local.recognitionId == null) db.bills().update(local.copy(recognitionId = recognitionId))
+                        local.id
+                    } else {
+                        inserted++
+                        db.bills().insert(BillEntity(priceCents = b.priceCents, type = b.type,
+                            timeMillis = b.timeMillis, merchant = b.merchant, method = b.method,
+                            orderTail = b.orderTail, sourcePkg = b.sourcePkg, strategy = b.strategy,
+                            fingerprint = b.fingerprint, createdAt = b.createdAt, category = b.category,
+                            subCategory = b.subCategory, account = b.account, note = b.note,
+                            recognitionId = recognitionId))
+                    }
+                    b.id?.let { idMap[it] = billId }
+                    recognitionId?.let { recognitionBills[it] = billId }
+                }
+                snapshot.history.orEmpty().forEach { incoming ->
+                    val local = existingHistory[incoming.id]
+                    val id = canonical.getValue(incoming.id)
+                    val linked = recognitionBills[id] ?: incoming.billId?.let(idMap::get)
+                    val restored = mergeRecognition(local, incoming.copy(id = id, billId = linked))
+                    if (local == null) historyDao.insert(restored) else historyDao.update(restored)
+                }
+                inserted to snapshot.history.orEmpty().size
             }
-            val fresh = ArrayList<BillEntity>(snapshot.bills.size)
-            snapshot.bills.forEach { b ->
-                if (!existing.add(b.fingerprint)) return@forEach
-                fresh += BillEntity(
-                    priceCents = b.priceCents,
-                    type = b.type,
-                    timeMillis = b.timeMillis,
-                    merchant = b.merchant,
-                    method = b.method,
-                    orderTail = b.orderTail,
-                    sourcePkg = b.sourcePkg,
-                    strategy = b.strategy,
-                    fingerprint = b.fingerprint,
-                    createdAt = b.createdAt,
-                    category = b.category,
-                    subCategory = b.subCategory,
-                    account = b.account,
-                    note = b.note,
-                )
-            }
-            if (fresh.isNotEmpty()) db.bills().insertAll(fresh)
 
             snapshot.ledger?.let {
-                LedgerConfig.restore(it.expense, it.income, it.accounts, it.noteTemplate)
+                LedgerConfig.restore(it.expense.takeIf { _ -> it.hasExpense }, it.income.takeIf { _ -> it.hasIncome },
+                    it.accounts.takeIf { _ -> it.hasAccounts }, it.noteTemplate.takeIf { _ -> it.hasNoteTemplate })
                 it.localRules?.let { rules -> LocalRuleStore.restore(rules) }
             }
 
             com.example.autobook.systems.SystemIntegration.refresh(context)
             Backup.RestoreStats(
-                bills = fresh.size,
+                bills = billCount,
+                history = historyCount,
                 ledger = snapshot.ledger != null,
                 settings = snapshot.settings,
             )
@@ -139,4 +171,12 @@ object BackupStore {
     /** 白名单为空时至少保留默认清单，避免恢复后什么都识别不到 */
     fun safeWhitelist(list: List<String>): Set<String> =
         list.filter { it.isNotBlank() }.toSet().ifEmpty { Packages.defaultWhitelist }
+}
+
+/** A restore may advance processing state, but cannot make a recorded item pending again. */
+internal fun mergeRecognition(local: RecognitionEntity?, incoming: RecognitionEntity): RecognitionEntity {
+    if (local == null) return incoming
+    if (local.status == RecognitionStatus.RECORDED) return local.copy(billId = incoming.billId ?: local.billId)
+    if (incoming.status == RecognitionStatus.RECORDED) return incoming.copy(id = local.id, identityKey = local.identityKey)
+    return if (incoming.updatedAt > local.updatedAt) incoming.copy(id = local.id, identityKey = local.identityKey) else local
 }

@@ -24,5 +24,10 @@ object ConfirmIntents {
             putExtra(ConfirmActivity.EXTRA_SUB_CATEGORY, draft.subCategory)
             putExtra(ConfirmActivity.EXTRA_ACCOUNT, draft.account)
             putExtra(ConfirmActivity.EXTRA_NOTE, draft.note)
+            putExtra(ConfirmActivity.EXTRA_HISTORY_ID, draft.historyId)
+            putExtra(ConfirmActivity.EXTRA_TRANSACTION_KEY, draft.transactionKey)
+            putExtra(ConfirmActivity.EXTRA_EXPLICIT_TIME, draft.hasExplicitTime)
+            putExtra(ConfirmActivity.EXTRA_CAPTURE_SESSION, draft.captureSessionId)
+            data = android.net.Uri.parse("autobook://confirm/" + android.net.Uri.encode(draft.historyId ?: draft.fingerprint))
         }
 }

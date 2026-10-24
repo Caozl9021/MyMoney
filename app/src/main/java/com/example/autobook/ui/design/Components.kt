@@ -6,7 +6,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -24,6 +24,9 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
@@ -334,50 +337,81 @@ fun AbSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
 // 分段控件
 // ---------------------------------------------------------------------------
 
-/** iOS 分段控件：容器浅灰，选中项浮起成白色小胶囊。 */
+/**
+ * iOS 分段控件：胶囊底槽 + 一枚会横向滑动的白色滑块。
+ *
+ * 滑块是**同一个** Box 在选项之间平移，不是每个选项各自淡入淡出；
+ * 圆角与底槽一致（capsule），避免滑块看起来像贴在方形槽里的圆角方块。
+ * 减少动效时动画时长归零且不画投影。
+ */
 @Composable
 fun Segmented(
     options: List<String>,
     selected: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
 ) {
     val p = LocalAbPalette.current
-    Row(
+    val reduceMotion = LocalReduceMotion.current
+    val count = options.size.coerceAtLeast(1)
+    val target = selected.coerceIn(0, count - 1)
+    val position by animateFloatAsState(
+        targetValue = target.toFloat(),
+        animationSpec = tween(
+            durationMillis = if (reduceMotion) 0 else AbMotion.selection,
+            easing = androidx.compose.animation.core.FastOutSlowInEasing,
+        ),
+        label = "segment-position",
+    )
+    val gap = 2.dp
+    val shape = RoundedCornerShape(AbRadius.capsule)
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(AbRadius.chip))
+            .clip(shape)
             .background(p.fill)
             .padding(2.dp),
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        options.forEachIndexed { index, label ->
-            val active = index == selected
-            val bg by animateColorAsState(
-                if (active) p.cardBg else Color.Transparent,
-                animationSpec = tween(if (LocalReduceMotion.current) 0 else 220), label = "seg-bg",
-            )
-            val fg by animateColorAsState(if (active) p.label else p.secondaryLabel, animationSpec = tween(if (LocalReduceMotion.current) 0 else 220), label = "seg-fg")
+        val cellWidth = (maxWidth - gap * (count - 1)) / count
+        // 滑块层与内容同大小：先让 Row 决定高度，再按最终高度铺满。
+        Box(Modifier.matchParentSize()) {
             Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 48.dp)
-                    .then(
-                        if (active) Modifier.shadow(2.dp, RoundedCornerShape(8.dp)) else Modifier,
-                    )
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(bg)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                    ) { onSelect(index) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    label,
-                    style = AbType.footnote.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
-                    color = fg,
+                Modifier
+                    .offset(x = (cellWidth + gap) * position)
+                    .width(cellWidth)
+                    .fillMaxHeight()
+                    .then(if (reduceMotion) Modifier else Modifier.shadow(2.dp, shape))
+                    .clip(shape)
+                    .background(p.cardBg),
+            )
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(gap)) {
+            options.forEachIndexed { index, label ->
+                val active = index == target
+                val fg by animateColorAsState(
+                    if (active) p.label else p.secondaryLabel,
+                    animationSpec = tween(if (reduceMotion) 0 else AbMotion.selection), label = "seg-fg",
                 )
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            enabled = enabled,
+                            role = Role.Tab,
+                        ) { onSelect(index) }
+                        .semantics { this.selected = active; stateDescription = if (active) "已选中" else "未选中" },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        label,
+                        style = AbType.footnote.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
+                        color = fg,
+                    )
+                }
             }
         }
     }
@@ -387,66 +421,99 @@ fun Segmented(
 // 按钮
 // ---------------------------------------------------------------------------
 
-/** 主按钮：通栏胶囊。 */
+/** 主按钮：按下只反馈触感，成功反馈必须由实际操作结果触发。 */
 @Composable
 fun PrimaryButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    busy: Boolean = false,
+    busyLabel: String = "处理中…",
 ) {
-    val p = LocalAbPalette.current
-    val haptic = rememberAbHaptic()
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.97f else 1f, animationSpec = tween(if (LocalReduceMotion.current) 0 else 120), label = "btn-scale")
-
-    Box(
-        modifier = modifier
-            .heightIn(min = 50.dp)
-            .scale(scale)
-            .clip(RoundedCornerShape(AbRadius.capsule))
-            .background(if (enabled) p.accent else p.fill)
-            .clickable(
-                enabled = enabled,
-                interactionSource = interaction,
-                indication = null,
-            ) {
-                haptic.confirm()
-                onClick()
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text,
-            style = AbType.headline,
-            color = if (enabled) p.onAccent else p.tertiaryLabel,
-        )
-    }
+    ActionButton(text, onClick, modifier, enabled, busy, busyLabel, primary = true)
 }
 
-/** 次要按钮：透明底 + 细描边。 */
+/** 次要按钮：透明底 + 细描边，共用按压、忙碌与读屏语义。 */
 @Composable
 fun SecondaryButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     tint: Color? = null,
+    enabled: Boolean = true,
+    busy: Boolean = false,
+    busyLabel: String = "处理中…",
+) {
+    ActionButton(text, onClick, modifier, enabled, busy, busyLabel, primary = false, tint = tint)
+}
+
+/** 危险操作使用次要层级；提交、失败与撤销仍由调用方决定。 */
+@Composable
+fun DestructiveButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    busy: Boolean = false,
+    busyLabel: String = "处理中…",
 ) {
     val p = LocalAbPalette.current
+    ActionButton(text, onClick, modifier, enabled, busy, busyLabel, primary = false, tint = p.red)
+}
+
+@Composable
+private fun ActionButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier,
+    enabled: Boolean,
+    busy: Boolean,
+    busyLabel: String,
+    primary: Boolean,
+    tint: Color? = null,
+) {
+    val p = LocalAbPalette.current
+    val haptic = rememberAbHaptic()
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val canClick = enabled && !busy
+    val reduceMotion = LocalReduceMotion.current
+    val animatedScale by animateFloatAsState(
+        if (pressed && canClick) AbMotion.pressedScale else 1f,
+        animationSpec = tween(if (reduceMotion) 0 else AbMotion.press), label = "button-press",
+    )
+    val shape = RoundedCornerShape(AbRadius.capsule)
     Box(
-        modifier = modifier
-            .heightIn(min = 50.dp)
-            .clip(RoundedCornerShape(AbRadius.capsule))
-            .border(1.dp, p.separator, RoundedCornerShape(AbRadius.capsule))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            ),
+        modifier = modifier.heightIn(min = 50.dp)
+            .scale(if (reduceMotion) 1f else animatedScale)
+            .clip(shape)
+            .background(if (primary) { if (canClick || busy) p.accent else p.fill } else Color.Transparent)
+            .then(if (primary) Modifier else Modifier.border(1.dp, p.separator, shape))
+            .clickable(enabled = canClick, role = Role.Button, interactionSource = interaction, indication = null) {
+                haptic.select()
+                onClick()
+            }
+            .semantics {
+                stateDescription = when { busy -> busyLabel; !enabled -> "不可用"; else -> "可用" }
+                if (busy) {
+                    progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate
+                    liveRegion = LiveRegionMode.Polite
+                }
+            }
+            .padding(horizontal = AbSpacing.m, vertical = AbSpacing.m),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, style = AbType.headline, color = tint ?: p.label)
+        Text(
+            if (busy) busyLabel else text,
+            style = AbType.headline,
+            color = when {
+                primary && (canClick || busy) -> p.onAccent
+                !canClick -> p.secondaryLabel
+                else -> tint ?: p.label
+            },
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
     }
 }
 
@@ -522,23 +589,75 @@ fun CapsuleChip(
     tint: Color? = null,
 ) {
     val p = LocalAbPalette.current
-    val c = p.accent
-    val bg by animateColorAsState(if (selected) c.copy(alpha = 0.13f) else p.fill, animationSpec = tween(if (LocalReduceMotion.current) 0 else 220), label = "chip-bg")
-    val fg by animateColorAsState(if (selected) p.accent else p.label, animationSpec = tween(if (LocalReduceMotion.current) 0 else 220), label = "chip-fg")
+    val c = tint ?: p.accent
+    val bg by animateColorAsState(if (selected) c.copy(alpha = 0.16f) else p.fill, animationSpec = tween(if (LocalReduceMotion.current) 0 else AbMotion.selection), label = "chip-bg")
+    val fg = p.label
     Box(
         modifier = modifier
             .heightIn(min = 48.dp)
             .clip(RoundedCornerShape(AbRadius.capsule))
             .background(bg)
+            .border(1.dp, if (selected) c.copy(alpha = 0.5f) else Color.Transparent, RoundedCornerShape(AbRadius.capsule))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick,
             )
-            .padding(horizontal = 14.dp),
+            .semantics { this.selected = selected; role = Role.Tab; stateDescription = if (selected) "已选中" else "未选中" }
+            .padding(horizontal = 14.dp, vertical = AbSpacing.s),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, style = AbType.footnote.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium), color = fg)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
+            if (selected) Icon(AbIcons.Check, null, Modifier.size(14.dp), tint = fg)
+            Text(text, style = AbType.footnote.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium), color = fg)
+        }
+    }
+}
+
+/** 非交互状态标签：文字始终表达状态，不以颜色作为唯一线索。 */
+@Composable
+fun StatusLabel(
+    text: String,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    emphasized: Boolean = false,
+) {
+    val p = LocalAbPalette.current
+    val shape = RoundedCornerShape(AbRadius.chip)
+    Row(
+        modifier = modifier.clip(shape)
+            .background(if (emphasized) p.accent.copy(alpha = 0.12f) else p.fill)
+            .border(0.75.dp, if (emphasized) p.accent.copy(alpha = 0.4f) else p.separator, shape)
+            .semantics(mergeDescendants = true) { }
+            .padding(horizontal = AbSpacing.s, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(AbSpacing.xs),
+    ) {
+        if (icon != null) Icon(icon, null, Modifier.size(14.dp), tint = p.label)
+        Text(text, style = AbType.caption1, color = p.label)
+    }
+}
+
+/** 就近说明/错误。静态呈现；只对操作结果或读取失败启用温和播报。 */
+@Composable
+fun InlineMessage(
+    text: String,
+    modifier: Modifier = Modifier,
+    isError: Boolean = false,
+    announce: Boolean = false,
+) {
+    val p = LocalAbPalette.current
+    Row(
+        modifier = modifier.fillMaxWidth()
+            .then(if (announce) Modifier.semantics { liveRegion = LiveRegionMode.Polite } else Modifier),
+        horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
+        verticalAlignment = Alignment.Top,
+    ) {
+        // 错误除颜色外还有明确文字前缀；不用循环/入场动画打扰长列表。
+        Text(if (isError) "错误" else "说明", style = AbType.caption1,
+            color = if (isError) p.red else p.secondaryLabel)
+        Text(text, style = AbType.footnote, color = if (isError) p.red else p.secondaryLabel,
+            modifier = Modifier.weight(1f))
     }
 }
 
