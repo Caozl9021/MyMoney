@@ -18,7 +18,7 @@ internal object FirstRunGuide {
             null -> false
         }),
         Step("允许悬浮窗以显示确认卡", overlayAllowed),
-        Step("打开支持的应用，识别一笔成功账单", recognized),
+        Step("在「识别与规则」里确认应用，识别一笔成功账单", recognized),
     )
 
     fun hasRecognizedSource(source: String): Boolean =

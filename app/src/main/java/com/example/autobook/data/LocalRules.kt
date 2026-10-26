@@ -70,12 +70,12 @@ object RuleLearning {
             }
             val old = learned.firstOrNull { it.id == id }
             val prior = pending.firstOrNull { it.key == id }
-            val count = if (prior?.value == value) (prior.count + 1).coerceAtMost(3) else 1
+            val count = if (prior?.value == value) (prior.count + 1).coerceAtMost(LearningRules.PROMOTION_THRESHOLD) else 1
             if (changed || allowFrequency) {
                 pending = pending.filterNot { it.key == id }
                 if (!changed) pending = pending + PendingLearning(id, value, count)
             }
-            if (changed || (allowFrequency && count >= 3 && old?.source != RuleSource.MANUAL)) {
+            if (changed || (allowFrequency && count >= LearningRules.PROMOTION_THRESHOLD && old?.source != RuleSource.MANUAL)) {
                 learned = learned.filterNot { it.id == id } + LearnedRule(id, edited.type, merchant, method,
                     category, sub, account, if (changed) RuleSource.MANUAL else RuleSource.LEARNED,
                     (old?.hits ?: 0) + 1, now)

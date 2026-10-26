@@ -27,6 +27,12 @@ object LocalRuleStore {
         save(RuleLearning.record(snapshot(), original, valid, allowFrequency))
     }
     @Synchronized fun deleteLearned(id: String) { save(snapshot().copy(learned = snapshot().learned.filterNot { it.id == id }, pending = snapshot().pending.filterNot { it.key == id })) }
+    /**
+     * 只清"待累计"，不动已经生效的记忆：用户想撤掉的是"还没生效的那条候选"，
+     * 顺手删掉已生效的规则会静默改变现有推荐。
+     */
+    @Synchronized fun clearPending() { save(LearningRules.clearPending(snapshot())) }
+    @Synchronized fun deletePending(key: String) { save(LearningRules.deletePending(snapshot(), key)) }
     @Synchronized fun clearLearned() { save(snapshot().copy(learned = emptyList(), pending = emptyList())) }
     private fun save(snapshot: LocalRuleSnapshot) { prefs?.edit()?.putString("local_rules_v1", LocalRuleCodec.encode(snapshot))?.apply(); mutable.value = snapshot }
 }

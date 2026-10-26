@@ -15,7 +15,7 @@ internal data class CaptureHealthInput(
 internal enum class CaptureAction(val label: String) {
     NOTIFICATION_ACCESS("授予通知使用权"), NOTIFICATION_RECONNECT("重新连接通知监听"),
     SELECT_MODE("选择识别方式"), RESUME("恢复识别"), ROOT_STATUS("查看 Root 状态"),
-    ACCESSIBILITY("打开无障碍设置"), OVERLAY("允许悬浮窗"), PENDING("查看待确认"), SUPPORTED_APPS("查看支持的应用"),
+    ACCESSIBILITY("打开无障碍设置"), OVERLAY("允许悬浮窗"), PENDING("查看待确认"), SUPPORTED_APPS("查看识别与规则"),
 }
 internal enum class CaptureHealthKind { MODE_REQUIRED, PAUSED, ROOT_STOPPED, ACCESSIBILITY_DISABLED, ACCESSIBILITY_UNBOUND, NOTIFICATION_DISABLED, NOTIFICATION_UNBOUND, DEGRADED, SOURCES_DISABLED, NOTIFICATION_OBSERVING, OVERLAY_MISSING, PENDING_MODE, RUNNING }
 internal data class CaptureHealth(

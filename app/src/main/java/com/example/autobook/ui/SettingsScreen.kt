@@ -67,6 +67,7 @@ import com.example.autobook.capture.CaptureModeManager
 import com.example.autobook.capture.PaymentNotificationListener
 import com.example.autobook.capture.NotificationIngress
 import com.example.autobook.data.CaptureMode
+import com.example.autobook.data.LocalRuleStore
 import com.example.autobook.root.RootWatcher
 import com.example.autobook.ui.design.AbIcons
 import com.example.autobook.ui.design.AbRadius
@@ -89,23 +90,11 @@ import com.example.autobook.ui.design.Segmented
 import com.example.autobook.ui.design.SubPageScaffold
 import com.example.billkit.BillKit
 import com.example.billkit.DebugBus
-import com.example.billkit.Packages
 import com.example.billkit.root.RootShell
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
-
-private val shortNames = linkedMapOf(
-    Packages.WECHAT to "微信",
-    Packages.ALIPAY to "支付宝",
-    Packages.UNIONPAY to "云闪付",
-    Packages.JD to "京东",
-    Packages.MEITUAN to "美团",
-    Packages.TAOBAO to "淘宝",
-    Packages.PDD to "拼多多",
-    Packages.DOUYIN to "抖音",
-)
 
 /** 设置页内部的页面栈（手写，不引 navigation-compose）。 */
 private enum class SettingsPage(val title: String) {
@@ -113,8 +102,7 @@ private enum class SettingsPage(val title: String) {
     CATEGORIES("分类与账户"),
     ASSETS("资产管理"),
     NOTE("备注模板"),
-    RULES("本地规则"),
-    APPS("支持的应用"),
+    RECOGNITION("识别与规则"),
     PERMISSIONS("权限"),
     MODE("识别模式"),
     ROOT_MODE("Root 状态"),
@@ -129,7 +117,7 @@ private enum class SettingsPage(val title: String) {
 private fun captureSettingsPage(destination: CaptureSettingsDestination): SettingsPage = when (destination) {
     CaptureSettingsDestination.MODE -> SettingsPage.MODE
     CaptureSettingsDestination.ROOT_STATUS -> SettingsPage.ROOT_MODE
-    CaptureSettingsDestination.SUPPORTED_APPS -> SettingsPage.APPS
+    CaptureSettingsDestination.SUPPORTED_APPS -> SettingsPage.RECOGNITION
 }
 
 /**
@@ -168,6 +156,8 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
 
     // 贯穿整棵设置树的共享状态
     val captureState by CaptureModeManager.state.collectAsStateWithLifecycle()
+    // 首页那一行的摘要要跟着学习记忆变化，否则删完记忆回到设置还显示旧条数。
+    val ruleState by LocalRuleStore.state.collectAsStateWithLifecycle()
     val enabled = captureState.enabled
     val mode = captureState.mode
     val scope = rememberCoroutineScope()
@@ -301,10 +291,6 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
                             leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Accessibility, p.accent) }, chevron = true,
                             onClick = { navigate(SettingsPage.MODE) })
                         InsetDivider(inset = 62.dp)
-                        ListRow(title = "支持的应用", subtitle = "已选 ${whitelist.size} 个",
-                            leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Store, p.accent) }, chevron = true,
-                            onClick = { navigate(SettingsPage.APPS) })
-                        InsetDivider(inset = 62.dp)
                         ListRow(title = "权限", subtitle = when (mode) {
                             CaptureMode.ROOT -> "Root 授权、悬浮窗与通知"
                             CaptureMode.ACCESSIBILITY -> if (serviceBound) "无障碍已连接" else "无障碍未连接"
@@ -312,9 +298,10 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
                         }, leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Shield, p.accent) }, chevron = true,
                             onClick = { navigate(SettingsPage.PERMISSIONS) })
                         InsetDivider(inset = 62.dp)
-                        ListRow(title = "本地规则", subtitle = "导入规则、餐段与学习",
+                        ListRow(title = "识别与规则",
+                            subtitle = "${whitelist.size} 个应用 · ${ruleState.learned.size} 条学习记忆",
                             leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Filter, p.accent) }, chevron = true,
-                            onClick = { navigate(SettingsPage.RULES) })
+                            onClick = { navigate(SettingsPage.RECOGNITION) })
                     }
                 }
                 item { GroupHeader("数据") }
@@ -364,27 +351,26 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
 
         SettingsPage.CATEGORIES -> LedgerConfigPage(onBack = back)
 
-        SettingsPage.RULES -> LocalRulesPage(onBack = back)
-
-        SettingsPage.NOTE -> NoteTemplatePage(onBack = back)
-
-        SettingsPage.APPEARANCE -> AppearancePage(onBack = back)
-
-        SettingsPage.APPS -> AppsPage(
+        SettingsPage.RECOGNITION -> RecognitionRulesPage(
             whitelist = whitelist,
+            healthInput = healthInput,
             onBack = back,
-            onToggle = { pkg ->
-                val checked = pkg in whitelist
-                settings.setSupported(pkg, !checked)
+            onToggleApp = { pkg ->
+                settings.setSupported(pkg, pkg !in whitelist)
                 whitelist = settings.whitelist
                 applyKit()
             },
-            onAdd = { pkg ->
+            onAddApp = { pkg ->
                 settings.setSupported(pkg, true)
                 whitelist = settings.whitelist
                 applyKit()
             },
+            onOpenDebug = { navigate(SettingsPage.DEBUG) },
         )
+
+        SettingsPage.NOTE -> NoteTemplatePage(onBack = back)
+
+        SettingsPage.APPEARANCE -> AppearancePage(onBack = back)
 
         SettingsPage.MODE -> CaptureModeSettingsPage(mode, back) {
             CaptureModeManager.select(context, it)
@@ -431,7 +417,7 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
 
         SettingsPage.HELP -> HelpPage(onBack = back, onDebug = { navigate(SettingsPage.DEBUG) },
             onMode = { navigate(SettingsPage.MODE) }, onPermissions = { navigate(SettingsPage.PERMISSIONS) },
-            onApps = { navigate(SettingsPage.APPS) }, onPending = { navigate(SettingsPage.PENDING) })
+            onApps = { navigate(SettingsPage.RECOGNITION) }, onPending = { navigate(SettingsPage.PENDING) })
         SettingsPage.DEBUG -> DebugPage(onBack = back)
         SettingsPage.PENDING -> RecognitionHistoryScreen(onBack = back, initialFilter = com.example.autobook.data.RecognitionStatus.PENDING)
     }
@@ -536,103 +522,6 @@ private fun NoteTemplatePage(onBack: () -> Unit) {
                     subtitle = "示例：瑞幸咖啡 · 餐饮 · 微信",
                 )
             }
-            Spacer(Modifier.height(AbSpacing.xl))
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// 子页：支持的应用
-// ---------------------------------------------------------------------------
-
-@Composable
-private fun AppsPage(
-    whitelist: Set<String>,
-    onBack: () -> Unit,
-    onToggle: (String) -> Unit,
-    onAdd: (String) -> Unit,
-) {
-    var draft by remember { mutableStateOf("") }
-    // 白名单里不在预设表里的包（分身/宿主包，如支付宝的 com.tentent.mm）
-    val extra = whitelist.filter { it !in shortNames }
-
-    SubPageScaffold(title = "支持的应用", onBack = onBack) { padding ->
-        Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-                .padding(padding).padding(horizontal = AbSpacing.page),
-            verticalArrangement = Arrangement.spacedBy(AbSpacing.xs),
-        ) {
-            if (extra.isNotEmpty()) {
-                GroupHeader("已手动添加")
-                InsetGroup {
-                    extra.forEachIndexed { index, pkg ->
-                        if (index > 0) InsetDivider()
-                        ListRow(
-                            title = pkg,
-                            subtitle = "自定义包名",
-                            trailing = {
-                                com.example.autobook.ui.design.IconBadge(
-                                    icon = AbIcons.Check,
-                                    tint = LocalAbPalette.current.green,
-                                    size = 26.dp,
-                                )
-                            },
-                            dividerAbove = index > 0,
-                            onClick = { onToggle(pkg) },
-                        )
-                    }
-                }
-            }
-
-            GroupHeader("选择要监听的应用")
-            InsetGroup {
-                shortNames.entries.forEachIndexed { index, (pkg, label) ->
-                    if (index > 0) InsetDivider()
-                    val checked = pkg in whitelist
-                    ListRow(
-                        title = label,
-                        subtitle = pkg,
-                        trailing = {
-                            com.example.autobook.ui.design.IconBadge(
-                                icon = if (checked) AbIcons.Check else AbIcons.Close,
-                                tint = if (checked) LocalAbPalette.current.green
-                                else LocalAbPalette.current.tertiaryLabel,
-                                size = 26.dp,
-                            )
-                        },
-                        dividerAbove = index > 0,
-                        onClick = { onToggle(pkg) },
-                    )
-                }
-            }
-            GroupFooter("通知监听仅处理已验证的交易模板；页面辅助只处理账单页面，列表和下单页会跳过。")
-
-            GroupHeader("手动添加包名")
-            InsetGroup {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = AbSpacing.l, vertical = AbSpacing.s),
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                ) {
-                    AbTextField(
-                        value = draft,
-                        onValueChange = { draft = it },
-                        modifier = Modifier.weight(1f),
-                        placeholder = "com.example.app",
-                        onDone = {
-                            val pkg = draft.trim()
-                            if (pkg.isNotEmpty()) {
-                                onAdd(pkg)
-                                draft = ""
-                            }
-                        },
-                    )
-                }
-            }
-            GroupFooter(
-                "分身/宿主包（比如某些 ROM 上的支付宝是 com.tentent.mm）在预设列表里看不到，" +
-                    "在这里直接填包名加进来。包名可以在「诊断」页或系统「应用信息」里查到；" +
-                    "加进来后页面仍要满足账单详情的条件才会识别。",
-            )
             Spacer(Modifier.height(AbSpacing.xl))
         }
     }
@@ -1324,7 +1213,7 @@ private fun HelpPage(
                 InsetDivider(inset = 62.dp)
                 ListRow(title = "权限", leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Shield, p.accent) }, chevron = true, onClick = onPermissions)
                 InsetDivider(inset = 62.dp)
-                ListRow(title = "支持的应用", leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Store, p.accent) }, chevron = true, onClick = onApps)
+                ListRow(title = "识别与规则", leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Store, p.accent) }, chevron = true, onClick = onApps)
                 InsetDivider(inset = 62.dp)
                 ListRow(title = "待确认", leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Clock, p.accent) }, chevron = true, onClick = onPending)
             }
@@ -1332,7 +1221,7 @@ private fun HelpPage(
             InsetGroup {
                 ListRow(title = "识别后需要确认", subtitle = "确认保存后才写入账本；关闭弹卡后可在待确认中处理。")
                 InsetDivider()
-                ListRow(title = "页面没有识别到？", subtitle = "先检查模式、支持的应用和权限，再打开支付结果或账单详情。仍有问题时先保存该页诊断样本，再切换页面。")
+                ListRow(title = "页面没有识别到？", subtitle = "先检查识别模式、识别与规则里的应用清单和权限，再打开支付结果或账单详情。仍有问题时先保存该页诊断样本，再切换页面。")
                 InsetDivider()
                 ListRow(title = "截图识别", subtitle = "仅 Root 模式支持，页面文字不足时使用；无障碍模式读取页面文字。")
                 InsetDivider()

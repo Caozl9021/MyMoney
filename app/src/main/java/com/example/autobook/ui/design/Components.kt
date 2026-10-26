@@ -244,6 +244,8 @@ fun ListRow(
     dividerAbove: Boolean = false,
     destructive: Boolean = false,
     titleStyle: TextStyle = AbType.body,
+    /** 副标题行数上限。默认不限；右侧徽标较宽的行需要收成一行，否则长包名会从中间折断。 */
+    subtitleMaxLines: Int = Int.MAX_VALUE,
     onClick: (() -> Unit)? = null,
 ) {
     val p = LocalAbPalette.current
@@ -285,7 +287,7 @@ fun ListRow(
                         text = subtitle,
                         style = AbType.footnote,
                         color = p.secondaryLabel,
-                        maxLines = Int.MAX_VALUE,
+                        maxLines = subtitleMaxLines,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }

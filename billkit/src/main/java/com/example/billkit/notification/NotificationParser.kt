@@ -38,7 +38,7 @@ sealed interface NotificationParseResult {
 }
 
 /** Pure parser: envelope guards apply to all templates; structured expense semantics are sample-bound. */
-class NotificationParser(private val templates: List<VerifiedExpenseNotificationTemplate> = listOf(AlipayExpenseNotificationTemplate())) {
+class NotificationParser(private val templates: List<VerifiedExpenseNotificationTemplate> = PRODUCTION_TEMPLATES) {
     fun parse(input: NotificationObservation): NotificationParseResult {
         if (input.packageName !in SUPPORTED_PACKAGES) return NotificationParseResult.Ignored("unsupported-package")
         if (input.isReconnectBaseline) return NotificationParseResult.Ignored("reconnect-baseline")
@@ -104,6 +104,20 @@ class NotificationParser(private val templates: List<VerifiedExpenseNotification
 
     companion object {
         val SUPPORTED_PACKAGES = setOf("com.tencent.mm", "com.eg.android.AlipayGphone")
+
+        /** Templates admitted from reviewed real evidence; a template without evidence never joins this list. */
+        val PRODUCTION_TEMPLATES: List<VerifiedExpenseNotificationTemplate> = listOf(AlipayExpenseNotificationTemplate())
+
+        /**
+         * Packages that currently have at least one admitted production template.
+         *
+         * Derived from [PRODUCTION_TEMPLATES] rather than a second hand-written list: a settings screen
+         * that claims "this app has no verified template" must not be able to drift from what the parser
+         * actually accepts. Being in [SUPPORTED_PACKAGES] only means the envelope is recognised.
+         */
+        val TEMPLATE_PACKAGES: Set<String> = PRODUCTION_TEMPLATES
+            .filter { it.id.isNotBlank() && it.evidenceReference.isNotBlank() }
+            .map { it.packageName }.toSet()
         private val success = Regex("支付成功|付款成功|扣款成功|消费成功")
         private val negative = Regex("失败|取消|待支付|待付款|未支付|未付款|支付中|付款中|处理中|进行中|退款|收款|转账|收入|优惠|红包|营销|验证码")
         private val plainAmount = Regex("(?:0|[1-9]\\d*)(?:\\.\\d{1,2})?")
