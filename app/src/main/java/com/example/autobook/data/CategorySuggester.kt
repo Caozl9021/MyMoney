@@ -107,7 +107,7 @@ object CategorySuggester {
         val hits = mutableListOf<RuleHit>()
         fun add(category: String?, sub: String?, account: String?, source: RuleSource, length: Int, reason: String) {
             val group = groups.firstOrNull { it.name == category }
-            val validAccount = account?.takeIf { it in accounts }
+            val validAccount = AssetMath.canonicalName(account, accounts, AssetStore.accounts.value)
             // A stale subcategory invalidates that rule rather than pinning a misleading parent.
             if (sub != null && group != null && sub !in group.subs && source in listOf(RuleSource.MANUAL, RuleSource.LEARNED)) {
                 if (validAccount != null) hits += RuleHit(account = validAccount, score = source.weight * 1000 + length, source = source, explanation = reason)
@@ -147,8 +147,10 @@ object CategorySuggester {
             ?.let { return it }
 
         accountHints.firstOrNull { it.first.containsMatchIn(text.lowercase()) }?.second
-            ?.let { hint -> return accounts.firstOrNull { it == hint } }
+            ?.let { hint -> AssetMath.canonicalName(hint, accounts, AssetStore.accounts.value)?.let { return it } }
 
-        return null
+        return AssetStore.accounts.value.asSequence().filter { !it.archived && it.name in accounts }
+            .flatMap { account -> AssetMath.aliases(account).asSequence().map { it to account.name } }
+            .sortedByDescending { it.first.length }.firstOrNull { text.contains(it.first, ignoreCase = true) }?.second
     }
 }

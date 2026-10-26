@@ -18,8 +18,8 @@ android {
         targetSdk = 35
         testInstrumentationRunner = providers.gradleProperty("autobookTestRunner")
             .getOrElse("com.example.autobook.HistoryInstrumentation")
-        versionCode = 43
-        versionName = "0.9.1"
+        versionCode = 52
+        versionName = "0.13.3"
     }
 
     // 签名信息放在仓库之外（~/.autobook-keys/keystore.properties），不进版本库。

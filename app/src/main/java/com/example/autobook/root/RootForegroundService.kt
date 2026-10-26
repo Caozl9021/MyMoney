@@ -45,7 +45,7 @@ class RootForegroundService : Service() {
 
         fun start(context: Context) {
             val settings = Settings(context)
-            if (!settings.enabled || settings.captureMode != CaptureMode.ROOT) return
+            if (!settings.enabled || !settings.pageFallbackEnabled || settings.captureMode != CaptureMode.ROOT) return
             val intent = Intent(context, RootForegroundService::class.java).setAction(ACTION_START)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
@@ -79,7 +79,7 @@ class RootForegroundService : Service() {
 
             else -> {
                 val settings = Settings(this)
-                if (!settings.enabled || settings.captureMode != CaptureMode.ROOT) {
+                if (!settings.enabled || !settings.pageFallbackEnabled || settings.captureMode != CaptureMode.ROOT) {
                     stopSelf()
                     return START_NOT_STICKY
                 }

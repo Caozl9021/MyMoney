@@ -61,6 +61,7 @@ internal fun ledgerTypeLabel(type: String?): String = when (type) {
 }
 
 /** Always visible controls; option lists can scroll independently at large font sizes. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun LedgerFilters(
     keyword: String, onKeyword: (String) -> Unit,
@@ -68,26 +69,33 @@ internal fun LedgerFilters(
     onDate: (String, String, String) -> Unit,
     category: String?, categories: List<String>, onCategory: (String?) -> Unit,
     type: String?, onType: (String?) -> Unit,
-    active: Boolean, onClear: () -> Unit,
+    active: Boolean, onClear: () -> Unit, summaryLabel: String = "",
 ) {
     var picker by rememberSaveable { mutableStateOf<String?>(null) }
     val palette = LocalAbPalette.current
     val keyboard = LocalSoftwareKeyboardController.current
     var focused by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth().padding(horizontal = AbSpacing.page)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = AbSpacing.page)
+        .padding(top = AbSpacing.m, bottom = AbSpacing.m)) {
         LedgerSearchField(keyword, onKeyword, focused, { focused = it },
             onSearch = { keyboard?.hide() })
-        Row(Modifier.fillMaxWidth()) {
-          // 一行三个筛选胶囊，窄屏/大字可横向滚动；命中条件的那一颗带选中态（描边+浅底+勾），
-          // 不让用户靠「文字变了」去猜哪一项生效。
-          Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-            CapsuleChip(ledgerDateFilterLabel(dateMode, start, end), dateMode != "ALL" && dateMode.isNotEmpty(), { picker = "DATE" },
-                Modifier.height(48.dp))
-            CapsuleChip(category?.ifEmpty { "未分类" } ?: "全部分类", !category.isNullOrEmpty(), { picker = "CATEGORY" },
-                Modifier.height(48.dp))
-            CapsuleChip(ledgerTypeLabel(type), type != null, { picker = "TYPE" }, Modifier.height(48.dp))
-          }
-          if (active) TextButton(onClick = onClear, modifier = Modifier.heightIn(min = 48.dp)) { Text("清除") }
+        Spacer(Modifier.height(AbSpacing.m))
+        FlowRow(Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
+            verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
+            CapsuleChip(ledgerDateFilterLabel(dateMode, start, end), dateMode != "ALL" && dateMode.isNotEmpty(),
+                { picker = "DATE" }, Modifier.heightIn(min = 48.dp))
+            CapsuleChip(category?.ifEmpty { "未分类" } ?: "全部分类", category != null,
+                { picker = "CATEGORY" }, Modifier.heightIn(min = 48.dp))
+            CapsuleChip(ledgerTypeLabel(type), type != null,
+                { picker = "TYPE" }, Modifier.heightIn(min = 48.dp))
+        }
+        Spacer(Modifier.height(AbSpacing.s))
+        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
+            Text(summaryLabel, style = AbType.caption1, color = palette.secondaryLabel,
+                modifier = Modifier.weight(1f))
+            if (active) TextButton(onClick = onClear, modifier = Modifier.heightIn(min = 48.dp)) { Text("清除筛选") }
         }
     }
     when (picker) {

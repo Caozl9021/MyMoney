@@ -49,6 +49,12 @@ data class BillEntity(
     val account: String? = null,
     val note: String? = null,
     val recognitionId: String? = null,
+    val accountId: String? = null,
+    val transferAccountId: String? = null,
+    @androidx.room.ColumnInfo(defaultValue = "0") val assetLinked: Boolean = false,
+    @androidx.room.ColumnInfo(defaultValue = "''") val assetKey: String = "",
+    @androidx.room.ColumnInfo(defaultValue = "0") val transferFeeCents: Long = 0,
+    val feeParentKey: String? = null,
 )
 
 @Dao
@@ -185,11 +191,13 @@ interface BillDao {
     suspend fun delete(id: Long)
 }
 
-@Database(entities = [BillEntity::class, RecognitionEntity::class], version = 3, exportSchema = false)
+@Database(entities = [BillEntity::class, RecognitionEntity::class, AssetAccount::class, AssetEntry::class, AssetMeta::class, CaptureAlias::class, CaptureEvidence::class, CaptureDelivery::class], version = 5, exportSchema = false)
 abstract class AppDb : RoomDatabase() {
 
     abstract fun bills(): BillDao
     abstract fun recognitions(): RecognitionDao
+    abstract fun assets(): AssetDao
+    abstract fun capture(): CaptureDao
 
     companion object {
         @Volatile
@@ -222,12 +230,51 @@ abstract class AppDb : RoomDatabase() {
             }
         }
 
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE bills ADD COLUMN accountId TEXT")
+                db.execSQL("ALTER TABLE bills ADD COLUMN transferAccountId TEXT")
+                db.execSQL("ALTER TABLE bills ADD COLUMN assetLinked INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE bills ADD COLUMN assetKey TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE bills ADD COLUMN transferFeeCents INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE bills ADD COLUMN feeParentKey TEXT")
+                db.execSQL("UPDATE bills SET assetKey = 'legacy-' || id")
+                db.execSQL("""CREATE TABLE IF NOT EXISTS asset_accounts (
+                    id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL,
+                    aliases TEXT NOT NULL, sortOrder INTEGER NOT NULL, archived INTEGER NOT NULL,
+                    included INTEGER NOT NULL, initialized INTEGER NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL)""")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_asset_accounts_name ON asset_accounts(name)")
+                db.execSQL("""CREATE TABLE IF NOT EXISTS asset_entries (
+                    id TEXT NOT NULL PRIMARY KEY, operationId TEXT NOT NULL, accountId TEXT NOT NULL,
+                    deltaCents INTEGER NOT NULL, kind TEXT NOT NULL, note TEXT NOT NULL, createdAt INTEGER NOT NULL,
+                    billKey TEXT, reversalOf TEXT)""")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_asset_entries_accountId ON asset_entries(accountId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_asset_entries_billKey ON asset_entries(billKey)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_asset_entries_operationId ON asset_entries(operationId)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_asset_entries_reversalOf ON asset_entries(reversalOf)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS asset_meta (`key` TEXT NOT NULL PRIMARY KEY, value TEXT NOT NULL)")
+            }
+        }
+
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE recognition_history ADD COLUMN protectedFields INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE recognition_history ADD COLUMN reviewOf TEXT")
+                db.execSQL("CREATE TABLE IF NOT EXISTS capture_aliases (aliasKey TEXT NOT NULL PRIMARY KEY, recognitionId TEXT NOT NULL, FOREIGN KEY(recognitionId) REFERENCES recognition_history(id) ON UPDATE NO ACTION ON DELETE CASCADE)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_capture_aliases_recognitionId ON capture_aliases(recognitionId)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS capture_evidence (eventId TEXT NOT NULL PRIMARY KEY, recognitionId TEXT, source TEXT NOT NULL, packageName TEXT NOT NULL, receivedAt INTEGER NOT NULL, outcome TEXT NOT NULL, detail TEXT NOT NULL, FOREIGN KEY(recognitionId) REFERENCES recognition_history(id) ON UPDATE NO ACTION ON DELETE CASCADE)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_capture_evidence_recognitionId ON capture_evidence(recognitionId)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS capture_deliveries (recognitionId TEXT NOT NULL PRIMARY KEY, state TEXT NOT NULL, attemptId TEXT NOT NULL, updatedAt INTEGER NOT NULL, FOREIGN KEY(recognitionId) REFERENCES recognition_history(id) ON UPDATE NO ACTION ON DELETE CASCADE)")
+                db.execSQL("INSERT INTO capture_deliveries SELECT id, 'RESTORED', 'migration-4-5', updatedAt FROM recognition_history")
+            }
+        }
+
         fun get(context: Context): AppDb = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext,
                 AppDb::class.java,
                 "autobook.db",
-            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build().also { instance = it }
         }
     }
 }

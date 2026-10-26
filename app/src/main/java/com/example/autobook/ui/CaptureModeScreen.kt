@@ -15,6 +15,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,6 +27,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.example.autobook.capture.CaptureModeManager
 import com.example.autobook.data.CaptureMode
+import com.example.autobook.data.Settings
 import com.example.autobook.ui.design.AbRadius
 import com.example.autobook.ui.design.AbSpacing
 import com.example.autobook.ui.design.AbType
@@ -38,12 +40,27 @@ fun CaptureModeScreen() {
     val context = LocalContext.current
     val p = LocalAbPalette.current
     var choice by rememberSaveable { mutableStateOf<CaptureMode?>(null) }
-    CaptureModeChoice(
-        mode = choice,
-        onSelect = { choice = it },
-        onDone = { choice?.let { CaptureModeManager.select(context, it) } },
-        modifier = Modifier.fillMaxSize().background(p.pageBg).systemBarsPadding(),
-    )
+    Column(Modifier.fillMaxSize().background(p.pageBg).systemBarsPadding()) {
+        Text("通知监听需要单独授予系统通知使用权。当前交易通知模板待真实样本验证，页面辅助可稍后配置。",
+            style = AbType.footnote, color = p.secondaryLabel,
+            modifier = Modifier.padding(horizontal = AbSpacing.xxl, vertical = AbSpacing.s))
+        TextButton(onClick = {
+            Settings(context).apply {
+                notificationCaptureEnabled = true
+                pageFallbackEnabled = false
+                enabled = true
+            }
+            CaptureModeManager.reconcile(context)
+        }, modifier = Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xxl)) {
+            Text("先使用通知监听，稍后配置页面辅助")
+        }
+        CaptureModeChoice(
+            mode = choice,
+            onSelect = { choice = it },
+            onDone = { choice?.let { CaptureModeManager.select(context, it) } },
+            modifier = Modifier.weight(1f),
+        )
+    }
 }
 
 /** Shared with Settings: selection is local until the caller saves with onDone. */
@@ -60,9 +77,9 @@ fun CaptureModeChoice(
         modifier.verticalScroll(rememberScrollState()).padding(AbSpacing.xxl),
         verticalArrangement = Arrangement.spacedBy(AbSpacing.xl),
     ) {
-        Text("选择采集模式", style = AbType.largeTitle, color = p.label)
+        Text("页面辅助方式", style = AbType.largeTitle, color = p.label)
         Text(
-            "只需一种采集方式。选择后会记住，你也可以随时在设置中切换。",
+            "页面辅助从 Root 与无障碍中选择一种，与通知监听独立。选择后会记住，也可稍后在设置中切换。",
             style = AbType.body,
             color = p.secondaryLabel,
         )

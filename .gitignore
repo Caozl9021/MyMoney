@@ -105,3 +105,9 @@ scratch/
 # 本地委派/测试产生的可重建Gradle缓存（保留本地，不入库）
 .dsh-gradle-home/
 .gradle-home-test/
+
+# 本轮本地临时工作目录（图标素材下载、探针输出、专用 Gradle 缓存，可重建）
+.gradle-user/
+.tmp-icons/
+.tmp-probe/
+.dsh-write-test

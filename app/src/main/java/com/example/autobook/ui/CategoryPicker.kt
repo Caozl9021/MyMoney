@@ -275,27 +275,43 @@ internal fun EmptyLedgerPickerActions(label: String, enabled: Boolean, onAdd: (S
     var adding by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     var restoring by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     var name by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
+    var addError by remember { mutableStateOf<String?>(null) }
+    var restoreError by remember { mutableStateOf<String?>(null) }
     val p = LocalAbPalette.current
     Column(Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xl)) {
         Text("还没有$label，可新增或恢复默认清单", style = AbType.footnote, color = p.secondaryLabel)
         Row(horizontalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-            androidx.compose.material3.TextButton(enabled = enabled, onClick = { name = ""; adding = true }) { Text("新增$label") }
-            androidx.compose.material3.TextButton(enabled = enabled, onClick = { restoring = true }) { Text("恢复默认清单") }
+            androidx.compose.material3.TextButton(enabled = enabled, onClick = { addError = null; adding = true }) { Text("新增$label") }
+            androidx.compose.material3.TextButton(enabled = enabled, onClick = { restoreError = null; restoring = true }) { Text("恢复默认清单") }
         }
     }
     if (adding) androidx.compose.material3.AlertDialog(
         onDismissRequest = { adding = false },
         title = { Text("新增$label") },
-        text = {
-            androidx.compose.material3.OutlinedTextField(value = name, onValueChange = { name = it },
-                label = { Text("${label}名") }, singleLine = true)
-        },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
+            androidx.compose.material3.OutlinedTextField(value = name, onValueChange = { name = it; addError = null },
+                label = { Text("${label}名") }, singleLine = true, isError = addError != null)
+            if (addError != null) InlineMessage(addError.orEmpty(), isError = true, announce = true)
+        } },
         confirmButton = { androidx.compose.material3.TextButton(enabled = name.isNotBlank() && enabled,
-            onClick = { onAdd(name.trim()); adding = false }) { Text("添加") } },
+            onClick = {
+                addError = null
+                runCatching { onAdd(name.trim()) }
+                    .onSuccess { name = ""; adding = false }
+                    .onFailure { addError = it.message ?: "新增${label}失败，请重试" }
+            }) { Text("添加") } },
         dismissButton = { androidx.compose.material3.TextButton(onClick = { adding = false }) { Text("取消") } },
     )
     if (restoring) RestoreLedgerDefaultsDialog(
         onDismiss = { restoring = false },
-        onConfirm = { if (enabled) { com.example.autobook.data.LedgerConfig.resetToDefault(); onRestored() }; restoring = false },
+        errorMessage = restoreError,
+        onConfirm = {
+            if (enabled) {
+                restoreError = null
+                runCatching { com.example.autobook.data.LedgerConfig.resetToDefault() }
+                    .onSuccess { onRestored(); restoring = false }
+                    .onFailure { restoreError = it.message ?: "恢复默认清单失败，请重试" }
+            }
+        },
     )
 }

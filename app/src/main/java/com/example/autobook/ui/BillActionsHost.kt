@@ -59,6 +59,11 @@ fun BillActionsHost(
     var editing by rememberSaveable(billId) { mutableStateOf(false) }
     var deleting by remember(billId) { mutableStateOf(false) }
     var deleteError by remember(billId) { mutableStateOf<String?>(null) }
+    var linkConfirm by remember(billId) { mutableStateOf(false) }
+    var linking by remember(billId) { mutableStateOf(false) }
+    var parentId by remember(billId) { mutableStateOf<Long?>(null) }
+    val assetAccounts by com.example.autobook.data.AssetStore.accounts.collectAsStateWithLifecycle()
+    val allBills by remember(dao) { dao.observeRange(Long.MIN_VALUE, Long.MAX_VALUE) }.collectAsStateWithLifecycle(initialValue = emptyList())
     var amountBounds by remember(billId) { mutableStateOf<Rect?>(null) }
     val summaryScroll = rememberLazyListState()
     val detailScroll = rememberLazyListState()
@@ -116,7 +121,9 @@ fun BillActionsHost(
                                     BillField("商户", bill.merchant)
                                     BillField("分类", bill.category)
                                     BillField("二级分类", bill.subCategory)
-                                    BillField("账户", bill.account)
+                                    BillField("账户", assetAccounts.firstOrNull { it.id == bill.accountId }?.name ?: bill.account)
+                                    if (bill.type == "TRANSFER") BillField("转入账户", assetAccounts.firstOrNull { it.id == bill.transferAccountId }?.name ?: "未补全")
+                                    BillField("余额联动", if (bill.assetLinked) "已计入账户余额" else "未计入余额；历史账单不会自动重复扣减")
                                     BillField("备注", bill.note)
                                 }
                             }
@@ -157,21 +164,31 @@ fun BillActionsHost(
                                     BillField("商户", bill.merchant)
                                     BillField("账单时间", billTime(bill.timeMillis))
                                     BillField("分类", bill.category)
-                                    BillField("账户", bill.account)
+                                    BillField("账户", assetAccounts.firstOrNull { it.id == bill.accountId }?.name ?: bill.account)
+                                    if (bill.type == "TRANSFER") BillField("转入账户", assetAccounts.firstOrNull { it.id == bill.transferAccountId }?.name ?: "未补全")
+                                    BillField("余额联动", if (bill.assetLinked) "已计入账户余额" else "未计入余额；历史账单不会自动重复扣减")
                                     BillField("备注", bill.note)
                                 }
                             }
                             item("actions") {
                                 InsetGroup {
-                                    ListRow(title = "修改", chevron = true,
+                                    if (bill.feeParentKey != null) {
+                                        val parent = allBills.firstOrNull { it.assetKey == bill.feeParentKey }
+                                        ListRow(title = "手续费随原转账一同修改 / 删除", subtitle = "保持本金、手续费与双账户余额一致",
+                                            chevron = parent != null, onClick = parent?.let { { parentId = it.id } })
+                                    } else ListRow(title = "修改", chevron = true,
                                         onClick = if (deleting) null else { { editing = true } })
+                                    if (!bill.assetLinked && bill.feeParentKey == null) ListRow(
+                                        title = if (bill.type == "TRANSFER") "补全转账账户并计入余额" else "计入账户余额",
+                                        subtitle = "仅在当前余额尚未包含这笔账单时使用", chevron = true,
+                                        onClick = if (deleting || linking) null else { { if (bill.type == "TRANSFER") editing = true else linkConfirm = true } })
                                     ListRow(title = "详情", chevron = true, dividerAbove = true,
                                         onClick = if (deleting) null else { { detail = true } })
                                     InsetDivider()
                                     Column(Modifier.fillMaxWidth().padding(AbSpacing.l),
                                         verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
                                         InlineMessage("删除后5秒内可逐笔撤销")
-                                        DestructiveButton(text = "删除账单", busy = deleting, busyLabel = "正在删除…",
+                                        if (bill.feeParentKey == null) DestructiveButton(text = "删除账单", busy = deleting, busyLabel = "正在删除…",
                                             modifier = Modifier.fillMaxWidth(), onClick = {
                                                 deleting = true
                                                 deleteError = null
@@ -191,8 +208,25 @@ fun BillActionsHost(
                 }
             }
         }
+        if (linkConfirm && bill != null) {
+            val linkedAccount = assetAccounts.firstOrNull { it.id == bill.accountId }
+                ?: assetAccounts.firstOrNull { it.name == bill.account }
+            androidx.compose.material3.AlertDialog(onDismissRequest = { if (!linking) linkConfirm = false },
+                title = { Text("将这笔账单计入余额？") },
+                text = { Text("${linkedAccount?.name ?: bill.account ?: "未指定账户"}\n本次余额变动 ${assetMoney(com.example.autobook.data.AssetMath.delta(bill.type, bill.priceCents))}\n若当前余额已包含这笔账单，请取消，以免重复扣算。") },
+                confirmButton = { TextButton(enabled = !linking, onClick = {
+                    linking = true
+                    BillWriter.linkAsset(app, bill.id) { result ->
+                        linking = false
+                        result.onSuccess { linkConfirm = false }.onFailure { deleteError = it.message ?: "计入余额失败"; linkConfirm = false }
+                    }
+                }) { Text(if (linking) "处理中…" else "确认计入") } },
+                dismissButton = { TextButton(enabled = !linking, onClick = { linkConfirm = false }) { Text("取消") } })
+        }
+        parentId?.let { id -> BillActionsHost(id, onClose = { parentId = null }) }
         if (editing && bill != null) {
-            BillEditorDialog(original = bill, newSource = bill.sourcePkg, newTime = bill.timeMillis,
+            if (bill.type == "TRANSFER") AssetTransferScreen(original = bill, onBack = { editing = false; detail = false })
+            else BillEditorDialog(original = bill, newSource = bill.sourcePkg, newTime = bill.timeMillis,
                 sourceAmountBounds = amountBounds, onClose = { editing = false; detail = false })
         }
     }

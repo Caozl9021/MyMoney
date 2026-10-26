@@ -85,6 +85,7 @@ fun BillEditorDialog(original: BillEntity?, newSource: String, newTime: Long, so
             showImport = false,
             saving = saving,
             errorMessage = error,
+            assetHint = if (original != null && !original.assetLinked) "这笔旧账尚未计入余额，修改不会自动补扣；如需纳入，请在账单操作页选择“计入账户余额”。" else null,
             onSave = { edited ->
                 // 同步立刻置位；快速双击无法排入两个数据库写操作。
                 if (!operation.saving && !operation.completed) {

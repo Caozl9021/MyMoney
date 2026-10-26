@@ -1,5 +1,7 @@
 package com.example.autobook.ui
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
@@ -143,12 +145,18 @@ fun ConfirmSheet(
     saving: Boolean = false,
     busyLabel: String = "保存中…",
     errorMessage: String? = null,
+    assetHint: String? = null,
     amountVisibility: Boolean = true,
     onAmountBounds: ((androidx.compose.ui.geometry.Rect) -> Unit)? = null,
     onPickerBackHandler: (((() -> Boolean)?) -> Unit)? = null,
     noteSuggestions: (current: BillDraft) -> List<NoteSuggester.Suggestion> = { emptyList() },
 ) {
     val p = LocalAbPalette.current
+    DisposableEffect(draft.historyId) {
+        val id = draft.historyId
+        if (id != null) com.example.autobook.data.CaptureEditLocks.acquire(id)
+        onDispose { if (id != null) com.example.autobook.data.CaptureEditLocks.release(id) }
+    }
     val reduceMotion = LocalReduceMotion.current
     val haptic = rememberAbHaptic()
 
@@ -462,6 +470,16 @@ fun ConfirmSheet(
                             modifier = Modifier.padding(horizontal = AbSpacing.xl),
                         )
                     }
+
+                    val assetAccounts by com.example.autobook.data.AssetStore.accounts.collectAsStateWithLifecycle()
+                    val assetAccount = assetAccounts.firstOrNull { it.name == account }
+                    val balanceHint = assetHint ?: when {
+                        type == BillType.TRANSFER -> "此转账尚未补全双账户。先保存账单，再从账单操作页补全；当前不改变余额。"
+                        assetAccount?.initialized != true -> "所选账户未设置余额：本次只记账，不联动余额。可稍后在资产页设置。"
+                        else -> "保存后立即更新账户余额，含补记和未来日期；账户应选择实际扣款来源。"
+                    }
+                    Text(balanceHint, style = AbType.caption1, color = p.secondaryLabel,
+                        modifier = Modifier.padding(horizontal = AbSpacing.xl))
 
                     if (!editableDetails) {
                         Column(

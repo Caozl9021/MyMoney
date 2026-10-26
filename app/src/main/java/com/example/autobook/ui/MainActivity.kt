@@ -42,6 +42,7 @@ import com.example.autobook.ui.design.AbIcons
 import com.example.autobook.ui.design.AbSize
 import com.example.autobook.ui.design.LocalAbPalette
 import com.example.autobook.ui.design.LiquidTabBar
+import com.example.autobook.ui.design.TabGlyph
 import com.example.autobook.ui.design.TabItem
 import com.example.autobook.ui.design.createLiquidGlassTabBar
 import kotlinx.coroutines.launch
@@ -89,7 +90,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         if (intent.action == "com.example.autobook.action.ADD_BILL") {
-            tabState.intValue = 1
+            tabState.intValue = 0
             requestAdd.intValue++
             // Consume the command while retaining extras identifying the launch source.
             intent.action = null
@@ -118,7 +119,7 @@ class MainActivity : ComponentActivity() {
         tabState.intValue = savedInstanceState?.getInt("selectedTab", 0)?.coerceIn(tabs.indices) ?: 0
         requestAdd.intValue = savedInstanceState?.getInt("requestAdd", 0) ?: 0
         if (savedInstanceState == null && intent.action == "com.example.autobook.action.ADD_BILL") {
-            tabState.intValue = 1
+            tabState.intValue = 0
             requestAdd.intValue++
             intent.action = null
         }
@@ -251,10 +252,11 @@ class MainActivity : ComponentActivity() {
 }
 
 private val tabs = listOf(
-    TabItem("首页", AbIcons.Home),
-    TabItem("明细", AbIcons.List),
-    TabItem("统计", AbIcons.Chart),
-    TabItem("设置", AbIcons.Settings),
+    // 四个都带 glyph：选中时播一次画入动效；icon 只作为无障碍/兜底的静态图形。
+    TabItem("首页", AbIcons.Home, TabGlyph.HOME),
+    TabItem("统计", AbIcons.Chart, TabGlyph.PIE),
+    TabItem("资产", AbIcons.Wallet, TabGlyph.CARD),
+    TabItem("设置", AbIcons.Settings, TabGlyph.SETTINGS),
 )
 
 @Composable
@@ -270,6 +272,28 @@ private fun AppContent(tabState: MutableIntState, requestAdd: Int, onEditorVisib
     val p = LocalAbPalette.current
     val reduceMotion = com.example.autobook.ui.design.LocalReduceMotion.current
     val tab = tabState.intValue
+    var detailsOpen by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var detailAddRequest by androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(0) }
+    var consumedAddRequest by androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(0) }
+    androidx.compose.runtime.LaunchedEffect(requestAdd) {
+        if (requestAdd != 0 && requestAdd != consumedAddRequest) {
+            consumedAddRequest = requestAdd
+            detailAddRequest = requestAdd
+            detailsOpen = true
+        }
+    }
+    // 明细是「压在 Tab 之上的整页」，但胶囊 Tab 栏仍然可见（iOS 的推入页观感），
+    // 所以这里不再按 detailsOpen 直接隐藏 dock；只有明细内部的弹层/子页才隐藏，
+    // 由 BillsScreen 的 onEditorVisibilityChanged 上报。
+    var lastTab by remember { androidx.compose.runtime.mutableIntStateOf(tab) }
+    androidx.compose.runtime.LaunchedEffect(tab) {
+        if (tab != lastTab) {
+            lastTab = tab
+            // 切页时把明细收掉，否则它会继续压在新 Tab 上，看起来像「串页」。
+            if (detailsOpen) detailsOpen = false
+        }
+    }
+    fun openDetails() { detailAddRequest = 0; detailsOpen = true }
     val tabStates = rememberSaveableStateHolder()
     var captureSettingsDestination by androidx.compose.runtime.saveable.rememberSaveable {
         mutableStateOf<CaptureSettingsDestination?>(null)
@@ -280,9 +304,9 @@ private fun AppContent(tabState: MutableIntState, requestAdd: Int, onEditorVisib
         .collectAsStateWithLifecycle(initialValue = emptyList())
 
     // 返回 / 侧滑：非首页 → 回首页；已在首页 → 交给系统退出（符合 Android 惯例）
-    BackHandler(enabled = captureState.mode != null && tab != 0) { tabState.intValue = 0 }
+    BackHandler(enabled = captureState.configured && tab != 0) { tabState.intValue = 0 }
 
-    if (captureState.mode == null) {
+    if (!captureState.configured) {
         CaptureModeScreen()
         return
     }
@@ -304,14 +328,21 @@ private fun AppContent(tabState: MutableIntState, requestAdd: Int, onEditorVisib
                     0 -> HomeScreen(
                         bills = bills,
                         onEditorVisibilityChanged = { editorChanged(0, it) },
-                        onSeeAll = { tabState.intValue = 1 },
+                        onSeeAll = { openDetails() },
+                        onOpenAssets = { tabState.intValue = 2 },
                         onOpenSettings = { destination -> captureSettingsDestination = destination; tabState.intValue = 3 },
                     )
-                    1 -> BillsScreen(requestAdd = requestAdd, onEditorVisibilityChanged = { editorChanged(1, it) })
-                    2 -> StatsScreen()
-                    else -> SettingsScreen(destination = captureSettingsDestination, onDestinationHandled = { captureSettingsDestination = null })
+                    1 -> StatsScreen(onOpenDetails = { openDetails() })
+                    2 -> AssetsScreen(onBack = { tabState.intValue = 0 }, isTab = true,
+                        onSubpageVisibilityChanged = { editorChanged(2, it) })
+                    else -> SettingsScreen(destination = captureSettingsDestination, onDestinationHandled = { captureSettingsDestination = null },
+                        onEditorVisibilityChanged = { editorChanged(3, it) }, onOpenAssets = { tabState.intValue = 2 })
                 }
             }
+        }
+        if (detailsOpen) {
+            BackHandler { detailsOpen = false }
+            BillsScreen(requestAdd = detailAddRequest, onBack = { detailsOpen = false })
         }
     }
 }

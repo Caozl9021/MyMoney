@@ -37,10 +37,13 @@ import com.example.autobook.ui.design.AbIcons
 import com.example.autobook.ui.design.AbSpacing
 import com.example.autobook.ui.design.AbType
 import com.example.autobook.ui.design.CapsuleChip
+import com.example.autobook.ui.design.CategoryBadge
+import com.example.autobook.ui.design.CategoryPresets
 import com.example.autobook.ui.design.EmptyState
 import com.example.autobook.ui.design.GroupFooter
 import com.example.autobook.ui.design.GroupHeader
 import com.example.autobook.ui.design.InsetDivider
+import com.example.autobook.ui.design.InlineMessage
 import com.example.autobook.ui.design.InsetGroup
 import com.example.autobook.ui.design.InputRow
 import com.example.autobook.ui.design.ListRow
@@ -66,6 +69,7 @@ fun LedgerConfigPage(
     var version by remember { mutableStateOf(0) }               // 强制重读清单
     var newGroup by rememberSaveable { mutableStateOf("") }
     var resetConfirm by rememberSaveable { mutableStateOf(false) }
+    var resetError by remember { mutableStateOf<String?>(null) }
     var sorting by rememberSaveable { mutableStateOf(false) }   // 排序模式：行尾出现上移/下移
 
     val groups = remember(version, tab) {
@@ -75,7 +79,13 @@ fun LedgerConfigPage(
 
     if (resetConfirm) RestoreLedgerDefaultsDialog(
         onDismiss = { resetConfirm = false },
-        onConfirm = { LedgerConfig.resetToDefault(); version++; resetConfirm = false },
+        errorMessage = resetError,
+        onConfirm = {
+            resetError = null
+            runCatching { LedgerConfig.resetToDefault() }
+                .onSuccess { version++; resetConfirm = false }
+                .onFailure { resetError = it.message ?: "恢复默认清单失败，请重试" }
+        },
     )
     val current = groups.firstOrNull { it.name == openGroup }
 
@@ -155,6 +165,43 @@ fun LedgerConfigPage(
                 }
             }
 
+            if (!sorting) {
+                // 预设：市面上大多数记账 App 都有的那一批名字。只补「当前还没有的」，
+                // 点一下就连同二级分类一起建好；之后和手工添加的分类没有任何区别。
+                val presets = CategoryPresets.forType(tab == 1)
+                val existing = groups.map { it.name }.toSet()
+                val missing = presets.filterNot { it.name in existing }
+                if (missing.isNotEmpty()) {
+                    item(key = "presets-hdr") {
+                        GroupHeader("常用预设", Modifier.padding(top = AbSpacing.s))
+                    }
+                    item(key = "presets") {
+                        InsetGroup {
+                            Column(Modifier.padding(AbSpacing.l), verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
+                                missing.chunked(3).forEach { row ->
+                                    Row(horizontalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
+                                        row.forEach { preset ->
+                                            CapsuleChip(
+                                                text = preset.name,
+                                                selected = false,
+                                                onClick = {
+                                                    runCatching {
+                                                        LedgerConfig.addGroup(type, preset.name)
+                                                        preset.subs.forEach { LedgerConfig.addSubCategory(type, preset.name, it) }
+                                                    }.onSuccess { version++ }
+                                                },
+                                            )
+                                        }
+                                    }
+                                }
+                                Text("点一下就把名字和二级分类建好，之后可以照常改名或删除。",
+                                    style = AbType.caption1, color = p.secondaryLabel)
+                            }
+                        }
+                    }
+                }
+            }
+
             item(key = "accounts-hdr") { SortableHeader("账户", sorting) { sorting = !sorting } }
 
             item(key = "accounts") {
@@ -168,7 +215,7 @@ fun LedgerConfigPage(
                         title = "恢复默认清单",
                         destructive = true,
                         subtitle = "替换支出、收入分类和账户；保留账单、历史与备注模板",
-                        onClick = { resetConfirm = true },
+                        onClick = { resetError = null; resetConfirm = true },
                     )
                 }
             }
@@ -193,22 +240,7 @@ private fun GroupRow(group: CategoryGroup, dividerAbove: Boolean, onClick: () ->
         dividerAbove = dividerAbove,
         chevron = trailing == null,
         trailing = trailing,
-        leading = {
-            Box(
-                Modifier
-                    .size(30.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(tint.copy(alpha = 0.16f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    Modifier
-                        .size(10.dp)
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(tint),
-                )
-            }
-        },
+        leading = { CategoryBadge(category = group.name, tint = tint, size = 32.dp) },
         onClick = onClick,
     )
 }
@@ -332,6 +364,7 @@ private fun SubCategoryPage(
 private fun AccountsSection(version: Int, onChanged: () -> Unit) {
     val p = LocalAbPalette.current
     var draft by rememberSaveable { mutableStateOf("") }
+    var accountError by remember { mutableStateOf<String?>(null) }
     val accounts = remember(version) { LedgerConfig.accounts }
 
     Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
@@ -347,8 +380,10 @@ private fun AccountsSection(version: Int, onChanged: () -> Unit) {
                                     text = "$name  ×",
                                     selected = false,
                                     onClick = {
-                                        LedgerConfig.removeAccount(name)
-                                        onChanged()
+                                        accountError = null
+                                        runCatching { LedgerConfig.removeAccount(name) }
+                                            .onSuccess { onChanged() }
+                                            .onFailure { accountError = it.message ?: "移除账户失败，请重试" }
                                     },
                                 )
                             }
@@ -360,16 +395,20 @@ private fun AccountsSection(version: Int, onChanged: () -> Unit) {
             InputRow(
                 label = "添加",
                 value = draft,
-                onValueChange = { draft = it },
+                onValueChange = { draft = it; accountError = null },
                 placeholder = "账户名（如 微信零钱）",
                 onDone = {
-                    LedgerConfig.addAccount(draft)
-                    draft = ""
-                    onChanged()
+                    accountError = null
+                    runCatching {
+                        require(draft.isNotBlank()) { "请输入账户名称" }
+                        LedgerConfig.addAccount(draft)
+                    }.onSuccess { draft = ""; onChanged() }
+                        .onFailure { accountError = it.message ?: "添加账户失败，请重试" }
                 },
             )
         }
-        GroupFooter("账户名同样要与 iCost 一致；识别时会按支付方式自动匹配。")
+        if (accountError != null) InlineMessage(accountError.orEmpty(), isError = true, announce = true)
+        GroupFooter("账户名同样要与 iCost 一致；识别时会按支付方式自动匹配。移除即归档，余额与历史保留；同名归档账户请在资产页恢复。")
     }
 }
 
@@ -428,24 +467,34 @@ private fun MoveButton(label: String, description: String, icon: androidx.compos
 @Composable
 private fun SortableAccounts(version: Int, onChanged: () -> Unit) {
     val accounts = remember(version) { LedgerConfig.accounts }
-    InsetGroup {
-        accounts.forEachIndexed { index, name ->
-            ListRow(
-                title = name,
-                dividerAbove = index > 0,
-                trailing = { MoveButtons(name, index, accounts.size) { from, to -> LedgerConfig.moveAccount(from, to); onChanged() } },
-            )
+    var accountError by remember { mutableStateOf<String?>(null) }
+    Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
+        InsetGroup {
+            accounts.forEachIndexed { index, name ->
+                ListRow(title = name, dividerAbove = index > 0,
+                    trailing = { MoveButtons(name, index, accounts.size) { from, to ->
+                        accountError = null
+                        runCatching { LedgerConfig.moveAccount(from, to) }
+                            .onSuccess { onChanged() }
+                            .onFailure { accountError = it.message ?: "账户排序失败，请重试" }
+                    } },
+                )
+            }
         }
+        if (accountError != null) InlineMessage(accountError.orEmpty(), isError = true, announce = true)
     }
 }
 
 /** All UI entry points explain the same bounded operation before any write. */
 @Composable
-internal fun RestoreLedgerDefaultsDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
+internal fun RestoreLedgerDefaultsDialog(onDismiss: () -> Unit, onConfirm: () -> Unit, errorMessage: String? = null) {
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("恢复默认清单？") },
-        text = { Text("将替换全部支出分类、收入分类和账户清单。已记账的账单、识别历史、备注模板、识别设置和权限均保留。") },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
+            Text("将替换全部支出分类、收入分类和账户候选清单；同名归档账户会恢复为候选。账户余额、资产流水、账单、识别历史、备注模板、识别设置和权限均保留。")
+            if (errorMessage != null) InlineMessage(errorMessage, isError = true, announce = true)
+        } },
         confirmButton = { androidx.compose.material3.TextButton(onClick = onConfirm) { Text("恢复默认清单") } },
         dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("取消") } },
     )

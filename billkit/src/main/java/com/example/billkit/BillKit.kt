@@ -108,6 +108,7 @@ object BillKit {
         screenshot: Bitmap,
         statusBarPx: Int = 0,
         now: Long = System.currentTimeMillis(),
+        configurationToken: String? = null,
     ): BillPipeline.Outcome? {
         if (!config.ocrEnabled) return null
         val fallback = ocrFallback ?: return null
@@ -119,8 +120,9 @@ object BillKit {
             statusBarPx = statusBarPx,
         ) ?: return null
 
-        val outcome = pipeline.process(snapshot, now)
-        dispatch(outcome, snapshot, now)
+        val captured = snapshot.copy(configurationToken = configurationToken)
+        val outcome = pipeline.process(captured, now)
+        dispatch(outcome, captured, now)
         return outcome
     }
 
@@ -137,13 +139,14 @@ object BillKit {
             }
 
             is BillPipeline.Outcome.Draft -> {
-                val draft = outcome.draft.copy(captureSessionId = sessionId)
+                val draft = outcome.draft.copy(captureSessionId = sessionId, captureConfigurationToken = snapshot.configurationToken)
                 val dedupeKey = deliveryKey(draft)
                 if (page == lastDraftPage) {
                     DebugBus.publish(snapshot, snapshot.diagnostic("skip:same-page"))
                     return
                 }
-                if (now - lastAcceptedAt < config.minIntervalMs) {
+                if (now - lastAcceptedAt < config.minIntervalMs &&
+                    !(draft.transactionKey != null && dedupeKey != lastDraftToken)) {
                     DebugBus.publish(snapshot, snapshot.diagnostic("skip:throttled"))
                     return
                 }
@@ -191,7 +194,7 @@ object BillKit {
 
     private fun deliveryKey(draft: BillDraft): String = when {
         pageSessionProvider == null -> draft.fingerprint // preserve standalone library compatibility
-        draft.transactionKey != null -> "order:${draft.transactionKey}"
+        draft.transactionKey != null -> "order:${draft.sourcePkg}:${draft.type.name}:${draft.transactionKey}"
         draft.hasExplicitTime -> listOf(draft.sourcePkg, draft.type.name, draft.priceCents,
             draft.timeMillis, draft.merchant, draft.method).joinToString("|")
         else -> draft.captureSessionId ?: draft.fingerprint

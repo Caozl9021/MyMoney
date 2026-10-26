@@ -6,6 +6,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -65,6 +69,7 @@ import com.example.autobook.ui.design.formatAmount
 fun HomeScreen(
     bills: List<BillEntity>,
     onSeeAll: () -> Unit,
+    onOpenAssets: () -> Unit = {},
     onOpenSettings: (CaptureSettingsDestination) -> Unit,
     onEditorVisibilityChanged: (Boolean) -> Unit = {},
 ) {
@@ -96,6 +101,7 @@ fun HomeScreen(
             prefs.edit().putBoolean("complete", true).apply()
         }
     }
+    var healthDetails by remember { mutableStateOf(false) }
     var newSource by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
     var newTime by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0L) }
     fun addBill() {
@@ -121,7 +127,14 @@ fun HomeScreen(
         }
     }
     PageScaffold(
-        title = "${clock.date.year}年${clock.date.monthValue}月",
+        title = "账本",
+        compact = true,
+        actions = {
+            Button(onClick = { addBill() }, modifier = Modifier.heightIn(min = 48.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = p.accent, contentColor = p.onAccent)) {
+                Text("＋ 记一笔")
+            }
+        },
         listState = listState,
         subtitle = clock.date.format(java.time.format.DateTimeFormatter.ofPattern("M月d日 EEEE", java.util.Locale.CHINA)),
     ) { padding ->
@@ -143,20 +156,28 @@ fun HomeScreen(
             // 本月支出是首页的主视觉，放在第一屏最上面；今日摘要降为它下面的一行辅助信息。
             item(key = "summary") { MonthlySummaryCard(clock) }
             if (health.attention) item(key = "runtime-attention") {
-                InsetGroup {
-                    CaptureHealthCard(health) { action ->
-                        performCaptureAction(context, action, onOpenSettings) {
-                            historyFilter = RecognitionStatus.PENDING; historyOpen = true
-                        }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
+                    Column(Modifier.weight(1f).clip(RoundedCornerShape(AbRadius.row))
+                        .clickable { healthDetails = true }.heightIn(min = 48.dp)
+                        .padding(vertical = AbSpacing.xs), verticalArrangement = Arrangement.Center) {
+                        Text(health.title, style = AbType.footnote, color = p.label)
+                        Text("点此查看原因", style = AbType.caption1, color = p.secondaryLabel)
+                    }
+                    health.actions.firstOrNull()?.let { action ->
+                        TextButton(onClick = {
+                            performCaptureAction(context, action, onOpenSettings) {
+                                historyFilter = RecognitionStatus.PENDING; historyOpen = true
+                            }
+                        }, modifier = Modifier.heightIn(min = 48.dp)) { Text("处理", color = p.accent) }
                     }
                 }
             }
             if (!historyReady || historyError != null || pending.isNotEmpty()) item(key = "pending") {
                 Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
-                    GroupHeader(if (historyError != null) "识别记录读取失败" else if (!historyReady) "正在读取识别记录" else "待处理 ${pending.size} 笔")
                     InsetGroup {
                         ListRow(
-                            title = if (historyError != null) "重新读取" else if (!historyReady) "正在读取待处理账单…" else "继续处理",
+                            title = if (historyError != null) "识别记录读取失败 · 重试" else if (!historyReady) "正在读取待处理账单…" else "待处理 ${pending.size} 笔",
                             subtitle = historyError ?: pending.firstOrNull()?.let { "${it.merchant ?: "识别到一笔账单"} · ${formatAmount(it.priceCents)}" },
                             chevron = historyReady && historyError == null,
                             onClick = {
@@ -167,7 +188,6 @@ fun HomeScreen(
                     }
                 }
             }
-            item(key = "today") { TodaySummaryCard(clock) }
             if (recentState == HomeRecentState.Loading) {
                 item(key = "recent-loading") {
                     InsetGroup { ListRow(title = "正在读取最近记录…") }
@@ -246,7 +266,7 @@ fun HomeScreen(
                     }
                 }
             }
-            if (!guideComplete) item(key = "guide") {
+            if (!guideComplete && healthInput.pageFallbackEnabled) item(key = "guide") {
                 Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
                     GroupHeader("开始自动记账")
                     InsetGroup {
@@ -279,6 +299,17 @@ fun HomeScreen(
             .padding(bottom = padding.calculateBottomPadding())) { BillUndoStack() }
         }
     }
+    if (healthDetails) AlertDialog(
+        onDismissRequest = { healthDetails = false },
+        title = { Text("识别状态") },
+        text = { CaptureHealthCard(health) { action ->
+            healthDetails = false
+            performCaptureAction(context, action, onOpenSettings) {
+                historyFilter = RecognitionStatus.PENDING; historyOpen = true
+            }
+        } },
+        confirmButton = { TextButton(onClick = { healthDetails = false }) { Text("关闭") } },
+    )
     selectedId?.let { id ->
         Box(Modifier.fillMaxSize().zIndex(10f)) {
             BillActionsHost(billId = id, onClose = { selectedId = null })

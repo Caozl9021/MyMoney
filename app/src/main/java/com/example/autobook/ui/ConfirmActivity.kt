@@ -75,15 +75,30 @@ class ConfirmActivity : ComponentActivity() {
     private var boundDraft by mutableStateOf<BillDraft?>(null)
     private var bindingGeneration = 0
 
+    private fun automaticPresentationAllowed(incoming: Intent): Boolean {
+        val token = incoming.getStringExtra("autobook_auto_capture_token") ?: return true
+        val settings = com.example.autobook.data.Settings(this)
+        return settings.enabled && settings.autoConfirm &&
+            token == com.example.autobook.capture.NotificationIngress.configurationToken(this) &&
+            (getSystemService(KEYGUARD_SERVICE) as? android.app.KeyguardManager)?.isKeyguardLocked != true
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         configureConfirmationWindow()
         super.onCreate(savedInstanceState)
+        if (!automaticPresentationAllowed(intent)) { finish(); return }
         savedInstanceState?.getString(EXTRA_HISTORY_ID)?.let { intent.putExtra(EXTRA_HISTORY_ID, it) }
         bindIntent()
         setContent {
             AutoBookTheme {
                 val draft = boundDraft
                 if (draft != null) key(draft.historyId) {
+                    LaunchedEffect(draft.historyId) {
+                        withFrameNanos { }
+                        withFrameNanos { }
+                        if (automaticPresentationAllowed(intent)) ConfirmLaunch.markLaunched(draft.historyId ?: draft.fingerprint)
+                        else finish()
+                    }
                     val operation = remember(draft.historyId) {
                         ViewModelProvider(this@ConfirmActivity).get(draft.historyId!!, ConfirmSaveOperation::class.java)
                     }
@@ -134,6 +149,7 @@ class ConfirmActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        if (!automaticPresentationAllowed(intent)) return
         val current = boundDraft
         if (current != null) {
             val operation = ViewModelProvider(this).get(current.historyId!!, ConfirmSaveOperation::class.java)
@@ -150,7 +166,6 @@ class ConfirmActivity : ComponentActivity() {
         val raw = readDraft()
         val generation = ++bindingGeneration
         boundDraft = null
-        ConfirmLaunch.markLaunched(raw.historyId ?: raw.fingerprint)
         ConfirmDelivery.cancel(this, raw.historyId ?: raw.fingerprint)
         lifecycleScope.launch {
             try {
@@ -168,6 +183,7 @@ class ConfirmActivity : ComponentActivity() {
                         operation.restoreResult(BillWriter.SaveResult(false, bill))
                     }
                     intent.putExtra(EXTRA_HISTORY_ID, restored.historyId)
+                    if (!automaticPresentationAllowed(intent)) { finish(); return@launch }
                     boundDraft = restored
                 }
             } catch (error: Exception) {

@@ -1,7 +1,6 @@
 package com.example.autobook.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -15,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -29,7 +29,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -91,9 +90,7 @@ private fun monthLabel(back: Int, target: YearMonth): String =
 /**
  * 首页主视觉：本月支出。
  *
- * 这一张卡就是首页最大的数字，不需要先展开。底色是两档同色相浅珊瑚渐变
- * （深色主题换成两档暗红），文字用深一档的同色相墨色而不是纯黑，
- * 避免整块强色，也避免白字压在浅底上的低对比。
+ * 中性紧凑卡集成月汇总与独立今日摘要；月支出仍为最大数字。
  *
  * 口径：支出是本地自然月 EXPENSE 总额，不扣退款；结余 = 收入 − 原支出 + 退款；
  * 转账不计收支。退款非零才单独出现，不为了「统一四行」硬凑一个 ¥0.00。
@@ -106,45 +103,44 @@ internal fun MonthlySummaryCard(clock: LedgerClock) {
     val currentMonth = YearMonth.from(clock.date)
     val target = currentMonth.minusMonths(back.toLong())
     val state = rememberSummary(target.atDay(1), target.atEndOfMonth(), clock, retry)
-    val shape = RoundedCornerShape(AbRadius.card)
+    val shape = RoundedCornerShape(AbRadius.group)
     val interactive = remember { MutableInteractionSource() }
 
     Column(
         Modifier.fillMaxWidth()
             .clip(shape)
-            .background(Brush.verticalGradient(listOf(p.heroSurfaceTop, p.heroSurfaceBottom)))
-            .border(1.dp, p.heroStroke, shape)
-            .padding(start = AbSpacing.xl, end = AbSpacing.l, top = AbSpacing.l, bottom = AbSpacing.xl),
+            .background(p.cardBg)
+            .padding(AbSpacing.l),
         verticalArrangement = Arrangement.spacedBy(AbSpacing.m),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 "${monthLabel(back, target)}支出",
                 style = AbType.footnote.copy(fontWeight = FontWeight.Medium),
-                color = p.heroSecondaryLabel,
+                color = p.secondaryLabel,
                 modifier = Modifier.weight(1f),
             )
             if (back > 0) Text(
                 "回到本月",
                 style = AbType.caption1.copy(fontWeight = FontWeight.Medium),
-                color = p.heroAmount,
+                color = p.label,
                 modifier = Modifier
                     .clip(RoundedCornerShape(AbRadius.capsule))
                     .clickable(interactionSource = interactive, indication = null) { back = 0 }
-                    .heightIn(min = 40.dp)
+                    .heightIn(min = 48.dp)
                     .padding(horizontal = AbSpacing.s, vertical = 10.dp),
             )
-            MonthArrow(p.heroAmount, "上个月") { back++ }
-            MonthArrow(p.heroAmount, "下个月", enabled = back > 0) { back-- }
+            MonthArrow(p.label, "上个月") { back++ }
+            MonthArrow(p.label, "下个月", enabled = back > 0) { back-- }
         }
         when (state) {
             SummaryState.Loading -> {
-                Text("正在读取${monthLabel(back, target)}账单…", style = AbType.subhead, color = p.heroSecondaryLabel)
+                Text("正在读取${monthLabel(back, target)}账单…", style = AbType.subhead, color = p.secondaryLabel)
             }
             SummaryState.Failed -> {
-                Text("${monthLabel(back, target)}账单读取失败", style = AbType.subhead, color = p.heroAmount)
+                Text("${monthLabel(back, target)}账单读取失败", style = AbType.subhead, color = p.label)
                 TextButton(onClick = { retry++ }, modifier = Modifier.heightIn(min = 48.dp)) {
-                    Text("重新加载", color = p.heroAmount)
+                    Text("重新加载", color = p.label)
                 }
             }
             is SummaryState.Ready -> {
@@ -152,21 +148,15 @@ internal fun MonthlySummaryCard(clock: LedgerClock) {
                 // 主数字：整块宽度可用，金额不省略、不缩到读不出（AmountText 自身有下限）。
                 AmountText(
                     value = formatAmount(summary.expense),
-                    style = AbType.amountHero.copy(fontSize = 42.sp, lineHeight = 48.sp),
-                    color = p.heroAmount,
+                    style = AbType.amountHero.copy(fontSize = 36.sp, lineHeight = 42.sp),
+                    color = p.label,
                     modifier = Modifier.fillMaxWidth().semantics { contentDescription = "${monthLabel(back, target)}支出 ${formatAmount(summary.expense)}" },
                 )
                 SummarySecondary(summary, p)
-                Text(
-                    buildString {
-                        append(if (summary.count == 0) "${monthLabel(back, target)}还没有记录" else "${monthLabel(back, target)}已记 ${summary.count} 笔")
-                        if (summary.refund != 0L) append(" · 退款不计入支出")
-                    },
-                    style = AbType.caption1,
-                    color = p.heroSecondaryLabel,
-                )
             }
         }
+        HorizontalDivider(color = p.separator.copy(alpha = 0.45f))
+        TodaySummaryCard(clock)
     }
 }
 
@@ -174,7 +164,7 @@ internal fun MonthlySummaryCard(clock: LedgerClock) {
 private fun MonthArrow(tint: Color, label: String, enabled: Boolean = true, onClick: () -> Unit) {
     val p = LocalAbPalette.current
     Box(
-        Modifier.size(40.dp)
+        Modifier.size(48.dp)
             .clip(RoundedCornerShape(AbRadius.capsule))
             .clickable(enabled = enabled, onClick = onClick)
             .semantics { contentDescription = label },
@@ -184,7 +174,7 @@ private fun MonthArrow(tint: Color, label: String, enabled: Boolean = true, onCl
             if (label == "上个月") AbIcons.ChevronLeft else AbIcons.ChevronRight,
             contentDescription = null,
             modifier = Modifier.size(18.dp),
-            tint = if (enabled) tint else p.heroSecondaryLabel.copy(alpha = 0.45f),
+            tint = if (enabled) tint else p.secondaryLabel.copy(alpha = 0.45f),
         )
     }
 }
@@ -197,6 +187,7 @@ private fun SummarySecondary(summary: BillQuerySummary, p: AbPalette) {
         val cells = buildList {
             add("收入" to formatAmount(summary.income))
             add("结余" to (if (summary.balance < 0) "−" + formatAmount(-summary.balance) else formatAmount(summary.balance)))
+            add("已记" to "${summary.count} 笔")
             if (summary.refund != 0L) add("退款" to formatAmount(summary.refund))
         }
         val gap = AbSpacing.l
@@ -212,8 +203,8 @@ private fun SummarySecondary(summary: BillQuerySummary, p: AbPalette) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(gap)) {
                     row.forEach { (label, value) ->
                         Column(Modifier.width(cellWidth), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                            Text(label, style = AbType.caption1, color = p.heroSecondaryLabel)
-                            Text(value, style = AbType.subhead.copy(fontWeight = FontWeight.Medium), color = p.heroAmount)
+                            Text(label, style = AbType.caption1, color = p.secondaryLabel)
+                            Text(value, style = AbType.subhead.copy(fontWeight = FontWeight.Medium), color = p.label)
                         }
                     }
                 }
@@ -228,15 +219,16 @@ private fun SummarySecondary(summary: BillQuerySummary, p: AbPalette) {
  * 区间固定是「今天」，不随上面的月份切换变化 —— 看 9 月的月支出时，
  * 这一行仍然是今天的支出，两者口径不同，不能混。
  */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 internal fun TodaySummaryCard(clock: LedgerClock) {
     val p = LocalAbPalette.current
     var retry by remember { mutableIntStateOf(0) }
     val state = rememberSummary(clock.date, clock.date, clock, retry)
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xs).semantics(mergeDescendants = true) {},
-        verticalAlignment = Alignment.CenterVertically,
+    androidx.compose.foundation.layout.FlowRow(
+        Modifier.fillMaxWidth().semantics(mergeDescendants = true) {},
         horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
+        verticalArrangement = Arrangement.spacedBy(AbSpacing.xs),
     ) {
         Text("今日支出", style = AbType.footnote, color = p.secondaryLabel)
         when (state) {
@@ -255,7 +247,6 @@ internal fun TodaySummaryCard(clock: LedgerClock) {
                     if (summary.count == 0) "今天还没有记录" else "· ${summary.count} 笔",
                     style = AbType.caption1,
                     color = p.tertiaryLabel,
-                    modifier = Modifier.weight(1f),
                 )
                 if (summary.count != 0) Text(
                     clock.date.format(java.time.format.DateTimeFormatter.ofPattern("M月d日", java.util.Locale.CHINA)),

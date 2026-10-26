@@ -72,7 +72,7 @@ object RootWatcher {
         intervalMs: Long = 1_200L,
         onAuthorizationDenied: () -> Unit = {},
     ) {
-        if (!settings.enabled || settings.captureMode != CaptureMode.ROOT || running) return
+        if (!settings.enabled || !settings.pageFallbackEnabled || settings.captureMode != CaptureMode.ROOT || running) return
         stop()
         appContext = context.applicationContext
         // 换来源/换白名单后旧的哈希会误判为"没变化"，重启轮询时清掉
@@ -85,9 +85,9 @@ object RootWatcher {
                 withContext(Dispatchers.Main) { onAuthorizationDenied() }
                 return@launch
             }
-            if (!isActive || !settings.enabled || settings.captureMode != CaptureMode.ROOT) return@launch
+            if (!isActive || !settings.enabled || !settings.pageFallbackEnabled || settings.captureMode != CaptureMode.ROOT) return@launch
             update { it.copy(running = true, lastResult = "运行中") }
-            while (isActive && settings.enabled && settings.captureMode == CaptureMode.ROOT) {
+            while (isActive && settings.enabled && settings.pageFallbackEnabled && settings.captureMode == CaptureMode.ROOT) {
                 val interactive = isInteractive(app)
                 if (!interactive) {
                     // 熄屏：什么都不做，长睡。醒来第一轮把 lastHash 清掉，
@@ -137,7 +137,9 @@ object RootWatcher {
     }
 
     private suspend fun tick(context: Context, settings: Settings): RootPollPolicy.Tick {
-        if (!settings.enabled || settings.captureMode != CaptureMode.ROOT) {
+        val captureToken = com.example.autobook.capture.NotificationIngress.configurationToken(context)
+        fun currentConfiguration() = captureToken == com.example.autobook.capture.NotificationIngress.configurationToken(context)
+        if (!settings.enabled || !settings.pageFallbackEnabled || settings.captureMode != CaptureMode.ROOT) {
             lastHash = null
             update { it.copy(lastResult = "识别已关闭") }
             return RootPollPolicy.Tick.IDLE
@@ -155,8 +157,8 @@ object RootWatcher {
         }
 
         // 前台已经查过了，直接传进去，省一次 dumpsys window
-        if (!settings.enabled || settings.captureMode != CaptureMode.ROOT) return RootPollPolicy.Tick.IDLE
-        val snapshot = source.dump(fg) ?: run {
+        if (!settings.enabled || !settings.pageFallbackEnabled || settings.captureMode != CaptureMode.ROOT || !currentConfiguration()) return RootPollPolicy.Tick.IDLE
+        val snapshot = source.dump(fg)?.copy(configurationToken = captureToken) ?: run {
             update { it.copy(lastPackage = fg.packageName, lastResult = "dump 失败") }
             return RootPollPolicy.Tick.IDLE
         }
@@ -174,7 +176,7 @@ object RootWatcher {
         update { it.copy(lastPackage = fg.packageName, lastTickAt = System.currentTimeMillis(), tickCount = it.tickCount + 1) }
 
         currentCoroutineContext().ensureActive()
-        if (!settings.enabled || settings.captureMode != CaptureMode.ROOT) return RootPollPolicy.Tick.IDLE
+        if (!settings.enabled || !settings.pageFallbackEnabled || settings.captureMode != CaptureMode.ROOT || !currentConfiguration()) return RootPollPolicy.Tick.IDLE
         val outcome = BillKit.offer(snapshot)
         val label = when (outcome) {
             is com.example.billkit.BillPipeline.Outcome.Draft -> "识别到账单"
@@ -187,18 +189,19 @@ object RootWatcher {
         if (!outcome.needsOcr || !BillKit.currentConfig().ocrEnabled) return result
         if (System.currentTimeMillis() - lastOcrAt < OCR_COOLDOWN_MS) return result
 
-        if (!settings.enabled || settings.captureMode != CaptureMode.ROOT) return result
+        if (!settings.enabled || !settings.pageFallbackEnabled || settings.captureMode != CaptureMode.ROOT || !currentConfiguration()) return result
         lastOcrAt = System.currentTimeMillis()
         val bitmap = RootScreenshot.capture() ?: return result
         try {
             currentCoroutineContext().ensureActive()
-            if (!settings.enabled || settings.captureMode != CaptureMode.ROOT) return result
+            if (!settings.enabled || !settings.pageFallbackEnabled || settings.captureMode != CaptureMode.ROOT || !currentConfiguration()) return result
             val statusBarPx = (STATUS_BAR_DP * context.resources.displayMetrics.density).toInt()
             val ocrOutcome = BillKit.offerOcr(
                 packageName = fg.packageName,
                 activityClass = fg.activityClass,
                 screenshot = bitmap,
                 statusBarPx = statusBarPx,
+                configurationToken = captureToken,
             )
             if (ocrOutcome is com.example.billkit.BillPipeline.Outcome.Draft) result = RootPollPolicy.Tick.ACTIVE
         } finally {

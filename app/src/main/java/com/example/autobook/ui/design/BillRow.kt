@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -54,16 +56,21 @@ fun formatAmount(cents: Long, signed: Boolean = false, type: String? = null): St
 fun timeOfDay(timeMillis: Long): String =
     SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(timeMillis))
 
-/** 分类 → 线性图标的稳定映射（按关键字命中，兜底用标签图标）。 */
+/**
+ * 分类 → 图标 key 的稳定映射。
+ *
+ * 具体规则在 [CategoryIcons]（实心 Material Symbols，`cat_*` 资源）；这里保留一个
+ * 过渡入口，万一还有地方只要 `ImageVector` 的老接口。
+ */
 fun iconForCategory(category: String?): ImageVector {
-    val c = category.orEmpty()
-    return when {
-        listOf("餐饮", "零食", "咖啡", "外卖", "食").any { it in c } -> AbIcons.Store
-        listOf("交通", "打车", "油", "停车", "地铁").any { it in c } -> AbIcons.Layers
-        listOf("购物", "服饰", "数码", "日用").any { it in c } -> AbIcons.Tag
-        listOf("工资", "收入", "奖金", "红包", "退款").any { it in c } -> AbIcons.ArrowDownLeft
-        listOf("转账", "人情", "借").any { it in c } -> AbIcons.ArrowUpRight
-        listOf("缴费", "水", "电", "话费", "房租", "物业").any { it in c } -> AbIcons.Note
+    val key = CategoryIcons.keyFor(category)
+    return when (key) {
+        "restaurant", "local_cafe" -> AbIcons.Store
+        "directions_bus", "local_taxi", "local_gas_station", "flight" -> AbIcons.Layers
+        "shopping_cart", "shopping_bag", "checkroom", "devices", "local_mall" -> AbIcons.Tag
+        "work", "emoji_events", "redeem", "savings", "undo" -> AbIcons.ArrowDownLeft
+        "swap_horiz", "card_giftcard" -> AbIcons.ArrowUpRight
+        "home", "apartment", "bolt", "smartphone", "receipt_long" -> AbIcons.Note
         else -> AbIcons.Tag
     }
 }
@@ -71,28 +78,22 @@ fun iconForCategory(category: String?): ImageVector {
 /** 缺失或全空白都算没有：不把 `""` 当成一个可显示的值。 */
 internal fun displayOrNull(value: String?): String? = value?.takeIf { it.isNotBlank() }
 
-/**
- * 行标题：merchant → note → 「未命名账单」。
- *
- * 第三条**不能**回退到 `strategy`：那是识别管线的技术串（`wechat-minimal` 之类），
- * 露在账本里既看不懂又是内部实现细节。
- */
-internal fun billRowTitle(merchant: String?, note: String?): String =
-    displayOrNull(merchant) ?: displayOrNull(note) ?: "未命名账单"
+/** 分类是账单行的稳定主标题；即使父分类缺失，已有二级分类也照常显示。 */
+internal fun billRowTitle(category: String?, subCategory: String?): String =
+    displayOrNull(subCategory) ?: displayOrNull(category) ?: "未分类"
 
-/** 行副标题：分类（含二级）与时间，缺的分量整个省掉，不留孤立分隔符。 */
-internal fun billRowSubtitle(category: String?, subCategory: String?, time: String?, refund: Boolean): String =
-    listOfNotNull(
-        if (refund) "退款" else null,
-        when (val cat = displayOrNull(category)) {
-            null -> "未分类"
-            else -> displayOrNull(subCategory)?.let { "$cat · $it" } ?: cat
-        },
-        time,
-    ).joinToString(" · ")
+/** 保留商户（否则备注）与时间；二级标题的父分类作为次级上下文，不重复标题。 */
+internal fun billRowSubtitle(
+    category: String?, subCategory: String?, merchant: String?, note: String?, time: String?, refund: Boolean,
+): String = listOfNotNull(
+    if (refund) "退款" else null,
+    displayOrNull(category)?.takeIf { displayOrNull(subCategory) != null && it != subCategory },
+    displayOrNull(merchant) ?: displayOrNull(note),
+    displayOrNull(time),
+).joinToString(" · ")
 
 /**
- * 一行账单：左图标 / 中间商户 + 次级信息 / 右金额与账户。
+ * 一行账单：左图标 / 中间分类 + 次级信息 / 右金额与账户。
  *
  * 首页和明细页共用唯一的形态，避免两处排版漂移。右侧不是固定 45% 的窄列：
  * 金额按内容取宽、余量让给标题，账户独立成第二行右对齐；账户缺失就整行不画，
@@ -109,7 +110,9 @@ fun BillListRow(
     val p = LocalAbPalette.current
     val accent = swatchFor(bill.category ?: "未分类")
     val time = if (showTime) timeOfDay(bill.timeMillis) else null
-    val account = displayOrNull(bill.account)
+    val assetAccounts by com.example.autobook.data.AssetStore.accounts.collectAsStateWithLifecycle()
+    val account = displayOrNull(assetAccounts.firstOrNull { it.id == bill.accountId }?.name ?: bill.account)
+    val subtitle = billRowSubtitle(bill.category, bill.subCategory, bill.merchant, bill.note, time, bill.type == "REFUND")
     val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
 
     Row(
@@ -120,17 +123,17 @@ fun BillListRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(AbSpacing.m),
     ) {
-        IconBadge(icon = iconForCategory(bill.category), tint = accent, size = 38.dp)
+        CategoryBadge(category = bill.category, tint = accent, size = 38.dp)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
-                text = billRowTitle(bill.merchant, bill.note),
+                text = billRowTitle(bill.category, bill.subCategory),
                 style = AbType.body,
                 color = p.label,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                text = billRowSubtitle(bill.category, bill.subCategory, time, bill.type == "REFUND"),
+            if (subtitle.isNotEmpty()) Text(
+                text = subtitle,
                 style = AbType.caption1,
                 color = p.secondaryLabel,
                 maxLines = 1,

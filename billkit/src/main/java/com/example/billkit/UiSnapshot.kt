@@ -10,6 +10,7 @@ data class UiSnapshot(
     val items: List<String>,
     val truncated: Boolean = false,
     val source: Source = Source.ACCESSIBILITY,
+    val configurationToken: String? = null,
 ) {
     enum class Source { ACCESSIBILITY, ROOT_DUMP, ROOT_OCR }
 

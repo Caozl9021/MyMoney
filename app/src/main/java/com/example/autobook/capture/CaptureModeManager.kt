@@ -40,7 +40,7 @@ object CaptureModeManager {
         }
         settings.migrateCaptureMode(configured)
         app = application
-        mutableState.value = CaptureModeState(settings.captureMode, settings.enabled)
+        mutableState.value = CaptureModeState(settings.captureMode, settings.enabled, settings.pageFallbackEnabled, settings.notificationCaptureEnabled)
         application.getSharedPreferences(Settings.PREFS_NAME, Context.MODE_PRIVATE)
             .registerOnSharedPreferenceChangeListener(listener)
     }
@@ -63,12 +63,23 @@ object CaptureModeManager {
         }
     }
 
+    fun setNotificationEnabled(context: Context, enabled: Boolean) {
+        init(context)
+        onMain { Settings(context).notificationCaptureEnabled = enabled; reconcile(context) }
+    }
+
+    fun setPageFallbackEnabled(context: Context, enabled: Boolean) {
+        init(context)
+        onMain { Settings(context).pageFallbackEnabled = enabled; reconcile(context) }
+    }
+
     fun reconcile(context: Context) {
         init(context)
         onMain {
             val settings = Settings(context)
-            val next = CaptureModeState(settings.captureMode, settings.enabled)
+            val next = CaptureModeState(settings.captureMode, settings.enabled, settings.pageFallbackEnabled, settings.notificationCaptureEnabled)
             mutableState.value = next
+            NotificationIngress.clearInvalidSample(context)
             com.example.autobook.systems.SystemIntegration.refreshTile(context)
             BillKit.updateConfig(settings.toKitConfig())
             BillAccessibilityService.instance?.refreshServiceInfo()

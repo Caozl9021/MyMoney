@@ -1,6 +1,9 @@
 package com.example.autobook.ui.design
 
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.keyframes
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -50,7 +53,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.CornerRadius
-import kotlin.math.abs
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
@@ -117,12 +119,10 @@ fun LargeTitleBar(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                    Text(
-                        title,
-                        style = AbType.navTitle,
-                        color = p.label,
-                        modifier = Modifier.alpha(compactAlpha),
-                    )
+                    Column(Modifier.alpha(compactAlpha)) {
+                        Text(title, style = AbType.navTitle, color = p.label)
+                        if (compact && subtitle != null) Text(subtitle, style = AbType.caption1, color = p.secondaryLabel)
+                    }
                 }
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
@@ -168,7 +168,12 @@ fun LargeTitleBar(
 // Tab 栏
 // ---------------------------------------------------------------------------
 
-data class TabItem(val label: String, val icon: ImageVector)
+data class TabItem(
+    val label: String,
+    val icon: ImageVector,
+    /** 有值就画会动的版本（选中时播一次画入动效）；否则退回 [icon] 静态图标。 */
+    val glyph: TabGlyph? = null,
+)
 
 /**
  * 底部悬浮胶囊 Tab 栏（API < 33 的假玻璃兜底）：半透明玻璃、内容从它下面穿过。
@@ -221,9 +226,22 @@ fun LiquidTabCells(
     // a new composition/measurement for an indicator animation frame.
     val position = animateFloatAsState(
         targetValue = selected.toFloat(),
-        animationSpec = if (reduceMotion) snap() else spring(dampingRatio = 0.92f, stiffness = 480f),
+        animationSpec = if (reduceMotion) snap() else spring(dampingRatio = 0.82f, stiffness = 450f),
         label = "tabIndicatorPosition",
     )
+    val pulse = remember { Animatable(1f) }
+    val previousSelection = remember { intArrayOf(selected) }
+    LaunchedEffect(selected, reduceMotion) {
+        val changed = selected != previousSelection[0]
+        previousSelection[0] = selected
+        if (reduceMotion) pulse.snapTo(1f)
+        else if (changed) pulse.animateTo(1f, keyframes {
+            durationMillis = 330
+            pulse.value at 0 using androidx.compose.animation.core.FastOutSlowInEasing
+            1.04f at 110 using androidx.compose.animation.core.FastOutSlowInEasing
+            1f at 330 using androidx.compose.animation.core.FastOutSlowInEasing
+        })
+    }
     val inset = 6.dp
     Box(modifier.fillMaxSize().selectableGroup().drawBehind {
         val stroke = 0.65.dp.toPx()
@@ -241,13 +259,12 @@ fun LiquidTabCells(
         val cellW = ((size.width - inset.toPx() * 2) / items.size).coerceAtLeast(1.dp.toPx())
         val cellH = (size.height - inset.toPx() * 2).coerceAtLeast(1.dp.toPx())
         val pos = if (reduceMotion) selected.toFloat() else position.value
-        // One spring drives both translation and deformation; the previous second
-        // spring retargeted on every position frame and also changed layout sizes.
-        val stretch = abs(selected - pos).coerceIn(0f, 1f)
-        val indicatorW = cellW + 6.dp.toPx() + 8.dp.toPx() * stretch
-        val indicatorH = cellH + 6.dp.toPx() - 2.dp.toPx() * stretch
-        val indicatorX = (inset.toPx() + cellW * pos - 3.dp.toPx() - 4.dp.toPx() * stretch)
-            .coerceIn(3.dp.toPx(), (size.width - 3.dp.toPx() - indicatorW).coerceAtLeast(3.dp.toPx()))
+        // Pulse scales only the selection surface, never the hit grid, icons or layout.
+        val scale = if (reduceMotion) 1f else pulse.value
+        val indicatorW = ((cellW + 6.dp.toPx()) * scale).coerceAtMost(size.width - 2.dp.toPx())
+        val indicatorH = ((cellH + 6.dp.toPx()) * scale).coerceAtMost(size.height - 2.dp.toPx())
+        val indicatorX = (inset.toPx() + cellW * (pos + 0.5f) - indicatorW / 2)
+            .coerceIn(1.dp.toPx(), (size.width - 1.dp.toPx() - indicatorW).coerceAtLeast(1.dp.toPx()))
         drawRoundRect(
             color = p.tabIndicator,
             topLeft = Offset(indicatorX, (size.height - indicatorH) / 2),
@@ -309,17 +326,24 @@ private fun TabCell(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
+        val glyphModifier = Modifier.size(23.dp).graphicsLayer {
+            val scale = if (reduceMotion) targetScale else iconScale.value
+            scaleX = scale
+            scaleY = scale
+        }
         Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
-            Icon(
-                imageVector = item.icon,
-                contentDescription = null,
-                modifier = Modifier.size(23.dp).graphicsLayer {
-                    val scale = if (reduceMotion) targetScale else iconScale.value
-                    scaleX = scale
-                    scaleY = scale
-                },
-                tint = fg,
-            )
+            val glyph = item.glyph
+            if (glyph != null) {
+                // 动态图标自己管动效（内部也读 减少动效），外面只负责选中缩放。
+                TabGlyphIcon(glyph = glyph, active = active, tint = fg, modifier = glyphModifier)
+            } else {
+                Icon(
+                    imageVector = item.icon,
+                    contentDescription = null,
+                    modifier = glyphModifier,
+                    tint = fg,
+                )
+            }
         }
         Spacer(Modifier.height(2.dp))
         Text(
@@ -349,6 +373,14 @@ fun PageScaffold(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     compact: Boolean = false,
+    /**
+     * 传非 null 时改用固定子页导航栏（左「返回」、中标题、右动作），
+     * 大标题的滚动收缩随之关闭。
+     *
+     * 明细这种**压在其他 Tab 之上的整页**必须走这条路：大标题栏只在滚动时
+     * 才铺底色，静止时标题区是透明的，一旦离开会被下层页面「透」出来。
+     */
+    onBack: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
     content: @Composable (androidx.compose.foundation.layout.PaddingValues) -> Unit,
 ) {
@@ -358,15 +390,20 @@ fun PageScaffold(
 
     Box(modifier.fillMaxSize()) {
         Column(Modifier.widthIn(max = 560.dp).fillMaxSize().align(Alignment.TopCenter)) {
-            ScrollingTitleBar(
-                title = title,
-                listState = listState,
-                subtitle = subtitle,
-                compact = compact,
-                actions = actions,
-            )
+            if (onBack != null) {
+                SubPageBar(title = title, onBack = onBack, actions = actions)
+            } else {
+                ScrollingTitleBar(
+                    title = title,
+                    listState = listState,
+                    subtitle = subtitle,
+                    compact = compact,
+                    actions = actions,
+                )
+            }
             content(
                 androidx.compose.foundation.layout.PaddingValues(
+                    // 明细页把胶囊 Tab 栏留在原位（可以在明细里直接切页），所以照样留白。
                     bottom = dockHeight() + navBottom + AbSpacing.xxl,
                 ),
             )
@@ -479,15 +516,23 @@ fun SubPageScaffold(
     title: String,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * 底部是否给悬浮胶囊 Tab 栏留白。
+     *
+     * 二级页上胶囊照样浮着，所以默认要留；但整页式页面（明细、账单操作）
+     * 会先隐藏胶囊，再留这 100dp 就只是列表末尾的一块死白，故传 false。
+     */
+    reserveDock: Boolean = true,
+    actions: @Composable RowScope.() -> Unit = {},
     content: @Composable (androidx.compose.foundation.layout.PaddingValues) -> Unit,
 ) {
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     Box(modifier.fillMaxSize().background(LocalAbPalette.current.pageBg), contentAlignment = Alignment.TopCenter) {
     Column(Modifier.widthIn(max = 560.dp).fillMaxSize()) {
-        SubPageBar(title = title, onBack = onBack)
+        SubPageBar(title = title, onBack = onBack, actions = actions)
         content(
             androidx.compose.foundation.layout.PaddingValues(
-                bottom = dockHeight() + navBottom + AbSpacing.xxl,
+                bottom = if (reserveDock) dockHeight() + navBottom + AbSpacing.xxl else navBottom + AbSpacing.l,
             ),
         )
     }

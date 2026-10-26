@@ -13,7 +13,7 @@ object RecognitionCodec {
         "transactionKey" to row.transactionKey, "hasExplicitTime" to row.hasExplicitTime,
         "captureSessionId" to row.captureSessionId, "recognizedAt" to row.recognizedAt,
         "updatedAt" to row.updatedAt, "status" to row.status, "billId" to row.billId,
-        "shareState" to row.shareState)
+        "shareState" to row.shareState, "protectedFields" to row.protectedFields, "reviewOf" to row.reviewOf)
     fun decode(raw: Any?): RecognitionEntity {
         val m = raw as? Map<*, *> ?: error("识别历史不是对象")
         fun string(key: String) = (m[key] as? String)?.takeIf { it.isNotBlank() } ?: error("识别历史缺少$key")
@@ -22,6 +22,14 @@ object RecognitionCodec {
             val integer = value.toLong()
             require(value.toDouble().isFinite() && value.toDouble() == integer.toDouble()) { "识别历史${key}必须为整数" }
             return integer
+        }
+        val protectedFields = if (m.containsKey("protectedFields")) number("protectedFields").also {
+            require(it >= 0 && (it and CaptureFields.ALL) == it) { "人工字段保护无效" }
+        } else 0L
+        val reviewOf = when (val value = m["reviewOf"]) {
+            null -> null
+            is String -> value.takeIf { it.isNotBlank() } ?: throw IllegalArgumentException("待核对关联无效")
+            else -> throw IllegalArgumentException("待核对关联必须为文字")
         }
         val type = string("type").also { BillType.valueOf(it) }
         val status = string("status").also { require(it in setOf(RecognitionStatus.PENDING, RecognitionStatus.RECORDED, RecognitionStatus.IGNORED)) { "识别历史状态不支持" } }
@@ -36,6 +44,7 @@ object RecognitionCodec {
             note = m["note"] as? String, transactionKey = m["transactionKey"] as? String,
             hasExplicitTime = m["hasExplicitTime"] as? Boolean ?: false,
             captureSessionId = m["captureSessionId"] as? String, recognizedAt = number("recognizedAt"),
-            updatedAt = number("updatedAt"), status = status, billId = (m["billId"] as? Number)?.toLong(), shareState = share)
+            updatedAt = number("updatedAt"), status = status, billId = (m["billId"] as? Number)?.toLong(), shareState = share,
+            protectedFields = protectedFields, reviewOf = reviewOf)
     }
 }

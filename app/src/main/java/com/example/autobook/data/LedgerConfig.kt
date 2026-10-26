@@ -112,20 +112,23 @@ object LedgerConfig {
     fun moveSub(type: BillType, group: String, from: Int, to: Int) =
         writeGroups(type, groupsFor(type).map { if (it.name == group) it.copy(subs = Reorder.move(it.subs, from, to)) else it })
 
-    fun moveAccount(from: Int, to: Int) = writeStrings(KEY_ACCOUNTS, Reorder.move(accounts, from, to))
+    fun moveAccount(from: Int, to: Int) = AssetStore.changeCandidates(Reorder.move(accounts, from, to))
 
     fun subsOf(type: BillType, group: String?): List<String> =
         groupsFor(type).firstOrNull { it.name == group }?.subs.orEmpty()
 
     // ---------- 账户 ----------
 
-    val accounts: List<String>
+    internal val legacyAccounts: List<String>
         get() = readStrings(KEY_ACCOUNTS, DEFAULT_ACCOUNTS)
 
-    fun addAccount(name: String) = writeStrings(KEY_ACCOUNTS, accounts + name.trim())
+    val accounts: List<String>
+        get() = AssetStore.candidateNames() ?: legacyAccounts
+
+    fun addAccount(name: String) = AssetStore.changeCandidates(accounts + name.trim())
 
     fun removeAccount(name: String) =
-        writeStrings(KEY_ACCOUNTS, accounts.filterNot { it == name })
+        AssetStore.changeCandidates(accounts.filterNot { it == name })
 
     // ---------- 备注模板 ----------
 
@@ -145,13 +148,14 @@ object LedgerConfig {
     ) {
         expense?.let { writeGroups(BillType.EXPENSE, it) }
         income?.let { writeGroups(BillType.INCOME, it) }
-        accounts?.let { writeStrings(KEY_ACCOUNTS, it) }
+        accounts?.let { AssetStore.changeCandidates(it, restoreArchived = true) }
         noteTemplate?.let { this.noteTemplate = it }
     }
 
     // ---------- 重置 ----------
 
     fun resetToDefault() {
+        AssetStore.changeCandidates(DEFAULT_ACCOUNTS, restoreArchived = true)
         p().edit()
             .remove(KEY_EXPENSE).remove(KEY_INCOME).remove(KEY_ACCOUNTS)
             .remove(KEY_OLD_EXPENSE).remove(KEY_OLD_INCOME)

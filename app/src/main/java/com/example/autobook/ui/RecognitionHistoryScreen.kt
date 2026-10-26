@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -38,6 +39,7 @@ fun RecognitionHistoryScreen(onBack: () -> Unit, initialFilter: String = "ALL") 
     var filter by rememberSaveable { mutableStateOf(initialFilter) }
     var confirmClear by rememberSaveable { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
+    var timeline by remember { mutableStateOf<String?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
     var messageIsError by remember { mutableStateOf(true) }
     val statuses = listOf("ALL", RecognitionStatus.PENDING, RecognitionStatus.RECORDED, RecognitionStatus.IGNORED)
@@ -104,6 +106,9 @@ fun RecognitionHistoryScreen(onBack: () -> Unit, initialFilter: String = "ALL") 
                             else -> "（页面未提供，使用识别时间）"
                         }}\n来源：${row.sourcePkg}",
                             style = AbType.caption1, color = p.secondaryLabel)
+                        if (row.reviewOf != null && row.status == RecognitionStatus.PENDING) {
+                            InlineMessage("待核对：另一来源可能是同一笔交易。未自动合并，也未再次弹框；请比较金额和交易信息。")
+                        }
                         if (row.status == RecognitionStatus.RECORDED) {
                             InlineMessage(when {
                                 linkedIds == null -> "正在核对关联账单…"
@@ -116,7 +121,34 @@ fun RecognitionHistoryScreen(onBack: () -> Unit, initialFilter: String = "ALL") 
                             isError = row.shareState != RecognitionShareState.REQUESTED)
                         if (row.note != null) Text("备注：${row.note}", style = AbType.footnote, color = p.secondaryLabel)
                     }
-                    if (row.status != RecognitionStatus.RECORDED) ListRow(
+                    ListRow(title = "来源与投递记录", onClick = {
+                        scope.launch {
+                            runCatching {
+                                val events = db.capture().forRecord(row.id)
+                                events.joinToString("\n\n") { "${historyTime(it.receivedAt)} · ${it.source}\n${it.outcome}\n${it.detail}" }
+                                    .ifBlank { "旧记录没有来源时间线；不会补造通知证据。" }
+                            }.onSuccess { timeline = it }.onFailure { messageIsError = true; message = it.message }
+                        }
+                    })
+                    if (row.reviewOf != null && row.status == RecognitionStatus.PENDING) {
+                        ListRow(title = "作为独立账单确认", chevron = true, onClick = {
+                            if (!busy) { busy = true; scope.launch {
+                                runCatching {
+                                    val draft = RecognitionStore.resolveSeparate(row.id) ?: error("该记录已处理")
+                                    context.startActivity(ConfirmIntents.intent(context, draft))
+                                }.onFailure { messageIsError = true; message = it.message }
+                                busy = false
+                            } }
+                        })
+                        ListRow(title = "与原记录合并来源", onClick = {
+                            if (!busy) { busy = true; scope.launch {
+                                runCatching { RecognitionStore.mergeReview(row.id) }
+                                    .onFailure { messageIsError = true; message = it.message }
+                                busy = false
+                            } }
+                        })
+                    }
+                    if (row.status != RecognitionStatus.RECORDED && (row.reviewOf == null || row.status == RecognitionStatus.IGNORED)) ListRow(
                         title = if (busy) "处理中…" else if (row.status == RecognitionStatus.IGNORED) "重新确认" else "继续确认",
                         chevron = true, onClick = {
                             if (!busy) {
@@ -140,6 +172,9 @@ fun RecognitionHistoryScreen(onBack: () -> Unit, initialFilter: String = "ALL") 
             }
         }
     }
+    timeline?.let { text -> AlertDialog(onDismissRequest = { timeline = null }, title = { Text("来源与投递记录") },
+        text = { Text(text, modifier = Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState())) },
+        confirmButton = { TextButton(onClick = { timeline = null }) { Text("关闭") } }) }
     if (confirmClear) AlertDialog(onDismissRequest = { if (!busy) confirmClear = false },
         title = { Text("清理已忽略记录？") },
         text = { Text("将永久删除 ${records.count { it.status == RecognitionStatus.IGNORED }} 条已忽略的识别记录，之后无法重新确认。不会删除账本、待处理或已记账的历史记录。建议先导出 JSON 备份。") },

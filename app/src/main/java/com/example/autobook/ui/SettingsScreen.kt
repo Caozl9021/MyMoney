@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
@@ -63,6 +64,8 @@ import com.example.autobook.data.Backup
 import com.example.autobook.data.BackupStore
 import com.example.autobook.overlay.OverlayAnchor
 import com.example.autobook.capture.CaptureModeManager
+import com.example.autobook.capture.PaymentNotificationListener
+import com.example.autobook.capture.NotificationIngress
 import com.example.autobook.data.CaptureMode
 import com.example.autobook.root.RootWatcher
 import com.example.autobook.ui.design.AbIcons
@@ -108,6 +111,7 @@ private val shortNames = linkedMapOf(
 private enum class SettingsPage(val title: String) {
     ROOT("设置"),
     CATEGORIES("分类与账户"),
+    ASSETS("资产管理"),
     NOTE("备注模板"),
     RULES("本地规则"),
     APPS("支持的应用"),
@@ -135,7 +139,7 @@ private fun captureSettingsPage(destination: CaptureSettingsDestination): Settin
  * 明细都收进子页（D3 决策）。
  */
 @Composable
-fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinationHandled: () -> Unit = {}) {
+fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinationHandled: () -> Unit = {}, onEditorVisibilityChanged: (Boolean) -> Unit = {}, onOpenAssets: (() -> Unit)? = null) {
     val context = LocalContext.current
     val settings = remember { Settings(context) }
     val p = LocalAbPalette.current
@@ -143,6 +147,9 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
 
     var pagePath by rememberSaveable { mutableStateOf(listOf(SettingsPage.ROOT)) }
     val page = pagePath.last()
+    val visibilityChanged by androidx.compose.runtime.rememberUpdatedState(onEditorVisibilityChanged)
+    LaunchedEffect(page) { visibilityChanged(page == SettingsPage.ASSETS) }
+    DisposableEffect(Unit) { onDispose { visibilityChanged(false) } }
     fun navigate(target: SettingsPage) { pagePath = pagePath + target }
     fun returnToParent() { pagePath = pagePath.dropLast(1).ifEmpty { listOf(SettingsPage.ROOT) } }
     LaunchedEffect(destination) {
@@ -191,7 +198,7 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
             rootGranted = null
             rootGranted = withContext(Dispatchers.IO) { RootShell.isGranted() }
             val current = CaptureModeManager.state.value
-            if (rootGranted == true && current.mode == CaptureMode.ROOT && current.enabled) {
+            if (rootGranted == true && current.rootActive) {
                 // 主动检测获授权后，明确重试此前失败的 Root 服务启动。
                 CaptureModeManager.select(context, CaptureMode.ROOT)
             } else {
@@ -249,6 +256,35 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
                             trailing = { AbSwitch(enabled) { CaptureModeManager.setEnabled(context, it) } },
                             onClick = { CaptureModeManager.setEnabled(context, !enabled) })
                         InsetDivider(inset = 62.dp)
+                        ListRow(title = "通知监听（主通道）", subtitle = when {
+                            !captureState.notificationsEnabled -> "已关闭，不读取通知"
+                            !healthInput.notificationAuthorized -> "App 已启用，需授予系统通知使用权"
+                            !healthInput.notificationBound -> "系统已授权，监听尚未连接"
+                            else -> "监听已连接；已适配支付宝指定渠道的交易提醒"
+                        }, leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Note, p.accent) },
+                            trailing = { AbSwitch(captureState.notificationsEnabled) { CaptureModeManager.setNotificationEnabled(context, it) } },
+                            onClick = { CaptureModeManager.setNotificationEnabled(context, !captureState.notificationsEnabled) })
+                        InsetDivider(inset = 62.dp)
+                        ListRow(title = "通知使用权", subtitle = if (healthInput.notificationAuthorized) "系统已授权 · 与发送通知权限独立" else "系统未授权 · 点击前往设置",
+                            leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Shield, p.accent) }, chevron = true,
+                            onClick = { handleHealthAction(CaptureAction.NOTIFICATION_ACCESS) })
+                        if (captureState.notificationsEnabled && healthInput.notificationAuthorized) {
+                            InsetDivider(inset = 62.dp)
+                            ListRow(title = "通知监听连接", subtitle = if (healthInput.notificationBound) "已连接" else "未连接 · 点击请求重新连接",
+                                leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Note, p.accent) }, chevron = !healthInput.notificationBound,
+                                onClick = { if (!healthInput.notificationBound) handleHealthAction(CaptureAction.NOTIFICATION_RECONNECT) })
+                        }
+                        InsetDivider(inset = 62.dp)
+                        ListRow(title = "页面辅助", subtitle = if (captureState.pageFallbackEnabled) captureModeLabel(mode) else "已关闭 · 通知监听仍可独立启用",
+                            leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Accessibility, p.accent) },
+                            trailing = { AbSwitch(captureState.pageFallbackEnabled) {
+                                if (it && mode == null) navigate(SettingsPage.MODE)
+                                else CaptureModeManager.setPageFallbackEnabled(context, it)
+                            } }, onClick = {
+                                if (!captureState.pageFallbackEnabled && mode == null) navigate(SettingsPage.MODE)
+                                else CaptureModeManager.setPageFallbackEnabled(context, !captureState.pageFallbackEnabled)
+                            })
+                        InsetDivider(inset = 62.dp)
                         ListRow(title = "识别后弹出确认卡", subtitle = "关闭后保存在待确认中",
                             leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Note, p.accent) },
                             trailing = { AbSwitch(autoConfirm) { autoConfirm = it; settings.autoConfirm = it } },
@@ -261,7 +297,7 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
                                 onClick = { ocrFallback = !ocrFallback; settings.ocrFallback = ocrFallback; applyKit() })
                         }
                         InsetDivider(inset = 62.dp)
-                        ListRow(title = "识别模式", subtitle = captureModeLabel(mode),
+                        ListRow(title = "页面辅助方式", subtitle = captureModeLabel(mode),
                             leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Accessibility, p.accent) }, chevron = true,
                             onClick = { navigate(SettingsPage.MODE) })
                         InsetDivider(inset = 62.dp)
@@ -272,7 +308,7 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
                         ListRow(title = "权限", subtitle = when (mode) {
                             CaptureMode.ROOT -> "Root 授权、悬浮窗与通知"
                             CaptureMode.ACCESSIBILITY -> if (serviceBound) "无障碍已连接" else "无障碍未连接"
-                            null -> "请先选择识别模式"
+                            null -> if (captureState.notificationsEnabled) "通知使用权、悬浮窗与发送提醒" else "通知或页面识别权限"
                         }, leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Shield, p.accent) }, chevron = true,
                             onClick = { navigate(SettingsPage.PERMISSIONS) })
                         InsetDivider(inset = 62.dp)
@@ -287,6 +323,9 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
                         ListRow(title = "待确认", subtitle = "查看尚未记账的识别结果",
                             leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Clock, p.accent) }, chevron = true,
                             onClick = { navigate(SettingsPage.PENDING) })
+                        InsetDivider(inset = 62.dp)
+                        ListRow(title = "资产管理", subtitle = "余额、负债、转账与还款", chevron = true,
+                            onClick = { if (onOpenAssets != null) onOpenAssets() else navigate(SettingsPage.ASSETS) })
                         InsetDivider(inset = 62.dp)
                         ListRow(title = "分类与账户", leading = { com.example.autobook.ui.design.IconBadge(AbIcons.Tag, p.accent) },
                             chevron = true, onClick = { navigate(SettingsPage.CATEGORIES) })
@@ -320,6 +359,8 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
                 item { GroupFooter("数据和识别规则仅保存在本机；本 App 不联网、不上传页面内容。") }
             }
         }
+
+        SettingsPage.ASSETS -> AssetsScreen(onBack = back)
 
         SettingsPage.CATEGORIES -> LedgerConfigPage(onBack = back)
 
@@ -407,7 +448,7 @@ internal fun captureModeLabel(mode: CaptureMode?): String = when (mode) {
 @Composable
 private fun CaptureModeSettingsPage(mode: CaptureMode?, onBack: () -> Unit, onSave: (CaptureMode) -> Unit) {
     var selected by rememberSaveable { mutableStateOf(mode) }
-    SubPageScaffold(title = "识别模式", onBack = onBack) { padding ->
+    SubPageScaffold(title = "页面辅助方式", onBack = onBack) { padding ->
         CaptureModeChoice(
             mode = selected,
             onSelect = { selected = it },
@@ -564,7 +605,7 @@ private fun AppsPage(
                     )
                 }
             }
-            GroupFooter("只在这些 App 的账单详情页触发识别；列表页、下单页会被跳过。")
+            GroupFooter("通知监听仅处理已验证的交易模板；页面辅助只处理账单页面，列表和下单页会跳过。")
 
             GroupHeader("手动添加包名")
             InsetGroup {
@@ -614,6 +655,7 @@ private fun PermissionsPage(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
+    val sourceHealth = rememberCaptureHealthInput()
     // Android 13+ 通知是运行时权限：不申请的话，弹不出确认卡时连提醒都发不出去，
     // 用户只会在待确认队列里"凭空"看到一条记录。
     val notifyLauncher = rememberLauncherForActivityResult(
@@ -652,6 +694,18 @@ private fun PermissionsPage(
         ) {
             GroupHeader("识别权限")
             InsetGroup {
+                ListRow(title = "读取其他应用通知", subtitle = when {
+                    !sourceHealth.notificationAuthorized -> "未授予通知使用权，与发送提醒权限不同"
+                    sourceHealth.notificationBound -> "系统已授权，监听已连接"
+                    else -> "系统已授权，监听尚未连接"
+                }, chevron = true, onClick = {
+                    performCaptureAction(context, CaptureAction.NOTIFICATION_ACCESS, {}, {})
+                })
+                if (sourceHealth.notificationAuthorized && !sourceHealth.notificationBound) {
+                    InsetDivider()
+                    ListRow(title = "重新连接通知监听", onClick = { PaymentNotificationListener.requestReconnect(context) })
+                }
+                InsetDivider()
                 if (mode == CaptureMode.ROOT) {
                     ListRow(
                         title = "Root 授权",
@@ -682,9 +736,9 @@ private fun PermissionsPage(
                 ListRow(
                     title = "显示在其他应用上层",
                     subtitle = if (overlayGranted) {
-                        "已授权，识别后直接弹卡"
+                        "已授权 · 允许显示确认卡"
                     } else {
-                        "未授权 — 只能发通知，点这里去开启"
+                        "未授权 · 确认页无法打开时保留待确认"
                     },
                     chevron = true,
                     dividerAbove = true,
@@ -692,7 +746,7 @@ private fun PermissionsPage(
                 )
                 InsetDivider()
                 ListRow(
-                    title = "通知",
+                    title = "发送待确认提醒",
                     subtitle = if (notifyGranted) {
                         "已允许，弹不出卡时会发提醒"
                     } else {
@@ -715,7 +769,7 @@ private fun PermissionsPage(
                 when (mode) {
                     CaptureMode.ROOT -> "Root 用于读取账单页面，无需开启无障碍。"
                     CaptureMode.ACCESSIBILITY -> "无障碍用于读取账单页面文字，无需 Root。"
-                    null -> "请先在「识别模式」中选择识别方式。"
+                    null -> "通知监听可独立启用；需要页面补漏时再选择辅助方式。"
                 } +
                     "悬浮窗是「识别完立刻弹卡」的前提：" +
                     "有它才能不经通知、不启动 Activity 直接把确认卡盖在对方 App 上，" +
@@ -1125,7 +1179,7 @@ private fun BackupPage(onBack: () -> Unit, onRestored: (Backup.SettingsSnapshot?
             InsetGroup {
                 ListRow(
                     title = "导出备份文件",
-                    subtitle = if (busy) "处理中…" else "JSON，含账单 + 全部识别历史与处理状态 + 分类账户清单 + 关键设置",
+                    subtitle = if (busy) "处理中…" else "JSON，含账单、识别历史、账户余额与完整流水、配置",
                     chevron = true,
                     onClick = {
                         if (!busy) createLauncher.launch(BackupStore.fileName())
@@ -1146,7 +1200,7 @@ private fun BackupPage(onBack: () -> Unit, onRestored: (Backup.SettingsSnapshot?
                     onClick = { if (!busy) openLauncher.launch(arrayOf("*/*")) },
                 )
             }
-            GroupFooter("默认合并账单与识别历史，不重复导入，也不将已记账历史变成待处理。新版覆盖会替换账单和历史；旧备份不含历史时保留本机历史。")
+            GroupFooter("默认合并且不重复登记余额。新版覆盖会替换账单、历史及备份包含的资产；旧备份缺少资产时保留当前余额和流水，导入账单不自动联动，请恢复后对账。资产冲突会拒绝恢复，请核对后重试。")
 
             if (message != null) {
                 Spacer(Modifier.height(AbSpacing.s))
@@ -1177,10 +1231,12 @@ private fun BackupPage(onBack: () -> Unit, onRestored: (Backup.SettingsSnapshot?
                     if (confirmReplace) {
                         "覆盖恢复会替换现有的全部账单，导入 ${snap.bills.size} 条账单。" +
                             (if (snap.history != null) "同时替换全部识别历史，导入 ${snap.history.size} 条历史。" else "这是不含历史的旧备份：保留现有识别历史，失效的账单关联会解除，已记账状态保留。") +
-                            "如备份含分类账户和设置，也会恢复这些配置。此操作不可撤销，确定吗？"
+                            (if (snap.assets != null) "同时覆盖全部账户与资产流水，导入 ${snap.assets.accounts.size} 个账户、${snap.assets.entries.size} 条分录。显式空资产将清空当前资产。" else "此备份不含资产：保留当前余额与流水，导入账单不联动，恢复后请对账。") +
+                            "如备份含分类账户和设置，也会恢复这些配置。建议先导出当前备份；此操作不可撤销，确定吗？"
                     } else {
                         "备份时间：${whenText}\n账单：${snap.bills.size} 条\n" +
                             "识别历史：${snap.history?.let { "${it.size} 条" } ?: "旧格式未包含，保留本机历史"}\n" +
+                            "资产：${snap.assets?.let { "${it.accounts.size} 个账户、${it.entries.size} 条分录" } ?: "旧格式未包含，保留本机资产；导入后请对账"}\n" +
                             "分类账户清单：${if (snap.ledger != null) "有" else "无"}\n" +
                             "默认合并账单与历史，已有已记账状态保留；分类账户和设置按备份恢复。"
                     },
@@ -1199,7 +1255,7 @@ private fun BackupPage(onBack: () -> Unit, onRestored: (Backup.SettingsSnapshot?
                                 BackupStore.restore(context, json, BackupStore.Mode.REPLACE)
                             }
                             message = result.fold(
-                                onSuccess = { "已覆盖导入账单 ${it.bills} 条、识别历史 ${it.history} 条${if (snap.history == null) "（本机历史已保留）" else ""}" },
+                                onSuccess = { "已覆盖导入账单 ${it.bills} 条、识别历史 ${it.history} 条${if (snap.history == null) "（本机历史已保留）" else ""}" + (if (it.assets) "；资产已恢复" else "") + (it.assetWarning?.let { warning -> "\n$warning" } ?: "") },
                                 onFailure = { "恢复失败：${it.message}" },
                             )
                             result.getOrNull()?.let { onRestored(it.settings) }
@@ -1215,7 +1271,7 @@ private fun BackupPage(onBack: () -> Unit, onRestored: (Backup.SettingsSnapshot?
                                 BackupStore.restore(context, json, BackupStore.Mode.MERGE)
                             }
                             message = result.fold(
-                                onSuccess = { "已合并导入账单 ${it.bills} 条、识别历史 ${it.history} 条（已有记录不重复导入）" },
+                                onSuccess = { "已合并导入账单 ${it.bills} 条、识别历史 ${it.history} 条（已有记录不重复导入）" + (if (it.assets) "；资产已恢复" else "") + (it.assetWarning?.let { warning -> "\n$warning" } ?: "") },
                                 onFailure = { "恢复失败：${it.message}" },
                             )
                             result.getOrNull()?.let { onRestored(it.settings) }
@@ -1292,6 +1348,35 @@ private fun DebugPage(onBack: () -> Unit) {
     val context = LocalContext.current
     val p = LocalAbPalette.current
     val debug by DebugBus.state.collectAsStateWithLifecycle()
+    val notification by NotificationIngress.latest.collectAsStateWithLifecycle()
+    val recentNotifications by NotificationIngress.recent.collectAsStateWithLifecycle()
+    val notificationSamples by NotificationIngress.sampleOptions.collectAsStateWithLifecycle()
+    var notificationEventsExpanded by remember { mutableStateOf(false) }
+    var notificationReading by remember { mutableStateOf(false) }
+    var notificationReadResult by remember { mutableStateOf<String?>(null) }
+    fun notificationTime(at: Long): String = java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(at))
+    LaunchedEffect(Unit) { runCatching { NotificationIngress.restoreLatestDiagnostic(context) } }
+    val scope = rememberCoroutineScope()
+    var notificationPreview by remember { mutableStateOf<String?>(null) }
+    var notificationSaved by remember { mutableStateOf<String?>(null) }
+    var notificationSaving by remember { mutableStateOf(false) }
+    var notificationExport by remember { mutableStateOf<String?>(null) }
+    val notificationExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        val content = notificationExport
+        notificationExport = null
+        if (uri == null || content == null) {
+            notificationSaving = false
+        } else scope.launch {
+            val result = withContext(Dispatchers.IO) { runCatching {
+                require(content.length <= 65_536)
+                context.contentResolver.openOutputStream(uri)?.use { it.write(content.toByteArray(Charsets.UTF_8)) }
+                    ?: error("无法打开所选文件")
+            } }
+            notificationSaved = if (result.isSuccess) "已保存到所选位置；可自行检查后提供样本。" else "保存失败：${result.exceptionOrNull()?.message}"
+            notificationSaving = false
+            notificationPreview = null
+        }
+    }
     var sampleSaved by remember { mutableStateOf<String?>(null) }
 
     SubPageScaffold(title = "识别排查", onBack = onBack) { padding ->
@@ -1300,6 +1385,91 @@ private fun DebugPage(onBack: () -> Unit) {
                 .padding(padding).padding(horizontal = AbSpacing.page),
             verticalArrangement = Arrangement.spacedBy(AbSpacing.xs),
         ) {
+            GroupHeader("最近通知输入")
+            InsetGroup {
+                val recent = notification
+                if (recent == null) ListRow(title = "尚无通知输入", subtitle = "启用通知监听并授予系统通知使用权后，只记录所选应用的新通知诊断。")
+                else {
+                    ListRow(title = "应用", subtitle = recent.packageName)
+                    InsetDivider()
+                    ListRow(title = "接收时间", subtitle = java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(recent.receivedAt)))
+                    InsetDivider()
+                    ListRow(title = "阶段与结论", subtitle = recent.outcome)
+                    InsetDivider()
+                    ListRow(title = "原因与元数据", subtitle = recent.summary)
+                    InsetDivider()
+                    ListRow(title = "事件标识", subtitle = recent.traceId)
+                }
+            }
+            GroupFooter("上方只显示最近一次通知事件，样本列表与事件诊断独立。监听已连接或收到通知不代表交易模板已验证；未验证模板不会自动记账或弹确认框。")
+            if (notification?.outcome?.contains("group-summary") == true) {
+                GroupFooter("group-summary 表示这条汇总通知被跳过，不代表子通知没有到达。可展开最近事件，查看各条子通知的处理结果。")
+            }
+            SecondaryButton(text = "读取当前支付通知（仅诊断）", enabled = !notificationReading,
+                busy = notificationReading, busyLabel = "读取中…", onClick = {
+                    if (!notificationReading) {
+                        notificationReading = true
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) {
+                                runCatching { NotificationIngress.captureCurrentDiagnostics(context) }
+                            }
+                            notificationReadResult = result.fold(
+                                onSuccess = { count -> "已读取 $count 条当前支付通知，仅更新诊断和可用样本，不自动记账、弹框、预览或保存。" },
+                                onFailure = { "读取失败：${it.message ?: "请检查通知使用权和监听连接"}" },
+                            )
+                            notificationReading = false
+                        }
+                    }
+                }, modifier = Modifier.fillMaxWidth())
+            GroupFooter("此按钮仅诊断当前仍在通知栏里的所选支付应用通知，不会触发交易识别或自动弹框，也不需要再次付款。")
+            notificationReadResult?.let { GroupFooter(it) }
+            InsetGroup {
+                ListRow(title = "最近通知事件（${recentNotifications.size} / 20）",
+                    subtitle = if (notificationEventsExpanded) "点击收起" else "点击展开应用、时间与处理结论",
+                    chevron = true, onClick = { notificationEventsExpanded = !notificationEventsExpanded })
+                if (notificationEventsExpanded) {
+                    if (recentNotifications.isEmpty()) {
+                        InsetDivider()
+                        ListRow(title = "暂无事件", subtitle = "可等待新通知，或手动读取当前支付通知作诊断。")
+                    } else recentNotifications.forEach { event ->
+                        InsetDivider()
+                        ListRow(title = event.packageName,
+                            subtitle = "${notificationTime(event.receivedAt)} · ${event.outcome}" +
+                                if (event.outcome.contains("group-summary")) " · 汇总跳过，子通知单独处理" else "")
+                    }
+                }
+            }
+            GroupHeader("可用通知样本（${notificationSamples.size} / 10）")
+            InsetGroup {
+                if (notificationSamples.isEmpty()) ListRow(title = "暂时没有可预览样本",
+                    subtitle = "样本可能已过期，或通知没有可用正文；可读取当前支付通知作诊断。")
+                else notificationSamples.forEachIndexed { index, option ->
+                    if (index > 0) InsetDivider()
+                    ListRow(title = option.packageName,
+                        subtitle = "${notificationTime(option.receivedAt)} · ${option.outcome}" +
+                            if (option.diagnosticOnly) (if (option.outcome.contains("group-summary")) " · 手动汇总样本，非单笔交易" else " · 手动读取，仅诊断") else " · 新通知输入",
+                        chevron = true, onClick = {
+                            val sample = NotificationIngress.sampleForExport(option.id)
+                            if (sample == null) notificationSaved = "这条样本已过期或权限、来源配置已改变，未保存文件。"
+                            else {
+                                notificationPreview = sample
+                                notificationSaved = null
+                            }
+                        })
+                }
+            }
+            SecondaryButton(text = "查看最近有效脱敏样本", onClick = {
+                val sample = NotificationIngress.sampleForExport()
+                if (sample == null) notificationSaved = "当前没有有效的内存通知样本，尚未保存文件。"
+                else {
+                    notificationPreview = sample
+                    notificationSaved = null
+                }
+            }, modifier = Modifier.fillMaxWidth())
+            GroupFooter("样本最多暂存 10 条、保留 5 分钟；后到汇总或无正文通知不会清空已有有效样本。配置变动或撤销通知使用权后失效。最近有效样本不一定对应最上方的最近事件。")
+            GroupFooter("选择样本后先预览，确认保存才写入你选择的文件位置，不自动分享。金额和格式词可能保留，请检查预览；手机号与长订单等由采样器脱敏。")
+            notificationSaved?.let { GroupFooter(it) }
+            Spacer(Modifier.height(AbSpacing.l))
             if (debug == null) {
                 EmptyState(
                     icon = AbIcons.Search,
@@ -1380,6 +1550,32 @@ private fun DebugPage(onBack: () -> Unit) {
             Spacer(Modifier.height(AbSpacing.xl))
         }
     }
+    notificationPreview?.let { preview ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { if (!notificationSaving) notificationPreview = null },
+            title = { Text("通知脱敏样本预览") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
+                    Text("仅保存当前预览，不自动分享。监听输入样本不代表真实付款或交易模板已验证。", style = AbType.footnote)
+                    Box(Modifier.fillMaxWidth().heightIn(max = 340.dp).verticalScroll(rememberScrollState())) {
+                        Text(preview, style = AbType.mono, color = p.secondaryLabel)
+                    }
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(enabled = !notificationSaving, onClick = {
+                    notificationSaving = true
+                    notificationExport = preview
+                    notificationExportLauncher.launch("AutoBook-notification-${System.currentTimeMillis()}.json")
+                }) { Text(if (notificationSaving) "保存中…" else "保存到文件") }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(enabled = !notificationSaving,
+                    onClick = { notificationPreview = null }) { Text("取消") }
+            },
+        )
+    }
+
 }
 
 // ---------------------------------------------------------------------------
@@ -1444,3 +1640,5 @@ private fun copy(context: Context, text: String) {
     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     cm.setPrimaryClip(ClipData.newPlainText("autobook", text))
 }
+
+/** Explicitly confirmed, already redacted preview only; never called by the listener itself. */

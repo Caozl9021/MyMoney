@@ -36,6 +36,7 @@ import com.example.autobook.ui.design.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 
@@ -47,7 +48,7 @@ private sealed interface StatisticsLoad {
 /** Full local calendar ranges; this page does not depend on the home page's recent window. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun StatsScreen() {
+fun StatsScreen(onOpenDetails: () -> Unit = {}) {
     val p = LocalAbPalette.current
     val context = LocalContext.current
     val dao = remember(context) { AppDb.get(context).bills() }
@@ -59,7 +60,6 @@ fun StatsScreen() {
     var grouping by rememberSaveable { mutableIntStateOf(0) }
     var retry by remember { mutableIntStateOf(0) }
     var followsToday by rememberSaveable { mutableStateOf(true) }
-    var showExplanation by rememberSaveable { mutableStateOf(false) }
     val zone = clock.zone
     val effectiveAnchorDay = if (followsToday) clock.date.toEpochDay() else anchorDay
     val period = StatisticsPeriod.valueOf(periodName)
@@ -72,7 +72,10 @@ fun StatsScreen() {
     LaunchedEffect(dao, range, retry) {
         result = null
         try {
-            dao.observeRange(range.fromMillis, range.toMillis).collect { bills ->
+            combine(dao.observeRange(range.fromMillis, range.toMillis), AssetStore.accounts) { bills, accounts ->
+                val namesById = accounts.associate { it.id to it.name }
+                bills.map { bill -> bill.accountId?.let(namesById::get)?.let { bill.copy(account = it) } ?: bill }
+            }.collect { bills ->
                 val value = withContext(Dispatchers.Default) { statistics(bills, range) }
                 result = StatisticsLoad.Ready(value)
             }
@@ -85,6 +88,11 @@ fun StatsScreen() {
     // A range tag prevents a new period from briefly displaying the previous period's data.
     val summary = (result as? StatisticsLoad.Ready)?.value?.takeIf { it.range == range }
     val failed = (result as? StatisticsLoad.Failed)?.range == range
+    LaunchedEffect(summary, type, grouping) {
+        if (grouping == 1 && summary != null && selectedGroup != null && summary.accounts(type).none { it.name == selectedGroup }) {
+            selectedGroup = null
+        }
+    }
     val reduceMotion = LocalReduceMotion.current
     val reveal = remember(range) { Animatable(if (reduceMotion) 1f else 0f) }
     var presented by remember(range) { mutableStateOf(false) }
@@ -107,8 +115,8 @@ fun StatsScreen() {
     // 省下的 69dp 直接给了趋势图（V1-01 的首屏量化目标）。
     PageScaffold(title = "统计", listState = listState, compact = true,
         actions = {
-            TextButton(onClick = { showExplanation = true }, modifier = Modifier.heightIn(min = 48.dp)) {
-                Text("统计说明", color = p.accent)
+            TextButton(onClick = onOpenDetails, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text("明细", color = p.accent)
             }
         },
     ) { padding ->
@@ -264,7 +272,6 @@ fun StatsScreen() {
             }
         }
     }
-    if (showExplanation) StatisticsExplanation { showExplanation = false }
 }
 
 @Composable
@@ -358,33 +365,6 @@ private fun CompactStatisticsGroupRow(
         }
         if (!last) HorizontalDivider(Modifier.padding(horizontal = AbSpacing.l), color = p.separator, thickness = 0.5.dp)
     }
-}
-
-@Composable
-private fun StatisticsExplanation(onDismiss: () -> Unit) {
-    val p = LocalAbPalette.current
-    AlertDialog(onDismissRequest = onDismiss, containerColor = p.cardBg,
-        title = { Text("统计说明", color = p.label) },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(AbSpacing.l)) {
-                listOf(
-                    "统计周期" to "统计使用本机完整账单。周为周一至周日，月为自然月；左右滑动或点击箭头切换，点击回到本周／本月查看当前周期。",
-                    "金额口径" to "结余 = 收入 − 原支出 + 退款。退款独立统计，不计收入；转账不计收支，也不参与图表。本周期总笔数包含转账。",
-                    "每日趋势" to "金额单位为元。趋势和占比均只统计上方选中的支出、收入或退款。周视图是 7 天柱状图；月视图是日历热力图，格子越深表示当天金额越多。点击日期可看金额与笔数。",
-                    "分类与账户" to "分类与账户使用本机账单名称。点击列表名称或环图可查看该项；序号对应环图顺序，顺时针从顶部开始。每行显示金额、笔数、占比，百分比条表示该项占选中类型总金额的比例。",
-                ).forEach { (title, body) ->
-                    Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
-                        Text(title, style = AbType.headline, color = p.label)
-                        Text(body, style = AbType.subhead, color = p.secondaryLabel)
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) {
-                Text("知道了", color = p.accent)
-            }
-        })
 }
 
 /**

@@ -59,9 +59,7 @@ class BillPipeline(
         val type = if (refund) BillType.REFUND else detectType(snapshot.items, match.kind, hit.sign)
         val pageTime = if (refund) AmountParser.findRefundTime(snapshot.items) else AmountParser.findTime(snapshot.items)
         val transactionKey = fields.orderId?.takeIf { it.isNotBlank() }?.let { orderId ->
-            java.security.MessageDigest.getInstance("SHA-256")
-                .digest("${snapshot.packageName}|${type.name}|$orderId".toByteArray(Charsets.UTF_8))
-                .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+            TransactionIdentity.key(snapshot.packageName, type, orderId)
         }
         val draft = BillDraft(
             priceCents = hit.cents,

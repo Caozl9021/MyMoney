@@ -46,7 +46,7 @@ object ConfirmDelivery {
     private const val LAUNCH_TIMEOUT_MS = 1_500L
 
     /** 返回值直接进调试面板，方便一眼看出"到底有没有送到用户面前" */
-    suspend fun deliver(context: Context, incoming: BillDraft, autoConfirm: Boolean): String {
+    suspend fun deliver(context: Context, incoming: BillDraft, autoConfirm: Boolean, allowPresentation: () -> Boolean = { true }): String {
         val record = RecognitionStore.record(incoming)
         if (record.status != RecognitionStatus.PENDING) return "history-${record.status.lowercase()}"
         val draft = record.toDraft()
@@ -55,17 +55,21 @@ object ConfirmDelivery {
         }
 
         val app = context.applicationContext
+        fun mayShow(): Boolean = allowPresentation() &&
+            (app.getSystemService(Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager)?.isKeyguardLocked != true
+        if (!mayShow()) return "pending-source-disabled"
 
         // ① 有悬浮窗权限：直接盖一张卡，不启动 Activity（不受 BAL 影响）
-        if (ConfirmOverlay.canShow(app) && ConfirmOverlay.show(app, draft)) {
+        if (ConfirmOverlay.canShow(app) && ConfirmOverlay.show(app, draft, allowed = { mayShow() })) {
             return "overlay"
         }
 
         // ② 退回透明 Activity：不在前台就先挂锚点拿豁免
+        if (!mayShow()) return "pending-source-disabled"
         val foreground = isAppForeground(app)
         val anchored = !foreground && OverlayAnchor.hold(app)
         val exempt = foreground || anchored || isAccessibilityServiceEnabled(app)
-        val launched = exempt && launchConfirm(app, draft, waitReceipt = !foreground)
+        val launched = exempt && launchConfirm(app, draft, waitReceipt = !foreground, allowed = { mayShow() })
         OverlayAnchor.release()
 
         if (launched) {
@@ -74,6 +78,7 @@ object ConfirmDelivery {
 
         // 没授通知权限时必须和"通知被系统静音"区分开，否则排查时只会看到 pending，
         // 不知道到底是 BAL 拦了还是根本发不出去通知。
+        if (!mayShow()) return "pending-source-disabled"
         if (!hasNotificationPermission(app)) return "pending-no-notify"
         return if (notify(app, draft)) "pending+notified" else "pending"
     }
@@ -86,10 +91,13 @@ object ConfirmDelivery {
      * 拉起确认页，并等它回报"我真的起来了"。
      * @param waitReceipt 主线程上不能阻塞等回执（会把 UI 卡住 1.5s），只有后台线程才等
      */
-    private fun launchConfirm(context: Context, draft: BillDraft, waitReceipt: Boolean): Boolean {
+    private fun launchConfirm(context: Context, draft: BillDraft, waitReceipt: Boolean, allowed: () -> Boolean): Boolean {
+        val presentationToken = NotificationIngress.configurationToken(context)
+        if (!allowed()) return false
         ConfirmLaunch.begin(draft.historyId ?: draft.fingerprint)
         val started = try {
-            context.startActivity(ConfirmIntents.intent(context, draft))
+            if (!allowed()) return false
+            context.startActivity(ConfirmIntents.intent(context, draft).putExtra("autobook_auto_capture_token", presentationToken))
             true
         } catch (e: Exception) {
             false

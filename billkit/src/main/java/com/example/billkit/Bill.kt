@@ -27,6 +27,8 @@ data class BillDraft(
     val transactionKey: String? = null,
     val hasExplicitTime: Boolean = false,
     val captureSessionId: String? = null,
+    /** Ephemeral observation generation; never restored as permission or a runnable task. */
+    val captureConfigurationToken: String? = null,
 ) {
     /** 去重指纹：包名 + 金额 + 分钟 + 单号尾号（容忍几秒内的重复回调） */
     val fingerprint: String

@@ -28,6 +28,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.autobook.capture.AccessibilityGuardian
 import com.example.autobook.capture.BillAccessibilityService
 import com.example.autobook.capture.CaptureModeManager
+import com.example.autobook.capture.PaymentNotificationListener
 import com.example.autobook.data.Settings
 import com.example.autobook.root.RootWatcher
 import com.example.autobook.ui.design.*
@@ -40,6 +41,7 @@ internal fun rememberCaptureHealthInput(): CaptureHealthInput {
     val capture by CaptureModeManager.state.collectAsStateWithLifecycle()
     val root by RootWatcher.status.collectAsStateWithLifecycle()
     val bound by BillAccessibilityService.bound.collectAsStateWithLifecycle()
+    val notificationBound by PaymentNotificationListener.bound.collectAsStateWithLifecycle()
     var revision by remember { mutableIntStateOf(0) }
     DisposableEffect(context, lifecycle) {
         val prefs = context.getSharedPreferences(Settings.PREFS_NAME, Context.MODE_PRIVATE)
@@ -57,16 +59,20 @@ internal fun rememberCaptureHealthInput(): CaptureHealthInput {
             context.contentResolver.unregisterContentObserver(secureObserver)
         }
     }
-    return remember(capture, root.running, bound, revision) {
+    return remember(capture, root.running, bound, notificationBound, revision) {
         CaptureHealthInput(capture.mode, capture.enabled, root.running,
             AccessibilityGuardian.isEnabledInSettings(context), bound,
-            SystemSettings.canDrawOverlays(context), Settings(context).autoConfirm)
+            SystemSettings.canDrawOverlays(context), Settings(context).autoConfirm,
+            capture.pageFallbackEnabled, capture.notificationsEnabled,
+            PaymentNotificationListener.isAuthorized(context), notificationBound)
     }
 }
 
 internal fun performCaptureAction(context: Context, action: CaptureAction,
     onSettings: (CaptureSettingsDestination) -> Unit, onPending: () -> Unit) {
     when (action) {
+        CaptureAction.NOTIFICATION_ACCESS -> launchCaptureSettings(context, Intent(SystemSettings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+        CaptureAction.NOTIFICATION_RECONNECT -> PaymentNotificationListener.requestReconnect(context)
         CaptureAction.SELECT_MODE -> onSettings(CaptureSettingsDestination.MODE)
         CaptureAction.ROOT_STATUS -> onSettings(CaptureSettingsDestination.ROOT_STATUS)
         CaptureAction.SUPPORTED_APPS -> onSettings(CaptureSettingsDestination.SUPPORTED_APPS)

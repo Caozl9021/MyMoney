@@ -22,6 +22,8 @@ object CostCsv {
 
     const val REFUND_UNSUPPORTED = "当前 iCost CSV 模板不支持退款，所选账单包含退款，无法导出。请使用 JSON 备份保留完整账目。"
 
+    const val TRANSFER_UNSUPPORTED = "当前 iCost CSV 无法完整保留双账户转账，所选账单包含转账，无法导出。请使用 JSON 备份。"
+
     const val TARGET_PACKAGE = "com.gostraight.smallAccountBook.fltandroid"
 
     val HEADER = listOf(
@@ -57,6 +59,7 @@ object CostCsv {
 
     fun build(bills: List<BillDraft>, profile: Profile = Profile()): String {
         require(bills.none { it.type == BillType.REFUND }) { REFUND_UNSUPPORTED }
+        require(bills.none { it.type == BillType.TRANSFER }) { TRANSFER_UNSUPPORTED }
         val format = SimpleDateFormat(profile.datePattern, Locale.US)
         val builder = StringBuilder()
 

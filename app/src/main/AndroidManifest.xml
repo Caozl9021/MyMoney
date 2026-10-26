@@ -156,6 +156,17 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- User-granted notification access; independent from accessibility and our own notifications. -->
+        <service
+            android:name=".capture.PaymentNotificationListener"
+            android:exported="true"
+            android:label="AutoBook 交易通知监听"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
         <!--
           无障碍服务：诚实申报
           - isAccessibilityTool=false

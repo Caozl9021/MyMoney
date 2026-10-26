@@ -45,6 +45,7 @@ class BillAccessibilityService : AccessibilityService() {
     private lateinit var settings: Settings
     private var pendingPackage: String? = null
     private var pendingClass: String? = null
+    private var pendingToken: String? = null
 
     private val schedule = AccessibilityCaptureSchedule()
 
@@ -61,7 +62,7 @@ class BillAccessibilityService : AccessibilityService() {
         val hookState = XposedModuleDetector.detect(this)
 
         // 连上就确保守护在跑：模式可能是在别处改的，这里再兜一次底（幂等）
-        if (settings.enabled && settings.captureMode == CaptureMode.ACCESSIBILITY) {
+        if (settings.enabled && settings.pageFallbackEnabled && settings.captureMode == CaptureMode.ACCESSIBILITY) {
             AccessibilityGuardian.ensureRunning(this)
         }
 
@@ -70,7 +71,7 @@ class BillAccessibilityService : AccessibilityService() {
 
     /** 白名单/开关变化后由 UI 调用，减少无效回调 */
     fun refreshServiceInfo() {
-        val enabled = settings.enabled && settings.captureMode == CaptureMode.ACCESSIBILITY
+        val enabled = settings.enabled && settings.pageFallbackEnabled && settings.captureMode == CaptureMode.ACCESSIBILITY
         if (!enabled || pendingPackage?.let { it !in settings.whitelist } == true) {
             clearPending()
         }
@@ -86,7 +87,7 @@ class BillAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
         if (!::settings.isInitialized) return
-        if (!settings.enabled || settings.captureMode != CaptureMode.ACCESSIBILITY) { clearPending(); return }
+        if (!settings.enabled || !settings.pageFallbackEnabled || settings.captureMode != CaptureMode.ACCESSIBILITY) { clearPending(); return }
 
         val pkg = event.packageName?.toString() ?: return
         if (!BillKit.isAccepted(pkg) || pkg == packageName) {
@@ -103,7 +104,9 @@ class BillAccessibilityService : AccessibilityService() {
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> AccessibilityCaptureSchedule.Event.CONTENT
             else -> return
         }
-        if (pendingPackage != pkg) clearPending()
+        val token = NotificationIngress.configurationToken(this)
+        if (pendingPackage != pkg || pendingToken != token) clearPending()
+        pendingToken = token
         pendingPackage = pkg
         // A content event often identifies a TextView, not the hosting Activity.
         // Preserve window metadata while merging content into its deadline.
@@ -123,11 +126,14 @@ class BillAccessibilityService : AccessibilityService() {
         schedule.clear()
         pendingPackage = null
         pendingClass = null
+        pendingToken = null
     }
 
     private fun captureAndOffer() {
-        if (!settings.enabled || settings.captureMode != CaptureMode.ACCESSIBILITY) { clearPending(); return }
+        if (!settings.enabled || !settings.pageFallbackEnabled || settings.captureMode != CaptureMode.ACCESSIBILITY) { clearPending(); return }
         val pkg = pendingPackage ?: return
+        val token = pendingToken ?: return
+        if (token != NotificationIngress.configurationToken(this)) { clearPending(); return }
         val root = rootInActiveWindow
 
         // 事件到了但无障碍树还没建好（支付宝这类自绘/WebView 页面很常见）：
@@ -148,11 +154,13 @@ class BillAccessibilityService : AccessibilityService() {
             items = collected.items,
             truncated = collected.truncated,
             source = UiSnapshot.Source.ACCESSIBILITY,
+            configurationToken = token,
         )
 
         clearPending()
         worker.execute {
-            if (settings.enabled && settings.captureMode == CaptureMode.ACCESSIBILITY) {
+            if (settings.enabled && settings.pageFallbackEnabled && settings.captureMode == CaptureMode.ACCESSIBILITY &&
+                token == NotificationIngress.configurationToken(this)) {
                 BillKit.offer(snapshot)
             }
         }

@@ -44,7 +44,7 @@ private data class BillWindowState(
 
 /** Complete ledger, grown in windows while every bill remains an independent lazy item. */
 @Composable
-fun BillsScreen(requestAdd: Int = 0, onEditorVisibilityChanged: (Boolean) -> Unit = {}) {
+fun BillsScreen(requestAdd: Int = 0, onEditorVisibilityChanged: (Boolean) -> Unit = {}, onBack: (() -> Unit)? = null) {
     val app = LocalContext.current.applicationContext
     val dao = remember(app) { AppDb.get(app).bills() }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -122,9 +122,10 @@ fun BillsScreen(requestAdd: Int = 0, onEditorVisibilityChanged: (Boolean) -> Uni
     val days = remember(bills, clock.zone) {
         bills.groupBy { Instant.ofEpochMilli(it.timeMillis).atZone(clock.zone).toLocalDate() }
     }
-    Box(Modifier.fillMaxSize()) {
-        PageScaffold(title = "明细", listState = listState,
-            subtitle = window.summary?.let { "${if (active) "匹配" else "共"} ${it.count} 笔" },
+    // 明细是压在 Tab 之上的整页，不是 Tab 之一：必须自己铺不透明底，
+    // 否则下面的统计/首页会从行缝里透出来（曾经的「串页」）。
+    Box(Modifier.fillMaxSize().background(LocalAbPalette.current.pageBg)) {
+        PageScaffold(title = "明细", listState = listState, onBack = onBack,
             actions = {
                 IconButton(onClick = { historyOpen = true }, modifier = Modifier.size(48.dp)) {
                     Icon(AbIcons.Clock, contentDescription = "识别历史", tint = LocalAbPalette.current.label)
@@ -135,7 +136,9 @@ fun BillsScreen(requestAdd: Int = 0, onEditorVisibilityChanged: (Boolean) -> Uni
             Column(Modifier.fillMaxSize().imePadding()) {
                 LedgerFilters(keyword, { keyword = it; changed() }, dateMode, start, end, clock.date,
                     { mode, from, to -> dateMode = mode; start = from; end = to; changed() },
-                    category, categoryOptions, { category = it; changed() }, type, { type = it; changed() }, active, { clear() })
+                    category, categoryOptions, { category = it; changed() }, type, { type = it; changed() }, active, { clear() },
+                    summaryLabel = window.summary?.let { "${if (active) "匹配" else "共"} ${it.count} 笔" }
+                        ?: if (window.error != null) "读取失败" else "正在读取账单…")
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     // Keep a restored deep position untouched until its saved window is available.
                     if (window.summary == null) {
@@ -194,9 +197,15 @@ fun BillsScreen(requestAdd: Int = 0, onEditorVisibilityChanged: (Boolean) -> Uni
                 }
             }
         }
-        if (historyOpen) Box(Modifier.fillMaxSize().zIndex(9f)) { RecognitionHistoryScreen(onBack = { historyOpen = false }) }
-        selectedId?.let { id -> Box(Modifier.fillMaxSize().zIndex(10f)) { BillActionsHost(billId = id, onClose = { selectedId = null }) } }
-        if (newSource != null) key(newSource) { Box(Modifier.fillMaxSize().zIndex(10f)) { BillEditorDialog(null, newSource.orEmpty(), newTime, onClose = { newSource = null }) } }
+        if (historyOpen) Box(Modifier.fillMaxSize().zIndex(9f)) {
+            RecognitionHistoryScreen(onBack = { historyOpen = false })
+        }
+        selectedId?.let { id ->
+            Box(Modifier.fillMaxSize().zIndex(10f)) { BillActionsHost(billId = id, onClose = { selectedId = null }) }
+        }
+        if (newSource != null) key(newSource) {
+            Box(Modifier.fillMaxSize().zIndex(10f)) { BillEditorDialog(null, newSource.orEmpty(), newTime, onClose = { newSource = null }) }
+        }
     }
 }
 

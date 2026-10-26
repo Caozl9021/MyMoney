@@ -23,6 +23,7 @@ class App : Application() {
 
         RecognitionStore.init(this)
         LedgerConfig.init(this)
+        com.example.autobook.data.AssetStore.init(this)
         com.example.autobook.data.LocalRuleStore.init(this)
         com.example.autobook.data.ExternalRuleStore.init(this)
         com.example.autobook.data.CoverageStore.init(this)
@@ -34,14 +35,25 @@ class App : Application() {
         val settings = Settings(this)
 
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-        val deliveries = Channel<Pair<com.example.billkit.BillDraft, DebugBus.State?>>(Channel.UNLIMITED)
         scope.launch {
-            for ((draft, diagnostic) in deliveries) {
+            runCatching { com.example.autobook.data.BackupStore.completePendingConfiguration(this@App) }
+                .onFailure { android.util.Log.e("AutoBook", "恢复配置尚未完成", it) }
+        }
+        data class PageDelivery(val draft: com.example.billkit.BillDraft, val diagnostic: DebugBus.State?, val token: String)
+        val deliveries = Channel<PageDelivery>(Channel.UNLIMITED)
+        scope.launch {
+            for ((draft, diagnostic, token) in deliveries) {
                 try {
+                    fun allowed(): Boolean = settings.enabled && settings.pageFallbackEnabled && draft.sourcePkg in settings.whitelist &&
+                        token == com.example.autobook.capture.NotificationIngress.configurationToken(this@App)
+                    if (!allowed()) continue
                     val suggestion = CategorySuggester.suggest(draft, candidates = com.example.autobook.data.ExternalRuleStore.candidates())
                     val named = draft.copy(category = suggestion.category, subCategory = suggestion.subCategory, account = suggestion.account)
                     val enriched = named.copy(note = NoteTemplate.render(named).ifBlank { null })
-                    val delivery = ConfirmDelivery.deliver(this@App, enriched, settings.autoConfirm)
+                    val accepted = com.example.autobook.capture.CaptureCoordinator.accept(this@App,
+                        com.example.autobook.capture.CaptureCoordinator.Input(enriched, "PAGE",
+                            "page:" + com.example.autobook.data.RecognitionIdentity.key(enriched)), allowed = { allowed() }) ?: continue
+                    val delivery = com.example.autobook.capture.CaptureCoordinator.deliver(this@App, accepted) { allowed() }
                     if (DebugBus.state.value == diagnostic) DebugBus.annotateOutcome(buildString {
                         append(" → ").append(delivery)
                         suggestion.categoryHit?.let { append(" 分类依据：").append(it.explanation) }
@@ -63,7 +75,8 @@ class App : Application() {
         val pageSessions = PageSessionStore(this)
         BillKit.install(
             config = settings.toKitConfig(),
-            sink = { draft -> check(deliveries.trySend(draft to DebugBus.state.value).isSuccess) },
+            sink = { draft -> check(deliveries.trySend(PageDelivery(draft, DebugBus.state.value,
+                draft.captureConfigurationToken ?: "missing-capture-token")).isSuccess) },
             ocrEngine = MlKitOcrEngine(),
             pageSessionProvider = pageSessions::sessionFor,
         )

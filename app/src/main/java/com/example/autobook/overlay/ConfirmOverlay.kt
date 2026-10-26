@@ -88,15 +88,16 @@ object ConfirmOverlay {
      * 弹出确认卡。任意线程可调用。
      * @return true 表示卡片已经真的出现在屏幕上
      */
-    fun show(context: Context, draft: BillDraft): Boolean {
+    fun show(context: Context, draft: BillDraft, allowed: () -> Boolean = { true }): Boolean {
         val app = context.applicationContext
-        if (!canShow(app)) return false
-        if (Looper.myLooper() == Looper.getMainLooper()) return showOnMain(app, draft)
+        if (!canShow(app) || !allowed()) return false
+        if (Looper.myLooper() == Looper.getMainLooper()) return showOnMain(app, draft, allowed)
 
         val latch = CountDownLatch(1)
         val ok = AtomicBoolean(false)
+        val deadline = android.os.SystemClock.uptimeMillis() + SHOW_TIMEOUT_MS
         main.post {
-            ok.set(showOnMain(app, draft))
+            ok.set(showOnMain(app, draft) { allowed() && android.os.SystemClock.uptimeMillis() <= deadline })
             latch.countDown()
         }
         return try {
@@ -130,7 +131,8 @@ object ConfirmOverlay {
     }
     private var session: Session? = null
 
-    private fun showOnMain(app: Context, draft: BillDraft): Boolean {
+    private fun showOnMain(app: Context, draft: BillDraft, allowed: () -> Boolean): Boolean {
+        if (!allowed()) return false
         // Keep the existing editor intact; another draft remains durable and uses fallback delivery.
         if (session != null) {
             if (session?.result == null) return false
@@ -185,6 +187,7 @@ object ConfirmOverlay {
         }
 
         return try {
+            if (!allowed()) return false
             wm.addView(root, params)
             appContext = app
             windowManager = wm
