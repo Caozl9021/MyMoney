@@ -21,7 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.autobook.data.*
@@ -62,7 +62,8 @@ fun AssetsScreen(onBack: () -> Unit, isTab: Boolean = false, onSubpageVisibility
     var billId by rememberSaveable { mutableStateOf<Long?>(null) }
     val prefs = remember { context.getSharedPreferences("asset_display", android.content.Context.MODE_PRIVATE) }
     var hidden by remember { mutableStateOf(prefs.getBoolean("hide_amount", false)) }
-    var showArchived by rememberSaveable { mutableStateOf(false) }
+    var showArchived by remember { mutableStateOf(prefs.getBoolean("show_archived", false)) }
+    var moreOpen by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var actionBusy by remember { mutableStateOf(false) }
     var confirmArchive by remember { mutableStateOf(false) }
@@ -71,13 +72,26 @@ fun AssetsScreen(onBack: () -> Unit, isTab: Boolean = false, onSubpageVisibility
     val scope = rememberCoroutineScope()
     val account = accounts.firstOrNull { it.id == selected }
     val summary = remember(accounts, entries) { AssetMath.summary(accounts, entries) }
+    val clock = rememberLedgerClock()
+    val startDay = rememberMonthStartDay()
+    val currentPeriod = LedgerMonthPeriod.containing(clock.date, startDay, clock.zone)
+    var expandedPeriods by rememberSaveable(account?.id, startDay, currentPeriod.month.toString(), clock.zone.id) {
+        mutableStateOf(listOf(currentPeriod.month.toString()))
+    }
+    var periods by remember(account?.id, startDay, currentPeriod.month, clock.zone) { mutableStateOf<List<AccountHistoryPeriod>?>(null) }
+    LaunchedEffect(account, allBills, entries, clock.date, clock.zone, startDay) {
+        periods = account?.let { selectedAccount -> withContext(Dispatchers.Default) {
+            accountPeriodHistory(selectedAccount, allBills, entries, clock.date, startDay, clock.zone)
+        } }
+    }
+
     fun closePage() {
         when { billId != null -> billId = null; form != null -> form = null; selected != null -> selected = null; else -> onBack() }
     }
     val currentVisibility by rememberUpdatedState(onSubpageVisibilityChanged)
     LaunchedEffect(form, selected, billId) { currentVisibility(form != null || selected != null || billId != null) }
     DisposableEffect(Unit) { onDispose { currentVisibility(false) } }
-    BackHandler(enabled = !isTab || form != null || selected != null || billId != null) { closePage() }
+    ActiveBackHandler(enabled = !isTab || form != null || selected != null || billId != null) { closePage() }
     fun mutate(onSuccess: () -> Unit = {}, block: suspend () -> Unit) {
         if (!actionBusy) { actionBusy = true; error = null
             scope.launch { runCatching { withContext(Dispatchers.IO) { block() } }.onSuccess { onSuccess() }
@@ -85,28 +99,38 @@ fun AssetsScreen(onBack: () -> Unit, isTab: Boolean = false, onSubpageVisibility
         }
     }
     when (form) {
+        "candidates" -> AccountCandidatesPage(onBack = { form = null })
         "new", "edit" -> AssetAccountForm(if (form == "edit") account else null,
             onBack = { form = null }, onSaved = { selected = it; form = null })
         "balance" -> account?.let { AssetBalanceForm(it, AssetMath.balance(it.id, entries), onBack = { form = null }) }
         "transfer" -> AssetTransferScreen(initialFromId = account?.id, onBack = { form = null })
-        else -> AssetScaffold(title = account?.name ?: "资产", isRoot = isTab && account == null,
-            onBack = { closePage() }, onAdd = { form = "new" }) { padding ->
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = AbSpacing.page, end = AbSpacing.page,
-                bottom = padding.calculateBottomPadding()), verticalArrangement = Arrangement.spacedBy(AbSpacing.m)) {
-                if (!ready) item { GroupFooter("正在读取本地资产…") }
+        else -> AssetScaffold(title = if (account != null) "账户详情" else "资产", isRoot = isTab && account == null,
+            onBack = { closePage() }, onAdd = if (account == null) ({ form = "new" }) else null) { padding ->
+            AssetPageColumn(detail = account != null, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(start = AbSpacing.page, end = AbSpacing.page,
+                top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding()), verticalArrangement = Arrangement.spacedBy(AbCardDensity.gap)) {
                 if (storeError != null || error != null) item {
                     InlineMessage(error ?: storeError.orEmpty(), isError = true, announce = true)
                 }
                 if (account == null) {
                     val visible = accounts.filter { showArchived || !it.archived }
                     val anyValue = accounts.any { it.included && it.initialized }
-                    item { AssetNetWorthCard(summary = summary,
+                    if (!isTab) item { InsetGroup {
+                        ListRow(title = "转账 / 还款", subtitle = "两端资金划转，本金不计收支", chevron = true,
+                            dividerAbove = false,
+                            onClick = if (accounts.count { !it.archived && it.initialized } >= 2) { { form = "transfer" } } else null)
+                        ListRow(title = "账户管理", subtitle = "确认卡账户清单、排序与默认账户", chevron = true,
+                            dividerAbove = true, onClick = { form = "candidates" })
+                        ListRow(title = "显示归档账户", subtitle = "归档保留余额，默认继续纳入总览", dividerAbove = true,
+                            trailing = { AbSwitch(showArchived) { showArchived = it; prefs.edit().putBoolean("show_archived", it).apply() } },
+                            onClick = { showArchived = !showArchived; prefs.edit().putBoolean("show_archived", showArchived).apply() })
+                    } }
+                    if (isTab) item { AssetNetWorthCard(summary = summary,
                         hidden = hidden, hasValue = anyValue,
                         onToggleHidden = {
                             hidden = !hidden; prefs.edit().putBoolean("hide_amount", hidden).apply()
                         }) }
-                    item {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AbSpacing.m)) {
+                    if (isTab) item {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AbCardDensity.gap)) {
                             AssetMetricTile("总资产", summary.assets, up = true, hidden = hidden, hasValue = anyValue, modifier = Modifier.weight(1f))
                             AssetMetricTile("总负债", summary.debts, up = false, hidden = hidden, hasValue = anyValue, modifier = Modifier.weight(1f))
                         }
@@ -123,65 +147,33 @@ fun AssetsScreen(onBack: () -> Unit, isTab: Boolean = false, onSubpageVisibility
                             }
                         }
                     }
-                    item { InsetGroup {
-                        ListRow(title = "转账 / 还款", subtitle = "两端资金划转，本金不计收支", chevron = true,
-                            dividerAbove = false,
-                            onClick = if (accounts.count { !it.archived && it.initialized } >= 2) { { form = "transfer" } } else null)
-                        ListRow(title = "显示归档账户", subtitle = "归档保留余额，默认继续纳入总览", dividerAbove = true,
-                            trailing = { AbSwitch(showArchived) { showArchived = it } }, onClick = { showArchived = !showArchived })
-                    } }
-                    item { GroupFooter("余额由你设置，后续新账单同步更新；它不是银行实时余额。初始化和调账不计入收支。") }
+
                 } else {
-                    val balance = AssetMath.balance(account.id, entries)
-                    item { InsetGroup {
-                        ListRow(title = if (hidden && account.initialized) "••••" else positionLabel(account, balance),
-                            subtitle = assetKinds[account.kind] + (if (account.archived) " · 已归档" else ""))
-                        ListRow(title = "纳入资产总览", subtitle = if (account.included) "当前已计入；归档后仍保留" else "当前已排除，余额和流水仍保留",
-                            trailing = { AbSwitch(account.included) { checked -> mutate { AssetStore.updateAccount(account.copy(included = checked)) } } })
-                        ListRow(title = if (account.initialized) "调整余额" else "设置当前余额", chevron = true, onClick = if (actionBusy) null else { { form = "balance" } })
-                        ListRow(title = "账户设置", subtitle = "名称、类型、别名与排序", chevron = true, onClick = { form = "edit" })
-                        ListRow(title = if (account.archived) "恢复账户" else "归档账户", subtitle = "历史和余额会保留", onClick = if (actionBusy) null else { { confirmArchive = true } })
-                        if (!account.initialized && entries.none { it.accountId == account.id } && allBills.none { it.accountId == account.id || it.transferAccountId == account.id })
-                            ListRow(title = "删除空账户", subtitle = "仅无余额、无流水、无账单关联时可删除", destructive = true,
-                                onClick = if (actionBusy) null else { { confirmDelete = true } })
-                        if (!account.archived && account.initialized) ListRow(title = "转账 / 还款", chevron = true, onClick = { form = "transfer" })
-                    } }
-                    item { GroupHeader("余额流水") }
-                    val accountEntries = entries.filter { it.accountId == account.id }.sortedWith(compareBy<AssetEntry> { it.createdAt }.thenBy { it.id })
-                    val running = mutableMapOf<String, Pair<Long, Long>>()
-                    var previous = 0L
-                    accountEntries.forEach { entry ->
-                        val next = Math.addExact(previous, entry.deltaCents)
-                        running[entry.id] = previous to next; previous = next
+                    item {
+                        AccountBalanceCard(account, AssetMath.balance(account.id, entries), hidden,
+                            onMore = { moreOpen = true }, onEditBalance = { form = "balance" })
                     }
-                    if (accountEntries.isEmpty()) item { GroupFooter("暂无余额流水。设置当前余额后，新的记账才会联动。") }
-                    items(accountEntries.asReversed(), key = { "entry-${it.id}" }) { entry ->
-                        val record = allBills.firstOrNull { it.assetKey == entry.billKey }
-                        val hasReversal = entries.any { it.reversalOf == entry.id }
-                        InsetGroup {
-                            ListRow(title = when (entry.kind) { "OPENING" -> "余额起点"; "ADJUSTMENT" -> "余额调整"; "REVERSAL" -> "冲销"; "TRANSFER" -> "转账 / 还款"; else -> "账单变动" },
-                                subtitle = buildString {
-                                    append(entry.note.ifBlank { "本地记账" })
-                                    append("\n登记于 ").append(assetTime(entry.createdAt))
-                                    if (record != null) append("\n账单时间 ").append(assetTime(record.timeMillis))
-                                    append("\n变动 ").append(if (hidden) "••••" else (if (entry.deltaCents >= 0) "+" else "") + assetMoney(entry.deltaCents))
-                                    val bounds = running[entry.id]!!
-                                    append("\n").append(if (hidden) "•••• → ••••" else "${assetMoney(bounds.first)} → ${assetMoney(bounds.second)}")
-                                }, chevron = record != null, onClick = record?.let { { billId = it.id } })
-                            if (entry.kind == "ADJUSTMENT" && !hasReversal) ListRow(title = "撤销这次调账", onClick = if (actionBusy) null else { { pendingReverse = entry } })
-                        }
-                    }
-                    item { GroupHeader("关联账单") }
-                    val related = allBills.filter { it.accountId == account.id || it.transferAccountId == account.id }
-                    if (related.isEmpty()) item { GroupFooter("暂无关联账单；历史未联动账单不会重复计入余额。") }
-                    items(related, key = { "bill-${it.id}" }) { bill -> InsetGroup {
-                        ListRow(title = bill.merchant?.takeIf { it.isNotBlank() } ?: bill.category ?: "账单",
-                            subtitle = "${if (hidden) "••••" else assetMoney(bill.priceCents)} · ${if (bill.assetLinked) "已计入余额" else "未计入余额"}\n${assetTime(bill.timeMillis)}",
-                            chevron = true, onClick = { billId = bill.id })
-                    } }
+                    if (periods == null) item { InlineMessage("正在读取账单…") }
+                    else accountPeriodCards(periods.orEmpty(), expandedPeriods, hidden, clock.zone, currentPeriod.month,
+                        onToggle = { key -> expandedPeriods = if (key in expandedPeriods) expandedPeriods - key else expandedPeriods + key },
+                        reversedIds = entries.mapNotNull { it.reversalOf }.toSet(),
+                        onBill = { billId = it }, onReverse = { pendingReverse = it })
                 }
             }
         }
+    }
+    if (moreOpen && account != null) AppDialog("账户操作", onDismiss = { moreOpen = false }) {
+        ListRow(title = "纳入资产总览", trailing = { AbSwitch(account.included, onCheckedChange = { checked ->
+            if (!actionBusy) mutate { AssetStore.updateAccount(account.copy(included = checked)) }
+        }) })
+        ListRow(title = if (account.initialized) "调整余额" else "设置当前余额", chevron = true,
+            onClick = if (actionBusy) null else ({ moreOpen = false; form = "balance" }))
+        ListRow(title = "账户设置", chevron = true, onClick = { moreOpen = false; form = "edit" })
+        ListRow(title = if (account.archived) "恢复账户" else "归档账户",
+            onClick = if (actionBusy) null else ({ moreOpen = false; confirmArchive = true }))
+        if (!account.initialized && entries.none { it.accountId == account.id } && allBills.none { it.accountId == account.id || it.transferAccountId == account.id })
+            ListRow(title = "删除空账户", destructive = true, onClick = if (actionBusy) null else ({ moreOpen = false; confirmDelete = true }))
+        SecondaryButton("关闭", onClick = { moreOpen = false }, modifier = Modifier.fillMaxWidth())
     }
     if (confirmArchive && account != null) AssetConfirmation(
         title = if (account.archived) "恢复此账户？" else "归档此账户？",
@@ -218,7 +210,7 @@ private fun AssetNetWorthCard(
         Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(AbRadius.card))
             .background(p.cardBg)
-            .padding(horizontal = AbSpacing.l, vertical = AbSpacing.l),
+            .padding(AbCardDensity.content),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("净资产", style = AbType.subhead, color = p.secondaryLabel)
@@ -244,8 +236,6 @@ private fun AssetNetWorthCard(
             },
             style = AbType.amountHero,
             color = p.label,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = AbSpacing.xs),
         )
         if (summary.unknown > 0) {
@@ -277,7 +267,7 @@ private fun AssetMetricTile(
         modifier = modifier
             .clip(RoundedCornerShape(AbRadius.card))
             .background(p.cardBg)
-            .padding(horizontal = AbSpacing.m, vertical = AbSpacing.m),
+            .padding(AbCardDensity.content),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
     ) {
@@ -302,8 +292,6 @@ private fun AssetMetricTile(
                 },
                 style = AbType.amountRow,
                 color = p.label,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -337,49 +325,60 @@ private fun AssetAccountRow(
     onClick: () -> Unit,
 ) {
     val p = LocalAbPalette.current
-    ListRow(
-        title = account.name,
-        subtitle = assetKinds[account.kind]?.let { if (account.archived) "$it · 已归档" else it },
-        leading = { AccountAvatar(name = account.name, size = 40.dp) },
-        trailing = {
-            Text(
-                text = when {
-                    hidden && account.initialized -> "••••"
-                    !account.initialized -> "未设置"
-                    balance < 0 -> assetMoney(balance)
-                    else -> assetMoney(balance)
-                },
-                style = AbType.amountRow,
-                color = if (account.initialized && balance < 0) p.expense else p.label,
-                maxLines = 1,
-            )
-        },
-        dividerAbove = dividerAbove,
-        onClick = onClick,
-    )
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        // Reserve readable space for the account name; grow vertically for long balances.
+        val amountMaxWidth = maxWidth * 0.45f
+        ListRow(
+            title = account.name,
+            subtitle = assetKinds[account.kind]?.let { if (account.archived) "$it · 已归档" else it },
+            leading = { AccountAvatar(name = account.name, size = AbCardDensity.settingsIcon) },
+            trailing = {
+                Column(Modifier.widthIn(max = amountMaxWidth), horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = when {
+                            hidden && account.initialized -> "••••"
+                            !account.initialized -> "未设置"
+                            balance < 0 -> assetMoney(balance)
+                            else -> assetMoney(balance)
+                        },
+                        style = AbType.amountRow,
+                        color = if (account.initialized && balance < 0) p.expense else p.label,
+                        textAlign = TextAlign.End,
+                    )
+                }
+            },
+            dividerAbove = dividerAbove,
+            onClick = onClick,
+        )
+    }
 }
 
 @Composable
-private fun AssetScaffold(title: String, isRoot: Boolean, onBack: () -> Unit, onAdd: () -> Unit,
+private fun AssetScaffold(title: String, isRoot: Boolean, onBack: () -> Unit, onAdd: (() -> Unit)?,
     content: @Composable (PaddingValues) -> Unit) {
-    if (isRoot) PageScaffold(title = title, listState = androidx.compose.foundation.lazy.rememberLazyListState(), compact = true, actions = {
-        TextButton(onClick = onAdd, modifier = Modifier.heightIn(min = 48.dp)) {
+    val actions: @Composable RowScope.() -> Unit = {
+        if (onAdd != null && isRoot) com.example.autobook.ui.design.FloatingHeaderAction(AbIcons.Plus, "添加账户", onAdd)
+        else if (onAdd != null) TextButton(onClick = onAdd, modifier = Modifier.heightIn(min = 48.dp)) {
             Text("添加账户", color = LocalAbPalette.current.accent)
         }
-    }, content = content)
-    else SubPageScaffold(title = title, onBack = onBack, content = content)
+    }
+    if (isRoot) PageScaffold(title = title, listState = androidx.compose.foundation.lazy.rememberLazyListState(),
+        compact = true, floatingHeader = true, actions = actions, content = content)
+    else SubPageScaffold(title = title, onBack = onBack, reserveDock = false, actions = actions, content = content)
 }
 
 @Composable
 private fun AssetConfirmation(title: String, message: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
-    AlertDialog(onDismissRequest = onDismiss, title = { Text(title) }, text = { Text(message) },
-        confirmButton = { TextButton(onClick = onConfirm) { Text("确认") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } })
+    AppDialog(title, onDismiss) {
+        Text(message, style = AbType.body, color = LocalAbPalette.current.secondaryLabel)
+        PrimaryButton("确认", onClick = onConfirm, modifier = Modifier.fillMaxWidth())
+        SecondaryButton("取消", onClick = onDismiss, modifier = Modifier.fillMaxWidth())
+    }
 }
 
 @Composable
 private fun AssetFormField(label: String, value: String, placeholder: String = "", onValue: (String) -> Unit) {
-    InsetGroup { Column(Modifier.fillMaxWidth().padding(AbSpacing.l), verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
+    InsetGroup { Column(Modifier.fillMaxWidth().padding(AbCardDensity.content), verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
         Text(label, style = AbType.footnote, color = LocalAbPalette.current.secondaryLabel)
         AbTextField(value, onValue, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), placeholder = placeholder)
     } }
@@ -400,20 +399,20 @@ private fun AssetAccountForm(original: AssetAccount?, onBack: () -> Unit, onSave
     val scope = rememberCoroutineScope()
     // 已有账户名：预设里已经存在的就不再重复列出来。
     val existingNames = remember { AssetStore.accounts.value.map { it.name }.toSet() }
-    BackHandler { if (!busy) onBack() }
-    SubPageScaffold(if (original == null) "添加账户" else "账户设置", onBack = { if (!busy) onBack() }) { padding ->
-        LazyColumn(Modifier.fillMaxSize().imePadding(), contentPadding = PaddingValues(start = AbSpacing.page, end = AbSpacing.page,
-            bottom = padding.calculateBottomPadding()), verticalArrangement = Arrangement.spacedBy(AbSpacing.m)) {
+    ActiveBackHandler { if (!busy) onBack() }
+    SubPageScaffold(if (original == null) "添加账户" else "账户设置", onBack = { if (!busy) onBack() }, reserveDock = false) { padding ->
+        com.example.autobook.ui.design.SectionLazyColumn(Modifier.fillMaxSize().imePadding(), contentPadding = PaddingValues(start = AbSpacing.page, end = AbSpacing.page,
+            top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding()), verticalArrangement = Arrangement.spacedBy(AbCardDensity.gap)) {
             item { AssetFormField("账户名称", name, "例如：招商储蓄卡") { name = it } }
             if (original == null) {
                 // 预设账户：名字 + 类型一次填好，logo 由名字自动匹配（见 AccountLogos）。
                 // 只列当前还没有的，避免重复建同名账户。
                 val missing = AccountPresets.all.filterNot { it.name in existingNames }
                 if (missing.isNotEmpty()) {
-                    item { GroupHeader("常用账户") }
+                    item(contentType = com.example.autobook.ui.design.SectionRole.HEADER) { GroupHeader("常用账户") }
                     item {
                         InsetGroup {
-                            Column(Modifier.padding(AbSpacing.l), verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
+                            Column(Modifier.padding(AbCardDensity.content), verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
                                 missing.chunked(3).forEach { row ->
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
                                         row.forEach { preset ->
@@ -429,23 +428,20 @@ private fun AssetAccountForm(original: AssetAccount?, onBack: () -> Unit, onSave
                                         }
                                     }
                                 }
-                                Text("点一下自动填好名称和类型；logo 按账户名识别，认不出的用首字头像。",
-                                    style = AbType.caption1, color = LocalAbPalette.current.secondaryLabel)
                             }
                         }
                     }
                 }
             }
-            item { GroupHeader("账户类型") }
+            item(contentType = com.example.autobook.ui.design.SectionRole.HEADER) { GroupHeader("账户类型") }
             items(assetKinds.toList()) { (value, label) -> InsetGroup {
                 ListRow(title = label, trailing = { Text(if (kind == value) "✓" else "", color = LocalAbPalette.current.accent) }, onClick = { kind = value })
             } }
             item { AssetFormField("别名（逗号分隔）", aliases, "仅明确填写的别名参与精确匹配") { aliases = it } }
-            item { GroupFooter("改名不会改写历史账单名称。若要继续匹配旧规则，请显式把旧名称加入别名。") }
             item { AssetFormField("排序序号", order) { order = it } }
             item { InsetGroup { ListRow(title = "纳入资产总览", trailing = { AbSwitch(included) { included = it } }) } }
             if (error != null) item { InlineMessage(error.orEmpty(), isError = true, announce = true) }
-            item { PrimaryButton("保存账户", modifier = Modifier.fillMaxWidth(), busy = busy, onClick = {
+            item(contentType = com.example.autobook.ui.design.SectionRole.ACTION) { PrimaryButton("保存账户", modifier = Modifier.fillMaxWidth(), busy = busy, onClick = {
                 if (!busy) { busy = true; error = null
                     scope.launch {
                         runCatching { withContext(Dispatchers.IO) {
@@ -477,16 +473,15 @@ private fun AssetBalanceForm(account: AssetAccount, current: Long, onBack: () ->
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    BackHandler { if (!busy) onBack() }
-    SubPageScaffold(if (account.initialized) "调整余额" else "设置当前余额", onBack = { if (!busy) onBack() }) { padding ->
-        LazyColumn(Modifier.fillMaxSize().imePadding(), contentPadding = PaddingValues(start = AbSpacing.page, end = AbSpacing.page,
-            bottom = padding.calculateBottomPadding()), verticalArrangement = Arrangement.spacedBy(AbSpacing.m)) {
+    ActiveBackHandler { if (!busy) onBack() }
+    SubPageScaffold(if (account.initialized) "调整余额" else "设置当前余额", onBack = { if (!busy) onBack() }, reserveDock = false) { padding ->
+        com.example.autobook.ui.design.SectionLazyColumn(Modifier.fillMaxSize().imePadding(), contentPadding = PaddingValues(start = AbSpacing.page, end = AbSpacing.page,
+            top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding()), verticalArrangement = Arrangement.spacedBy(AbCardDensity.gap)) {
             item { InsetGroup { ListRow(title = account.name, subtitle = positionLabel(account, current)) } }
             item { AssetFormField(if (debt) "当前欠款（元）" else "当前余额（元）", amount, if (debt) "欠款填正数，溢缴填负数" else "例如 1000.00，透支填负数") { amount = it } }
             item { AssetFormField("原因", reason, "请填写这次调整的原因") { reason = it } }
-            item { GroupFooter(if (account.initialized) "调整仅登记当前差额，不计入收支。以后修改已联动账单，仍会改变当前余额。" else "以现在输入的余额为准，历史账单不重复扣减。设置后新保存的账单（含补记和未来日期）立即影响当前余额。") }
             if (error != null) item { InlineMessage(error.orEmpty(), isError = true, announce = true) }
-            item { PrimaryButton("预览并确认", modifier = Modifier.fillMaxWidth(), busy = busy, onClick = {
+            item(contentType = com.example.autobook.ui.design.SectionRole.ACTION) { PrimaryButton("预览并确认", modifier = Modifier.fillMaxWidth(), busy = busy, onClick = {
                 runCatching {
                     require(reason.isNotBlank()) { "请填写原因" }
                     val cents = AssetMath.parseCents(amount)
@@ -518,8 +513,9 @@ fun AssetTransferScreen(initialFromId: String? = null, original: BillEntity? = n
     var amount by rememberSaveable(original?.id) { mutableStateOf(original?.let { assetNumber(it.priceCents) }.orEmpty()) }
     var fee by rememberSaveable(original?.id) { mutableStateOf(original?.let { assetNumber(it.transferFeeCents) } ?: "0") }
     var note by rememberSaveable(original?.id) { mutableStateOf(original?.note.orEmpty()) }
-    var date by rememberSaveable(original?.id) { mutableStateOf(java.time.LocalDateTime.ofInstant(
-        Instant.ofEpochMilli(original?.timeMillis ?: System.currentTimeMillis()), ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))) }
+    var billTime by rememberSaveable(original?.id) { mutableStateOf(original?.timeMillis ?: System.currentTimeMillis()) }
+    var dateOpen by remember { mutableStateOf(false) }
+    val date = java.time.LocalDateTime.ofInstant(Instant.ofEpochMilli(billTime), ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
     var preview by remember { mutableStateOf<Triple<Long, Long, Long>?>(null) }
     var previewBalances by remember { mutableStateOf(0L to 0L) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -528,17 +524,24 @@ fun AssetTransferScreen(initialFromId: String? = null, original: BillEntity? = n
     val eligible = accounts.filter { !it.archived && it.initialized }
     val fromAccount = accounts.firstOrNull { it.id == from }
     val toAccount = accounts.firstOrNull { it.id == to }
-    BackHandler { if (!busy) onBack() }
-    SubPageScaffold(if (original == null) "转账 / 还款" else "修改转账 / 还款", onBack = { if (!busy) onBack() }) { padding ->
-        LazyColumn(Modifier.fillMaxSize().imePadding(), contentPadding = PaddingValues(start = AbSpacing.page, end = AbSpacing.page,
-            bottom = padding.calculateBottomPadding()), verticalArrangement = Arrangement.spacedBy(AbSpacing.m)) {
-            item { GroupFooter("本金只转移账户资金，不计收支。选择信用账户为转入方即偿还欠款；手续费单独计支出。") }
-            item { GroupHeader("转出账户") }
+    val initialFields = rememberSaveable(original?.id) { listOf(from.orEmpty(), to.orEmpty(), amount, fee, note, billTime.toString()) }
+    var discardChanges by remember { mutableStateOf(false) }
+    fun requestClose() {
+        if (!busy) {
+            if (listOf(from.orEmpty(), to.orEmpty(), amount, fee, note, billTime.toString()) != initialFields) discardChanges = true else onBack()
+        }
+    }
+    ActiveBackHandler { requestClose() }
+    if (discardChanges) DiscardChangesDialog(onContinue = { discardChanges = false }, onDiscard = { discardChanges = false; onBack() })
+    SubPageScaffold(if (original == null) "转账 / 还款" else "修改转账 / 还款", onBack = { requestClose() }, reserveDock = false) { padding ->
+        com.example.autobook.ui.design.SectionLazyColumn(Modifier.fillMaxSize().imePadding(), contentPadding = PaddingValues(start = AbSpacing.page, end = AbSpacing.page,
+            top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding()), verticalArrangement = Arrangement.spacedBy(AbCardDensity.gap)) {
+            item(contentType = com.example.autobook.ui.design.SectionRole.HEADER) { GroupHeader("转出账户") }
             items(eligible, key = { "from-${it.id}" }) { candidate -> InsetGroup {
                 ListRow(title = candidate.name, subtitle = positionLabel(candidate, AssetMath.balance(candidate.id, entries)),
                     trailing = { Text(if (from == candidate.id) "✓" else "", color = LocalAbPalette.current.accent) }, onClick = { from = candidate.id })
             } }
-            item { GroupHeader("转入 / 还款账户") }
+            item(contentType = com.example.autobook.ui.design.SectionRole.HEADER) { GroupHeader("转入 / 还款账户") }
             items(eligible, key = { "to-${it.id}" }) { candidate -> InsetGroup {
                 ListRow(title = candidate.name, subtitle = positionLabel(candidate, AssetMath.balance(candidate.id, entries)),
                     trailing = { Text(if (to == candidate.id) "✓" else "", color = LocalAbPalette.current.accent) }, onClick = { to = candidate.id })
@@ -546,10 +549,10 @@ fun AssetTransferScreen(initialFromId: String? = null, original: BillEntity? = n
             if (eligible.size < 2) item { InlineMessage("请先为至少两个可用账户设置余额。", isError = true) }
             item { AssetFormField("本金（元）", amount) { amount = it } }
             item { AssetFormField("手续费（元）", fee) { fee = it } }
-            item { AssetFormField("账单时间", date, "yyyy-MM-dd HH:mm") { date = it } }
+            item { InsetGroup { ListRow(title = "账单时间", subtitle = date, onClick = if (busy) null else { { dateOpen = true } }) } }
             item { AssetFormField("备注", note) { note = it } }
             if (error != null) item { InlineMessage(error.orEmpty(), isError = true, announce = true) }
-            item { PrimaryButton("预览转账", modifier = Modifier.fillMaxWidth(), busy = busy, onClick = {
+            item(contentType = com.example.autobook.ui.design.SectionRole.ACTION) { PrimaryButton("预览转账", modifier = Modifier.fillMaxWidth(), busy = busy, onClick = {
                 error = null
                 runCatching {
                     require(fromAccount != null && toAccount != null && from != to) { "请选择两个不同账户" }
@@ -557,7 +560,7 @@ fun AssetTransferScreen(initialFromId: String? = null, original: BillEntity? = n
                     val cents = AssetMath.parseCents(amount); val feeCents = AssetMath.parseCents(fee.ifBlank { "0" })
                     require(cents > 0 && feeCents >= 0) { "本金须大于0，手续费不能为负" }
                     Math.addExact(cents, feeCents)
-                    val time = java.time.LocalDateTime.parse(date.trim(), DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm").withResolverStyle(java.time.format.ResolverStyle.STRICT)).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                    val time = billTime
                     fun originalNet(accountId: String): Long {
                         if (original?.assetLinked != true) return 0L
                         val out = if (original.accountId == accountId) Math.negateExact(Math.addExact(original.priceCents, original.transferFeeCents)) else 0L
@@ -572,6 +575,7 @@ fun AssetTransferScreen(initialFromId: String? = null, original: BillEntity? = n
             }) }
         }
     }
+    if (dateOpen) LedgerDateTimeDialog(billTime, onDismiss = { dateOpen = false }, onConfirm = { billTime = it; dateOpen = false })
     val target = preview
     if (target != null && fromAccount != null && toAccount != null) {
         val fromAfter = previewBalances.first
@@ -591,4 +595,11 @@ fun AssetTransferScreen(initialFromId: String? = null, original: BillEntity? = n
             }
         })
     }
+}
+
+@Composable
+private fun AssetPageColumn(detail: Boolean, modifier: Modifier, contentPadding: PaddingValues,
+    verticalArrangement: Arrangement.Vertical, content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit) {
+    if (detail) LazyColumn(modifier, contentPadding = contentPadding, content = content)
+    else SectionLazyColumn(modifier, contentPadding = contentPadding, verticalArrangement = verticalArrangement, content = content)
 }

@@ -7,6 +7,7 @@ import android.os.SystemClock
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import com.example.autobook.data.Settings
+import com.example.autobook.data.CaptureMode
 import com.example.billkit.notification.NotificationObservation
 import com.example.billkit.notification.NotificationParser
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,7 +53,7 @@ class PaymentNotificationListener : NotificationListenerService() {
         val settings = Settings(this)
         val pkg = notification.packageName
         // Inspect package and state before touching any message extras.
-        if (!settings.enabled || !settings.notificationCaptureEnabled || pkg == packageName || pkg !in settings.whitelist) return
+        if (settings.captureMode == CaptureMode.ROOT || !settings.enabled || !settings.notificationCaptureEnabled || pkg == packageName || pkg !in settings.whitelist) return
         val token = NotificationIngress.configurationToken(this)
         val baseline = notification.postTime <= connectedAt || instanceKey(notification) in baselineInstances
         val observation = buildObservation(notification, token, baseline, readText = !baseline)

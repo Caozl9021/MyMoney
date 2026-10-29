@@ -58,20 +58,17 @@ class BillAccessibilityService : AccessibilityService() {
         settings = Settings(this)
         refreshServiceInfo()
 
-        // 检测 LSP 模块状态（三档，不把"看到框架"说成"模块已启用"）
-        val hookState = XposedModuleDetector.detect(this)
-
         // 连上就确保守护在跑：模式可能是在别处改的，这里再兜一次底（幂等）
-        if (settings.enabled && settings.pageFallbackEnabled && settings.captureMode == CaptureMode.ACCESSIBILITY) {
+        if (settings.enabled && settings.pageEnabled && settings.captureMode == CaptureMode.ACCESSIBILITY) {
             AccessibilityGuardian.ensureRunning(this)
         }
 
-        Log.i(TAG, "无障碍服务已连接, 白名单=${settings.whitelist}, LSP状态=$hookState")
+        Log.i(TAG, "无障碍服务已连接, 白名单=${settings.whitelist}")
     }
 
     /** 白名单/开关变化后由 UI 调用，减少无效回调 */
     fun refreshServiceInfo() {
-        val enabled = settings.enabled && settings.pageFallbackEnabled && settings.captureMode == CaptureMode.ACCESSIBILITY
+        val enabled = settings.enabled && settings.pageEnabled && settings.captureMode == CaptureMode.ACCESSIBILITY
         if (!enabled || pendingPackage?.let { it !in settings.whitelist } == true) {
             clearPending()
         }
@@ -87,7 +84,7 @@ class BillAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
         if (!::settings.isInitialized) return
-        if (!settings.enabled || !settings.pageFallbackEnabled || settings.captureMode != CaptureMode.ACCESSIBILITY) { clearPending(); return }
+        if (!settings.enabled || !settings.pageEnabled || settings.captureMode != CaptureMode.ACCESSIBILITY) { clearPending(); return }
 
         val pkg = event.packageName?.toString() ?: return
         if (!BillKit.isAccepted(pkg) || pkg == packageName) {
@@ -130,7 +127,7 @@ class BillAccessibilityService : AccessibilityService() {
     }
 
     private fun captureAndOffer() {
-        if (!settings.enabled || !settings.pageFallbackEnabled || settings.captureMode != CaptureMode.ACCESSIBILITY) { clearPending(); return }
+        if (!settings.enabled || !settings.pageEnabled || settings.captureMode != CaptureMode.ACCESSIBILITY) { clearPending(); return }
         val pkg = pendingPackage ?: return
         val token = pendingToken ?: return
         if (token != NotificationIngress.configurationToken(this)) { clearPending(); return }
@@ -159,7 +156,7 @@ class BillAccessibilityService : AccessibilityService() {
 
         clearPending()
         worker.execute {
-            if (settings.enabled && settings.pageFallbackEnabled && settings.captureMode == CaptureMode.ACCESSIBILITY &&
+            if (settings.enabled && settings.pageEnabled && settings.captureMode == CaptureMode.ACCESSIBILITY &&
                 token == NotificationIngress.configurationToken(this)) {
                 BillKit.offer(snapshot)
             }

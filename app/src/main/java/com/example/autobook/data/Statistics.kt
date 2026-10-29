@@ -16,33 +16,34 @@ data class StatisticsRange(
     val startDate: LocalDate,
     val endExclusiveDate: LocalDate,
     val zone: ZoneId,
+    val monthStartDay: Int = 1,
 ) {
     init { require(startDate < endExclusiveDate) }
 
     val fromMillis: Long get() = startDate.atStartOfDay(zone).toInstant().toEpochMilli()
     val toMillis: Long get() = endExclusiveDate.atStartOfDay(zone).toInstant().toEpochMilli()
 
-    fun shift(amount: Long): StatisticsRange = containing(
-        when (period) {
-            StatisticsPeriod.WEEK -> startDate.plusWeeks(amount)
-            StatisticsPeriod.MONTH -> startDate.plusMonths(amount)
-        }, period, zone,
-    )
+    fun shift(amount: Long): StatisticsRange = when (period) {
+        StatisticsPeriod.WEEK -> containing(startDate.plusWeeks(amount), period, zone, monthStartDay)
+        StatisticsPeriod.MONTH -> LedgerMonthPeriod.containing(startDate, monthStartDay, zone).shift(amount).let {
+            StatisticsRange(period, it.startDate, it.endExclusiveDate, zone, monthStartDay)
+        }
+    }
 
     companion object {
         fun containing(
             date: LocalDate,
             period: StatisticsPeriod,
             zone: ZoneId = ZoneId.systemDefault(),
+            monthStartDay: Int = 1,
         ): StatisticsRange {
-            val start = when (period) {
-                StatisticsPeriod.WEEK -> date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-                StatisticsPeriod.MONTH -> date.withDayOfMonth(1)
+            require(monthStartDay in 1..31)
+            if (period == StatisticsPeriod.MONTH) {
+                val month = LedgerMonthPeriod.containing(date, monthStartDay, zone)
+                return StatisticsRange(period, month.startDate, month.endExclusiveDate, zone, monthStartDay)
             }
-            val end = when (period) {
-                StatisticsPeriod.WEEK -> start.plusWeeks(1)
-                StatisticsPeriod.MONTH -> start.plusMonths(1)
-            }
+            val start = date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+            val end = start.plusWeeks(1)
             return StatisticsRange(period, start, end, zone)
         }
     }

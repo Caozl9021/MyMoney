@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -79,8 +80,8 @@ fun iconForCategory(category: String?): ImageVector {
 internal fun displayOrNull(value: String?): String? = value?.takeIf { it.isNotBlank() }
 
 /** 分类是账单行的稳定主标题；即使父分类缺失，已有二级分类也照常显示。 */
-internal fun billRowTitle(category: String?, subCategory: String?): String =
-    displayOrNull(subCategory) ?: displayOrNull(category) ?: "未分类"
+internal fun billRowTitle(category: String?, subCategory: String?, type: String? = null): String =
+    if (type == "TRANSFER") "转账" else displayOrNull(subCategory) ?: displayOrNull(category) ?: "未分类"
 
 /** 保留商户（否则备注）与时间；二级标题的父分类作为次级上下文，不重复标题。 */
 internal fun billRowSubtitle(
@@ -88,7 +89,7 @@ internal fun billRowSubtitle(
 ): String = listOfNotNull(
     if (refund) "退款" else null,
     displayOrNull(category)?.takeIf { displayOrNull(subCategory) != null && it != subCategory },
-    displayOrNull(merchant) ?: displayOrNull(note),
+    displayOrNull(note) ?: displayOrNull(merchant),
     displayOrNull(time),
 ).joinToString(" · ")
 
@@ -108,7 +109,7 @@ fun BillListRow(
     hideAmount: Boolean = false,
 ) {
     val p = LocalAbPalette.current
-    val accent = swatchFor(bill.category ?: "未分类")
+    val accent = billIconTint(p, bill.type)
     val time = if (showTime) timeOfDay(bill.timeMillis) else null
     val assetAccounts by com.example.autobook.data.AssetStore.accounts.collectAsStateWithLifecycle()
     val account = displayOrNull(assetAccounts.firstOrNull { it.id == bill.accountId }?.name ?: bill.account)
@@ -118,15 +119,16 @@ fun BillListRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 78.dp)
-            .padding(horizontal = AbSpacing.l, vertical = 12.dp),
+            .heightIn(min = AbCardDensity.billRowMin)
+            .padding(horizontal = AbSpacing.l, vertical = AbCardDensity.rowVertical),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(AbSpacing.m),
     ) {
-        CategoryBadge(category = bill.category, tint = accent, size = 38.dp)
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        CategoryBadge(category = bill.category, tint = accent, size = AbCardDensity.icon,
+            foreground = if (p.cardBg.luminance() > 0.5f) Color.White else badgeForeground(accent))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(AbSpacing.xxs)) {
             Text(
-                text = billRowTitle(bill.category, bill.subCategory),
+                text = billRowTitle(bill.category, bill.subCategory, bill.type),
                 style = AbType.body,
                 color = p.label,
                 maxLines = 1,
@@ -167,12 +169,20 @@ fun BillListRow(
     }
 }
 
-/** 金额语义色：支出珊瑚、收入绿、退款青、转账中性；不做「只有颜色」的类型提示。 */
+/** 金额语义色：支出暖红、收入绿、退款青、转账灰；不做「只有颜色」的类型提示。 */
 internal fun amountTint(p: AbPalette, type: String): Color = when (type) {
     "INCOME" -> p.income
     "REFUND" -> p.refund
-    "TRANSFER" -> p.label
+    "TRANSFER" -> p.transfer
     else -> p.expense
+}
+
+/** 账单图案由分类决定，色彩只表达账单类型。 */
+internal fun billIconTint(p: AbPalette, type: String): Color = when (type) {
+    "INCOME" -> p.incomeIcon
+    "REFUND" -> p.refund
+    "TRANSFER" -> p.transfer
+    else -> p.expenseIcon
 }
 
 /** 左滑露出的删除底衬（红底 + 白字）。 */

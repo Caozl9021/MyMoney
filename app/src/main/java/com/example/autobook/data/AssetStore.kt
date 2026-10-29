@@ -172,7 +172,7 @@ object AssetStore {
         val operation = UUID.randomUUID().toString(); val now = System.currentTimeMillis()
         desired.forEach { (id, delta) ->
             db.assets().insertEntry(AssetEntry(UUID.randomUUID().toString(), operation, id, delta,
-                if (after.type == "TRANSFER") "TRANSFER" else "BILL", after.merchant ?: after.note ?: "账单", nextEntryTime(db), key))
+                if (after.type == "TRANSFER") "TRANSFER" else "BILL", after.note?.takeIf { it.isNotBlank() } ?: after.merchant ?: "账单", nextEntryTime(db), key))
         }
         AssetMath.validate(AssetSnapshot(db.assets().accounts(), db.assets().entries()))
         return row

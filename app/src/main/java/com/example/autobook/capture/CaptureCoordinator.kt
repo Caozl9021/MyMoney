@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.room.withTransaction
 import com.example.autobook.data.*
 import com.example.billkit.BillDraft
+import com.example.billkit.spec.SpecDedup
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.UUID
@@ -12,6 +13,13 @@ import java.util.UUID
 /** One transaction owner for both inputs; no UI or learning is performed by matching. */
 object CaptureCoordinator {
     private val lock = Mutex()
+
+    /**
+     * 所有采集来源。跨源同额合并只在这些来源之间互相比较——
+     * 新增通道（如短信）必须登记在这里，否则它跟其它通道的重复不会被发现。
+     */
+    val CAPTURE_SOURCES = setOf("PAGE", "NOTIFICATION", "SMS", "HOOK", "ROOT")
+
     data class Input(val draft: BillDraft, val source: String, val observationKey: String,
         val traceId: String = UUID.randomUUID().toString(), val receivedAt: Long = System.currentTimeMillis(), val reviewSlotKey: String? = null)
     /** [reviewReason] 是待核对的来源（见 [CaptureReviewPolicy]），为空表示不是待核对。
@@ -19,7 +27,16 @@ object CaptureCoordinator {
      * 只有被压制时才阻止弹框，避免"上一笔没弹过却把这一笔一起吞掉"。
      */
     data class Accepted(val row: RecognitionEntity, val created: Boolean, val decision: String,
-        val reviewReason: String? = null, val reviewSuppressed: Boolean = false)
+        val reviewReason: String? = null, val reviewSuppressed: Boolean = false,
+        /**
+         * 这条输入是否还该走一次投递。
+         *
+         * 默认等于 [created]：新建的记录当然要投递，合并到已有记录的不再重复弹框。
+         * 唯一的例外是 SPEC §7.4 的跨源合并——合并目标如果**从未呈现过**（投递被抑制、失败，
+         * 或当时通道刚关），把它算成"已投递"会让一笔真实付款彻底从屏幕上消失，
+         * 所以那种情况下合并后仍由本次输入负责投递。
+         */
+        val deliverable: Boolean = created)
 
     suspend fun accept(context: Context, input: Input, allowed: () -> Boolean = { true }): Accepted? = lock.withLock {
         if (!allowed()) return@withLock null
@@ -74,6 +91,26 @@ object CaptureCoordinator {
                 review = matched; matched = null
             }
         }
+        // SPEC §7.4 第二层去重：同包名 + 同金额 + 同时间桶的**跨来源**重复。
+        //
+        // 这条判定必须放在强身份之后、待核对之前：有真实订单号时以订单号为准（那是确定的同一笔），
+        // 而这里只是"金额和时间撞上了"，只有另一个来源也报了同一笔才成立。
+        // 同一来源在窗口内报两次同额（连买两杯同样的咖啡）是两笔真实消费，靠 SpecDedup.shouldMerge
+        // 里的来源比较排除掉。
+        var dedupMerged = false
+        var dedupTargetPresented = false
+        if (matched == null && review == null) {
+            val dedupAlias = draft.dedupKey?.takeIf(String::isNotBlank)?.let { "dedup:" + it }
+            val dedupRow = dedupAlias?.let { dao.alias(it)?.recognitionId }?.let { db.recognitions().byId(it) }
+            if (dedupRow != null && dedupRow.status == RecognitionStatus.PENDING && dedupRow.reviewOf == null &&
+                dedupRow.priceCents == draft.priceCents && dedupRow.type == draft.type.name &&
+                SpecDedup.shouldMerge(draft.dedupKey, input.source,
+                    dao.forRecord(dedupRow.id).map { it.source })) {
+                matched = dedupRow
+                dedupMerged = true
+                dedupTargetPresented = CaptureReviewPolicy.presented(dedupRow.status, dao.delivery(dedupRow.id)?.state)
+            }
+        }
         if (matched == null && review == null && reviewSlot != null) {
             val previous = dao.alias(reviewSlot)?.recognitionId?.let { db.recognitions().byId(it) }
             if (previous != null && previous.sourcePkg == draft.sourcePkg && previous.type == draft.type.name &&
@@ -90,7 +127,7 @@ object CaptureCoordinator {
             for (candidate in recent) {
                 // Amount/time only identify a review suggestion. They never authorize a merge.
                 if ((strong == null || candidate.transactionKey.isNullOrBlank()) &&
-                    dao.forRecord(candidate.id).any { it.source in setOf("PAGE", "NOTIFICATION") && it.source != input.source }) {
+                    dao.forRecord(candidate.id).any { it.source in CAPTURE_SOURCES && it.source != input.source }) {
                     review = candidate.reviewOf?.let { db.recognitions().byId(it) } ?: candidate
                     reviewReason = CaptureReviewPolicy.CROSS_SOURCE_SAME_AMOUNT
                     break
@@ -129,19 +166,26 @@ object CaptureCoordinator {
         if (dao.alias(observation) == null) dao.putAlias(CaptureAlias(observation, row.id))
         if (strong != null && dao.alias(strong) == null && reviewLink == null) dao.putAlias(CaptureAlias(strong, row.id))
         if (reviewSlot != null && created) dao.putReviewSlot(CaptureAlias(reviewSlot, row.id))
+        // 合并与新建都要登记合成身份：下一个来源（第三条通道）也要能找回这条记录。
+        draft.dedupKey?.takeIf(String::isNotBlank)?.let { key ->
+            val alias = "dedup:" + key
+            if (dao.alias(alias) == null) dao.putAlias(CaptureAlias(alias, row.id))
+        }
         dao.putEvidence(CaptureEvidence(eventId, row.id, input.source, draft.sourcePkg,
             input.receivedAt, decision, buildString {
                 append("trace=").append(CaptureMergePolicy.digest(input.traceId).take(16))
                 if (reviewReason != null) append(";review=").append(reviewReason)
                     .append(";reviewOf=").append(if (reviewSuppressed) "presented" else "not-presented")
+                if (dedupMerged) append(";dedup=merged").append(if (dedupTargetPresented) ";dedupTarget=presented" else ";dedupTarget=not-presented")
             }))
-        return Accepted(row, created, decision, reviewReason, reviewSuppressed)
+        val deliverable = if (dedupMerged) !dedupTargetPresented else created
+        return Accepted(row, created, decision, reviewReason, reviewSuppressed, deliverable)
     }
 
     /** A persistent claim is at-most-once for automatic UI, not an exactly-once OS transaction. */
     suspend fun deliver(context: Context, accepted: Accepted, allowed: () -> Boolean): String {
         val row = accepted.row
-        if (!accepted.created || row.reviewOf != null || row.status != RecognitionStatus.PENDING) return accepted.decision
+        if (!accepted.deliverable || row.reviewOf != null || row.status != RecognitionStatus.PENDING) return accepted.decision
         val db = AppDb.get(context)
         val attempt = UUID.randomUUID().toString()
         val claimed = db.withTransaction {

@@ -20,6 +20,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.example.billkit.root.RootShell
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -27,38 +33,58 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.example.autobook.capture.CaptureModeManager
 import com.example.autobook.data.CaptureMode
-import com.example.autobook.data.Settings
 import com.example.autobook.ui.design.AbRadius
 import com.example.autobook.ui.design.AbSpacing
 import com.example.autobook.ui.design.AbType
 import com.example.autobook.ui.design.LocalAbPalette
 import com.example.autobook.ui.design.PrimaryButton
 
-/** First-launch gate. Saving the choice is independent of whether permission is ready. */
+/**
+ * First-launch gate. Saving the choice is independent of whether permission is ready.
+ *
+ * 只问一件事：这台手机接下来按哪种方式工作。选完之后设置里就只剩这一种方式的入口——
+ * root 用户看不到无障碍那一套，普通用户也看不到任何 root 字样。
+ */
 @Composable
 fun CaptureModeScreen() {
     val context = LocalContext.current
     val p = LocalAbPalette.current
     var choice by rememberSaveable { mutableStateOf<CaptureMode?>(null) }
+    var checkingRoot by remember { mutableStateOf(false) }
+    var rootError by rememberSaveable { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize().background(p.pageBg).systemBarsPadding()) {
-        Text("通知监听需要单独授予系统通知使用权。当前交易通知模板待真实样本验证，页面辅助可稍后配置。",
+        Text(
+            "选择适合这台手机的方式，随后完成必要授权。可以随时切换。",
             style = AbType.footnote, color = p.secondaryLabel,
-            modifier = Modifier.padding(horizontal = AbSpacing.xxl, vertical = AbSpacing.s))
+            modifier = Modifier.padding(horizontal = AbSpacing.xxl, vertical = AbSpacing.s),
+        )
         TextButton(onClick = {
-            Settings(context).apply {
-                notificationCaptureEnabled = true
-                pageFallbackEnabled = false
-                enabled = true
-            }
-            CaptureModeManager.reconcile(context)
+            CaptureModeManager.startWithNotifications(context)
         }, modifier = Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xxl)) {
-            Text("先使用通知监听，稍后配置页面辅助")
+            Text("跳过，先用普通模式")
         }
         CaptureModeChoice(
             mode = choice,
-            onSelect = { choice = it },
-            onDone = { choice?.let { CaptureModeManager.select(context, it) } },
+            onSelect = { choice = it; rootError = null },
+            onDone = {
+                if (choice == CaptureMode.ROOT) {
+                    checkingRoot = true
+                    scope.launch {
+                        try {
+                            val granted = withContext(Dispatchers.IO) { RootShell.isGranted() }
+                            if (choice == CaptureMode.ROOT) {
+                                if (granted) CaptureModeManager.select(context, CaptureMode.ROOT)
+                                else rootError = "未获得 Root 授权，请授权后重试或使用普通模式。"
+                            }
+                        } finally { checkingRoot = false }
+                    }
+                } else choice?.let { CaptureModeManager.select(context, it) }
+            },
             modifier = Modifier.weight(1f),
+            doneLabel = if (checkingRoot) "正在检测 Root…" else "继续",
+            busy = checkingRoot,
+            error = rootError,
         )
     }
 }
@@ -71,15 +97,17 @@ fun CaptureModeChoice(
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
     doneLabel: String = "继续",
+    busy: Boolean = false,
+    error: String? = null,
 ) {
     val p = LocalAbPalette.current
     Column(
         modifier.verticalScroll(rememberScrollState()).padding(AbSpacing.xxl),
         verticalArrangement = Arrangement.spacedBy(AbSpacing.xl),
     ) {
-        Text("页面辅助方式", style = AbType.largeTitle, color = p.label)
+        Text("选择使用方式", style = AbType.largeTitle, color = p.label)
         Text(
-            "页面辅助从 Root 与无障碍中选择一种，与通知监听独立。选择后会记住，也可稍后在设置中切换。",
+            "普通手机选「普通模式」，已经 Root 的手机选「Root」。两者选一个，选了哪个就只显示哪个的设置。",
             style = AbType.body,
             color = p.secondaryLabel,
         )
@@ -88,24 +116,25 @@ fun CaptureModeChoice(
             verticalArrangement = Arrangement.spacedBy(AbSpacing.m),
         ) {
             CaptureModeCard(
-                "Root 模式",
-                "适合已 Root 的手机，需要 su 授权。通过 Root 读取账单页面，无需开启无障碍服务。",
-                mode == CaptureMode.ROOT,
-                { onSelect(CaptureMode.ROOT) },
-            )
-            CaptureModeCard(
-                "无障碍模式",
-                "适合普通手机，需要在系统设置中开启 AutoBook 无障碍服务。通过页面文字识别账单，无需 Root。",
+                "普通模式",
+                "绝大多数手机选这个。通过交易通知识别，也可以按需开启页面辅助。",
                 mode == CaptureMode.ACCESSIBILITY,
                 { onSelect(CaptureMode.ACCESSIBILITY) },
             )
+            CaptureModeCard(
+                "Root 模式",
+                "只给已经 Root 的手机。用 Root 直接读取通知栏，可以少开一次通知使用权授权。",
+                mode == CaptureMode.ROOT,
+                { onSelect(CaptureMode.ROOT) },
+            )
         }
         Text(
-            "悬浮窗权限用于在支付应用上直接弹出记账确认卡。可以先保存模式进入 App，再在设置中完成授权；Root 授权未通过也可切换模式。",
+            "两种方式都建议再给一次悬浮窗权限，这样识别完能直接把确认卡盖在支付页面上。",
             style = AbType.footnote,
             color = p.secondaryLabel,
         )
-        PrimaryButton(doneLabel, onDone, Modifier.fillMaxWidth(), enabled = mode != null)
+        error?.let { Text(it, style = AbType.footnote, color = p.red) }
+        PrimaryButton(doneLabel, onDone, Modifier.fillMaxWidth(), enabled = mode != null && !busy)
     }
 }
 

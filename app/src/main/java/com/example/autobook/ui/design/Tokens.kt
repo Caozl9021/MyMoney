@@ -41,7 +41,7 @@ data class AbPalette(
     val green: Color,
     val barTrack: Color,
     /**
-     * 支出金额的柔和珊瑚色。只用于金额与图表，不替换 [red]：
+     * 支出金额的饱和暖红，略偏橙。只用于金额与图表，不替换 [red]：
      * 删除、错误、失败提示仍走 [red]，两者语义不同，不能合并。
      */
     val expense: Color,
@@ -49,6 +49,11 @@ data class AbPalette(
     val income: Color,
     /** 退款金额与退款图表，独立于动态 accent，避免随壁纸变色。 */
     val refund: Color,
+    /** 转账使用中性灰，避免与正文黑白或收支混淆。 */
+    val transfer: Color,
+    /** 账单类型图标的明亮实底，与文字同色相。 */
+    val expenseIcon: Color,
+    val incomeIcon: Color,
     /** 首页本月支出主卡：上浅下深的两档珊瑚底，避免整块强色。 */
     val heroSurfaceTop: Color,
     val heroSurfaceBottom: Color,
@@ -83,12 +88,15 @@ val LightPalette = AbPalette(
     red = Color(0xFFFF3B30),
     green = Color(0xFF34C759),
     barTrack = Color(0x1F767680),
-    // 珊瑚红：白底 5.13:1、#F7F7F7 上 4.78:1，满足正文对比度。
-    expense = Color(0xFFC63A47),
-    // 深绿：白底 5.07:1，避免 iOS 亮绿在白底小字号下偏淡。
-    income = Color(0xFF1B7F3B),
+    // 更偏红的暖红色，金额在浅色页面上保持可读。
+    expense = Color(0xFFD93632),
+    // 清亮的正绿色相，文字保持可读；图标另用更浅亮的实底。
+    income = Color(0xFF078642),
     // 青蓝：白底 5.36:1，与收入和支出都能区分，且不随系统强调色漂移。
     refund = Color(0xFF0E7490),
+    transfer = Color(0xFF62676D),
+    expenseIcon = Color(0xFFFA5B50),
+    incomeIcon = Color(0xFF39B97E),
     heroSurfaceTop = Color(0xFFFFF3EC),
     heroSurfaceBottom = Color(0xFFFFE7E9),
     heroAmount = Color(0xFF5C2A2E),
@@ -118,10 +126,13 @@ val DarkPalette = AbPalette(
     red = Color(0xFFFF453A),
     green = Color(0xFF30D158),
     barTrack = Color(0x2E767680),
-    // 深色下同一语义取各自亮档：这三档在 #1C1C1E 上均 ≥7:1。
-    expense = Color(0xFFFF8A8F),
-    income = Color(0xFF30D158),
+    // 深色同步使用偏红暖红与柔和绿。
+    expense = Color(0xFFFF7166),
+    income = Color(0xFF6AE1A9),
     refund = Color(0xFF4FC3E8),
+    transfer = Color(0xFFA7ABB2),
+    expenseIcon = Color(0xFFFF7166),
+    incomeIcon = Color(0xFF6AE1A9),
     heroSurfaceTop = Color(0xFF2B161A),
     heroSurfaceBottom = Color(0xFF241014),
     heroAmount = Color(0xFFFFD9D6),
@@ -140,6 +151,18 @@ object AbSpacing {
     val xxxl = 32.dp
     /** 页面左右留白（inset grouped 的外边距） */
     val page = 16.dp
+}
+
+/** Shared compact density; heights remain content driven and touch targets remain 48dp. */
+object AbCardDensity {
+    val content = 12.dp
+    val gap = 10.dp
+    val rowVertical = 8.dp
+    val billRowMin = 64.dp
+    val icon = 34.dp
+    val settingsIcon = 36.dp
+    val leadingInset = AbSpacing.l + settingsIcon + AbSpacing.m
+    val headerVertical = 8.dp
 }
 
 object AbRadius {
@@ -208,3 +231,15 @@ fun dockHeightForFontScale(fontScale: Float) =
 
 @androidx.compose.runtime.Composable
 fun dockHeight() = dockHeightForFontScale(androidx.compose.ui.platform.LocalDensity.current.fontScale)
+
+/** Semantic vertical rhythm. Container owns outer gaps; rows own their inner padding. */
+object AbLayout {
+    val pageTop = 12.dp
+    val pageBottom = 16.dp
+    val cardGap = AbCardDensity.gap
+    val groupGap = 16.dp
+    val headingGap = 8.dp
+    val fieldGap = 8.dp
+    val captionGap = 4.dp
+    val actionGap = 16.dp
+}

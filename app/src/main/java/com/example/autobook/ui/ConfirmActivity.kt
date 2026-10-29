@@ -108,11 +108,13 @@ class ConfirmActivity : ComponentActivity() {
                         operation.onStored = feedbackHaptic
                         onDispose { if (operation.onStored === feedbackHaptic) operation.onStored = null }
                     }
-                    LaunchedEffect(operation.feedback) {
-                        if (operation.feedback != null && boundDraft?.historyId == draft.historyId) finish()
+                    LaunchedEffect(operation.feedback, operation.result) {
+                        if ((operation.feedback != null || operation.result?.let(ConfirmFeedback::closeAfterSave) == true) && boundDraft?.historyId == draft.historyId) finish()
                     }
                     val result = operation.result
-                    if (result != null) {
+                    if (result != null && ConfirmFeedback.closeAfterSave(result)) {
+                        // Real write completed: close without a success result surface.
+                    } else if (result != null) {
                         ConfirmResultSheet(
                             draft = result.bill?.let(BillWriter::toDraft) ?: operation.edited ?: draft,
                             title = ConfirmFeedback.saved(result.inserted),
@@ -180,7 +182,8 @@ class ConfirmActivity : ComponentActivity() {
                         val bill = withContext(Dispatchers.IO) { record.billId?.let { AppDb.get(applicationContext).bills().byId(it) } }
                         if (generation != bindingGeneration) return@launch
                         val operation = ViewModelProvider(this@ConfirmActivity).get(record.id, ConfirmSaveOperation::class.java)
-                        operation.restoreResult(BillWriter.SaveResult(false, bill))
+                        if (bill != null) { finish(); return@launch }
+                        operation.restoreResult(BillWriter.SaveResult(false, null))
                     }
                     intent.putExtra(EXTRA_HISTORY_ID, restored.historyId)
                     if (!automaticPresentationAllowed(intent)) { finish(); return@launch }

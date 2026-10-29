@@ -79,12 +79,15 @@ object BillWriter {
                                 dao.update(existing)
                             }
                             val inserted = existing == null
-                            val bill = existing ?: BillEntity(priceCents = draft.priceCents, type = draft.type.name,
+                            val bill = existing ?: if (draft.type == BillType.TRANSFER) {
+                                saveTransferDraftInTransaction(db, draft, null, history?.id ?: draft.sourcePkg + "|" + draft.fingerprint)
+                            } else BillEntity(priceCents = draft.priceCents, type = draft.type.name,
                                 timeMillis = draft.timeMillis, merchant = draft.merchant, method = draft.method,
                                 orderTail = draft.orderTail, sourcePkg = draft.sourcePkg, strategy = draft.strategy,
                                 fingerprint = draft.fingerprint, createdAt = System.currentTimeMillis(),
                                 category = draft.category, subCategory = draft.subCategory,
-                                account = draft.account, note = draft.note, recognitionId = history?.id).let {
+                                account = draft.account, note = draft.note, productName = draft.productName, productSource = draft.productSource,
+    noteOrigin = draft.noteOrigin, noteTemplateSnapshot = draft.noteTemplateSnapshot, recognitionId = history?.id).let {
                                     val linked = AssetStore.syncBill(db, null, it)!!
                                     linked.copy(id = dao.insert(linked))
                                 }
@@ -231,6 +234,8 @@ object BillWriter {
     internal suspend fun saveEditorInTransaction(db: AppDb, draft: BillDraft, original: BillEntity?): BillEntity {
         require(draft.priceCents in 1..100_000_000L) { "金额必须大于0且不超过一百万元" }
         val dao = db.bills()
+        if (draft.type == BillType.TRANSFER) return saveTransferDraftInTransaction(db, draft, original,
+            original?.assetKey?.takeIf { it.isNotBlank() } ?: draft.sourcePkg)
         if (original == null) {
             val fresh = newManualEntity(draft, System.currentTimeMillis())
             // One editor source UUID is one save, even after a retry or process recreation.
@@ -256,9 +261,26 @@ object BillWriter {
         return linked
     }
 
+    internal suspend fun saveTransferDraftInTransaction(db: AppDb, draft: BillDraft, original: BillEntity?, operationId: String): BillEntity {
+        require(draft.type == BillType.TRANSFER) { "账单类型须为转账" }
+        require(original?.feeParentKey == null) { "手续费请从原转账一同修改" }
+        val from = AssetStore.resolveAccount(db, draft.account) ?: error("请选择转出账户")
+        val to = draft.transferAccountId ?: error("请选择转入账户")
+        val row = saveTransferInTransaction(db, from.id, to, draft.priceCents, original?.transferFeeCents ?: 0,
+            draft.note.orEmpty(), draft.timeMillis, original, operationId, allowTypeConversion = true)
+        val final = row.copy(sourcePkg = original?.sourcePkg ?: draft.sourcePkg,
+            strategy = original?.strategy ?: draft.strategy, merchant = original?.merchant ?: draft.merchant,
+            method = original?.method ?: draft.method, orderTail = original?.orderTail ?: draft.orderTail,
+            fingerprint = original?.fingerprint ?: draft.fingerprint, recognitionId = original?.recognitionId ?: draft.historyId,
+            category = null, subCategory = null, productName = draft.productName, productSource = draft.productSource,
+            noteOrigin = draft.noteOrigin, noteTemplateSnapshot = draft.noteTemplateSnapshot)
+        check(db.bills().update(final) == 1)
+        return final
+    }
+
     internal suspend fun saveTransferInTransaction(
         db: AppDb, fromId: String, toId: String, cents: Long, feeCents: Long, note: String,
-        timeMillis: Long, original: BillEntity? = null, operationId: String? = null,
+        timeMillis: Long, original: BillEntity? = null, operationId: String? = null, allowTypeConversion: Boolean = false,
     ): BillEntity {
         require(fromId != toId) { "转出与转入账户不能相同" }
         require(cents in 1..100_000_000L && feeCents in 0..100_000_000L) { "金额必须大于0且不超过一百万元，手续费不能为负" }
@@ -267,7 +289,7 @@ object BillWriter {
         require(from.initialized && to.initialized) { "请先设置两端账户的当前余额" }
         val dao = db.bills()
         val current = original?.let { dao.byId(it.id) ?: error("原转账已被删除") }
-        require(current == null || current.type == "TRANSFER") { "仅转账账单可补全或修改两端" }
+        require(current == null || current.type == "TRANSFER" || allowTypeConversion) { "仅转账账单可补全或修改两端" }
         // A historical transfer may be edited without losing an archived endpoint; new operations cannot use it.
         require(!from.archived || current?.accountId == fromId) { "转出账户已归档" }
         require(!to.archived || current?.transferAccountId == toId) { "转入账户已归档" }
@@ -277,24 +299,25 @@ object BillWriter {
             ?: UUID.nameUUIDFromBytes(operation.toByteArray(Charsets.UTF_8)).toString()
         if (current == null) dao.allOnce().firstOrNull { it.assetKey == key }?.let { saved ->
             require(saved.type == "TRANSFER" && saved.accountId == fromId && saved.transferAccountId == toId &&
-                saved.priceCents == cents && saved.transferFeeCents == feeCents && saved.note == note.takeIf(String::isNotBlank)) {
+                saved.priceCents == cents && saved.transferFeeCents == feeCents && saved.timeMillis == timeMillis && saved.note == note.takeIf(String::isNotBlank)) {
                 "这次转账已保存，请从原账单修改；未重复转账"
             }
             return saved
         }
         val now = System.currentTimeMillis()
         val row = current?.copy(
-            priceCents = cents, account = from.name, accountId = fromId, transferAccountId = toId,
-            merchant = "${from.name} → ${to.name}",
+            priceCents = cents, type = "TRANSFER", category = null, subCategory = null,
+            timeMillis = timeMillis, account = from.name, accountId = fromId, transferAccountId = toId, transferAccount = to.name,
+            merchant = if (current.sourcePkg.startsWith("com.example.autobook.manual.transfer.")) "${from.name} → ${to.name}" else current.merchant,
             note = note.takeIf(String::isNotBlank), transferFeeCents = feeCents, assetKey = key, assetLinked = true,
         ) ?: BillEntity(
             priceCents = cents, type = "TRANSFER", timeMillis = timeMillis, merchant = "${from.name} → ${to.name}",
             method = null, orderTail = null, sourcePkg = "com.example.autobook.manual.transfer.$key",
             strategy = "本地转账", fingerprint = "asset-transfer-$key", createdAt = now,
-            account = from.name, accountId = fromId, transferAccountId = toId, assetLinked = true,
+            account = from.name, accountId = fromId, transferAccountId = toId, transferAccount = to.name, assetLinked = true,
             assetKey = key, transferFeeCents = feeCents, note = note.takeIf(String::isNotBlank),
         )
-        val finalRow = if (current != null && !current.fingerprint.startsWith("asset-transfer-"))
+        val finalRow = if (current != null && current.sourcePkg.startsWith("com.example.autobook.manual.") && current.recognitionId == null && !current.fingerprint.startsWith("asset-transfer-") && !current.fingerprint.startsWith("qianji:"))
             row.copy(fingerprint = toDraft(row).fingerprint) else row
         val linked = AssetStore.syncBill(db, current, finalRow, forceLink = true)!!
         val principal = if (current == null) linked.copy(id = dao.insert(linked)) else {
@@ -306,7 +329,7 @@ object BillWriter {
         if (feeCents == 0L) {
             previousFee?.let { AssetStore.syncBill(db, it, null); dao.delete(it.id) }
         } else {
-            val fee = previousFee?.copy(priceCents = feeCents, account = from.name, accountId = fromId,
+            val fee = previousFee?.copy(priceCents = feeCents, timeMillis = principal.timeMillis, account = from.name, accountId = fromId,
                 note = note.takeIf(String::isNotBlank)) ?: BillEntity(
                 priceCents = feeCents, type = "EXPENSE", timeMillis = principal.timeMillis,
                 merchant = "转账手续费", method = null, orderTail = null,
@@ -354,19 +377,20 @@ object BillWriter {
         category = entity.category,
         subCategory = entity.subCategory,
         account = entity.account,
-        note = entity.note,
+        note = entity.note, productName = entity.productName, productSource = entity.productSource,
+        noteOrigin = entity.noteOrigin, noteTemplateSnapshot = entity.noteTemplateSnapshot, transferAccountId = entity.transferAccountId,
     )
 }
 
-/** 只应用允许编辑的字段，识别来源、时间和身份保持不变。 */
+/** Ledger time is editable; capture/import identity and actual creation time remain intact. */
 internal fun applyBillEdit(original: BillEntity, edited: BillDraft): BillEntity {
     val updated = original.copy(
-        priceCents = edited.priceCents, type = edited.type.name, merchant = edited.merchant,
+        priceCents = edited.priceCents, type = edited.type.name, timeMillis = edited.timeMillis, merchant = original.merchant,
         category = edited.category, subCategory = edited.subCategory, account = edited.account,
-        note = edited.note,
+        note = edited.note, noteOrigin = edited.noteOrigin,
         accountId = original.accountId.takeIf { original.account == edited.account },
     )
-    return updated.copy(fingerprint = BillWriter.toDraft(updated).fingerprint)
+    return updated.copy(fingerprint = if (original.sourcePkg.startsWith("com.example.autobook.manual.") && original.recognitionId == null && !original.fingerprint.startsWith("qianji:")) BillWriter.toDraft(updated).fingerprint else original.fingerprint)
 }
 
 internal fun newManualEntity(draft: BillDraft, createdAt: Long): BillEntity {
@@ -378,7 +402,8 @@ internal fun newManualEntity(draft: BillDraft, createdAt: Long): BillEntity {
     sourcePkg = source, strategy = "手动记账",
     fingerprint = draft.copy(sourcePkg = source, orderTail = null).fingerprint,
     createdAt = createdAt, category = draft.category, subCategory = draft.subCategory,
-    account = draft.account, note = draft.note,
+    account = draft.account, note = draft.note, productName = draft.productName, productSource = draft.productSource,
+    noteOrigin = draft.noteOrigin, noteTemplateSnapshot = draft.noteTemplateSnapshot,
 )
 
 }

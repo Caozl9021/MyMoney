@@ -29,7 +29,7 @@ import java.util.Locale
 
 /** Persistent history is separate from the ledger; recorded entries never offer another insert. */
 @Composable
-fun RecognitionHistoryScreen(onBack: () -> Unit, initialFilter: String = "ALL") {
+fun RecognitionHistoryScreen(onBack: () -> Unit, initialFilter: String = "ALL", reserveDock: Boolean = true) {
     val context = LocalContext.current
     val p = LocalAbPalette.current
     val scope = rememberCoroutineScope()
@@ -54,11 +54,11 @@ fun RecognitionHistoryScreen(onBack: () -> Unit, initialFilter: String = "ALL") 
             .catch { messageIsError = true; message = "读取关联账单失败：${it.message}"; emit(null) }
     }.collectAsStateWithLifecycle(initialValue = null)
     LaunchedEffect(Unit) { RecognitionStore.init(context) }
-    BackHandler(enabled = !confirmClear) { onBack() }
-    SubPageScaffold(title = "识别历史", onBack = onBack) { padding ->
-        LazyColumn(state = listState, modifier = Modifier.fillMaxSize(),
+    ActiveBackHandler(enabled = !confirmClear && !LocalPageBackManaged.current) { onBack() }
+    SubPageScaffold(title = "识别历史", onBack = onBack, reserveDock = reserveDock) { padding ->
+        com.example.autobook.ui.design.SectionLazyColumn(state = listState, modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = AbSpacing.page, end = AbSpacing.page,
-                bottom = padding.calculateBottomPadding()),
+                top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding()),
             verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
             item(key = "filters") {
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -78,9 +78,6 @@ fun RecognitionHistoryScreen(onBack: () -> Unit, initialFilter: String = "ALL") 
                     if (storeError != null) ListRow(title = "重试读取", onClick = { RecognitionStore.init(context) })
                 }
             }
-            if (!ready && storeError == null) item(key = "loading") {
-                GroupFooter("正在读取本地识别历史…")
-            }
             if (ready && visible.isEmpty()) item(key = "empty") {
                 InsetGroup { EmptyState(icon = AbIcons.Clock, title = if (filter == "ALL") "暂无识别历史" else "暂无${labels[statuses.indexOf(filter)]}记录",
                     message = "成功识别的账单会保存在这里；手动记账不产生识别历史。") }
@@ -89,7 +86,7 @@ fun RecognitionHistoryScreen(onBack: () -> Unit, initialFilter: String = "ALL") 
                 InsetGroup {
                     Column(Modifier.fillMaxWidth().padding(AbSpacing.m), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(row.merchant ?: "识别到一笔账单", style = AbType.headline, color = p.label)
-                        Text("${historyType(row.type)} ${formatAmount(row.priceCents)}", style = AbType.headline, color = p.label)
+                        Text("${historyType(row.type)} ${formatAmount(row.priceCents)}", style = AbType.headline, color = amountTint(p, row.type))
                         StatusLabel(historyStatus(row.status), emphasized = row.status == RecognitionStatus.PENDING,
                             icon = when (row.status) {
                                 RecognitionStatus.PENDING -> AbIcons.Clock
@@ -165,7 +162,6 @@ fun RecognitionHistoryScreen(onBack: () -> Unit, initialFilter: String = "ALL") 
                 }
             }
             if (ready) item(key = "retention") {
-                GroupFooter("记录仅存本机，默认保留。关闭确认卡会保持待处理；已记账记录只读。")
                 if (records.any { it.status == RecognitionStatus.IGNORED }) DestructiveButton(
                     text = "清理已忽略记录", enabled = !busy,
                     onClick = { confirmClear = true }, modifier = Modifier.fillMaxWidth().padding(top = AbSpacing.s))

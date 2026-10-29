@@ -55,6 +55,11 @@ data class BillEntity(
     @androidx.room.ColumnInfo(defaultValue = "''") val assetKey: String = "",
     @androidx.room.ColumnInfo(defaultValue = "0") val transferFeeCents: Long = 0,
     val feeParentKey: String? = null,
+    val transferAccount: String? = null,
+    val productName: String? = null,
+    val productSource: String? = null,
+    val noteOrigin: String? = null,
+    val noteTemplateSnapshot: String? = null,
 )
 
 @Dao
@@ -107,6 +112,17 @@ interface BillDao {
     /** 完整统计区间，左闭右开；实时更新且不受首页500笔窗口限制。 */
     @Query("SELECT * FROM bills WHERE timeMillis >= :from AND timeMillis < :to ORDER BY timeMillis DESC, id DESC")
     fun observeRange(from: Long, to: Long): Flow<List<BillEntity>>
+
+    /** Home anchor and count use the exact same saved monthly period as its complete-day query. */
+    @Query("SELECT * FROM bills WHERE timeMillis >= :from AND timeMillis < :to ORDER BY timeMillis DESC, id DESC LIMIT :limit")
+    fun observeHomeWindow(from: Long, to: Long, limit: Int): Flow<List<BillEntity>>
+
+    @Query("SELECT COUNT(*) FROM bills WHERE timeMillis >= :from AND timeMillis < :to")
+    fun observeHomeCount(from: Long, to: Long): Flow<Int>
+
+    /** 首页完整自然日窗口：包含最老日零点及以后的全部账单，不能用行数截断日小计。 */
+    @Query("SELECT * FROM bills WHERE timeMillis >= :from ORDER BY timeMillis DESC, id DESC")
+    fun observeHomeFrom(from: Long): Flow<List<BillEntity>>
 
     /** 某月（毫秒区间）内的账单，用给月度统计 */
     @Query("SELECT * FROM bills WHERE timeMillis >= :from AND timeMillis < :to ORDER BY timeMillis DESC")
@@ -191,13 +207,15 @@ interface BillDao {
     suspend fun delete(id: Long)
 }
 
-@Database(entities = [BillEntity::class, RecognitionEntity::class, AssetAccount::class, AssetEntry::class, AssetMeta::class, CaptureAlias::class, CaptureEvidence::class, CaptureDelivery::class], version = 5, exportSchema = false)
+@Database(entities = [BillEntity::class, RecognitionEntity::class, AssetAccount::class, AssetEntry::class, AssetMeta::class, CaptureAlias::class, CaptureEvidence::class, CaptureDelivery::class, ImportIdentity::class, RuleModelEntity::class, AppDataEntity::class], version = 9, exportSchema = false)
 abstract class AppDb : RoomDatabase() {
 
     abstract fun bills(): BillDao
     abstract fun recognitions(): RecognitionDao
     abstract fun assets(): AssetDao
     abstract fun capture(): CaptureDao
+    abstract fun imports(): ImportDao
+    abstract fun rules(): SpecRuleDao
 
     companion object {
         @Volatile
@@ -269,12 +287,54 @@ abstract class AppDb : RoomDatabase() {
             }
         }
 
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE bills ADD COLUMN transferAccount TEXT")
+                db.execSQL("CREATE TABLE IF NOT EXISTS import_identities (sourceKey TEXT NOT NULL PRIMARY KEY, contentHash TEXT NOT NULL)")
+            }
+        }
+
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                for (table in listOf("bills", "recognition_history")) {
+                    for (column in listOf("productName", "productSource", "noteOrigin", "noteTemplateSnapshot")) {
+                        db.execSQL("ALTER TABLE $table ADD COLUMN $column TEXT")
+                    }
+                }
+            }
+        }
+
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""CREATE TABLE IF NOT EXISTS rule_model (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, app TEXT NOT NULL, type TEXT NOT NULL,
+                    js TEXT NOT NULL, name TEXT NOT NULL, systemRuleName TEXT NOT NULL,
+                    creator TEXT NOT NULL, struct TEXT NOT NULL,
+                    autoRecord INTEGER NOT NULL DEFAULT 0, enabled INTEGER NOT NULL DEFAULT 1,
+                    updateAt INTEGER NOT NULL)""")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_rule_model_app_type_enabled_id ON rule_model(app, type, enabled, id)")
+                db.execSQL("""CREATE TABLE IF NOT EXISTS app_data (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, data TEXT NOT NULL, type TEXT NOT NULL,
+                    app TEXT NOT NULL, time INTEGER NOT NULL,
+                    match INTEGER NOT NULL DEFAULT 0, rule TEXT NOT NULL,
+                    issue INTEGER NOT NULL DEFAULT 0, version TEXT NOT NULL, image TEXT NOT NULL)""")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_app_data_time ON app_data(time)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_app_data_app_match ON app_data(app, match)")
+            }
+        }
+
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE recognition_history ADD COLUMN transferAccountId TEXT")
+            }
+        }
+
         fun get(context: Context): AppDb = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext,
                 AppDb::class.java,
                 "autobook.db",
-            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build().also { instance = it }
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9).build().also { instance = it }
         }
     }
 }

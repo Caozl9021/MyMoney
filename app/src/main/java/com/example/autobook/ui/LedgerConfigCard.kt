@@ -31,8 +31,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.autobook.data.CategoryGroup
 import com.example.autobook.data.LedgerConfig
+import com.example.autobook.ui.design.AbCardDensity
 import com.example.autobook.ui.design.AbIcons
 import com.example.autobook.ui.design.AbSpacing
 import com.example.autobook.ui.design.AbType
@@ -53,7 +55,7 @@ import com.example.autobook.ui.design.swatchFor
 import com.example.billkit.BillType
 
 /**
- * 分类与账户 ——— 设置的第二级页面。
+ * 分类管理。账户候选清单由资产页单独管理。
  *
  * 两个层级：一级列表（点进去看这个分类的二级）→ 二级管理。
  * 名字仍然是唯一来源：识别匹配、确认页 chip、CSV 导出都读这里。
@@ -62,9 +64,11 @@ import com.example.billkit.BillType
 fun LedgerConfigPage(
     onBack: () -> Unit,
     initialTab: Int = 0,
+    fixedTab: Int? = null,
+    presetsOnly: Boolean = false,
 ) {
     val p = LocalAbPalette.current
-    var tab by rememberSaveable { mutableStateOf(initialTab) }          // 0 支出 1 收入
+    var tab by rememberSaveable(initialTab, fixedTab, presetsOnly) { mutableStateOf((fixedTab ?: initialTab).coerceIn(0, 1)) }          // 0 支出 1 收入
     var openGroup by rememberSaveable { mutableStateOf<String?>(null) } // 非空 = 在二级页
     var version by remember { mutableStateOf(0) }               // 强制重读清单
     var newGroup by rememberSaveable { mutableStateOf("") }
@@ -77,20 +81,20 @@ fun LedgerConfigPage(
     }
     val type = if (tab == 0) BillType.EXPENSE else BillType.INCOME
 
-    if (resetConfirm) RestoreLedgerDefaultsDialog(
+    if (resetConfirm) RestoreCategoriesDefaultsDialog(
         onDismiss = { resetConfirm = false },
         errorMessage = resetError,
         onConfirm = {
             resetError = null
-            runCatching { LedgerConfig.resetToDefault() }
+            runCatching { LedgerConfig.resetCategoriesToDefault() }
                 .onSuccess { version++; resetConfirm = false }
                 .onFailure { resetError = it.message ?: "恢复默认清单失败，请重试" }
         },
     )
     val current = groups.firstOrNull { it.name == openGroup }
 
-    if (current != null) {
-        androidx.activity.compose.BackHandler { openGroup = null }
+    if (current != null && !presetsOnly) {
+        ActiveBackHandler { openGroup = null }
         SubCategoryPage(
             group = current,
             type = type,
@@ -101,8 +105,14 @@ fun LedgerConfigPage(
         return
     }
 
-    SubPageScaffold(title = "分类与账户", onBack = onBack) { padding ->
-        LazyColumn(
+    val title = when {
+        presetsOnly -> "分类预设"
+        fixedTab == 0 -> "支出分类"
+        fixedTab == 1 -> "收入分类"
+        else -> "分类"
+    }
+    SubPageScaffold(title = title, onBack = onBack) { padding ->
+        com.example.autobook.ui.design.SectionLazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 start = AbSpacing.page,
@@ -112,60 +122,60 @@ fun LedgerConfigPage(
             ),
             verticalArrangement = Arrangement.spacedBy(AbSpacing.xs),
         ) {
-            item(key = "seg") {
-                Row(
-                    Modifier.fillMaxWidth().padding(bottom = AbSpacing.s),
-                    horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
-                ) {
-                    CapsuleChip("支出分类", tab == 0, { tab = 0 }, Modifier.weight(1f))
-                    CapsuleChip("收入分类", tab == 1, { tab = 1 }, Modifier.weight(1f))
+            if (fixedTab == null || presetsOnly) item(key = "seg") {
+                com.example.autobook.ui.design.Segmented(
+                    options = listOf("支出分类", "收入分类"), selected = tab,
+                    onSelect = { tab = it }, modifier = Modifier.fillMaxWidth().padding(bottom = AbSpacing.s),
+                )
+            }
+
+            if (!presetsOnly) {
+                item(key = "hdr") {
+                    SortableHeader(if (tab == 0) "支出分类" else "收入分类", sorting) { sorting = !sorting }
                 }
-            }
 
-            item(key = "hdr") {
-                SortableHeader(if (tab == 0) "支出分类" else "收入分类", sorting) { sorting = !sorting }
-            }
-
-            item(key = "groups") {
-                InsetGroup {
-                    if (groups.isEmpty()) {
-                        EmptyState(
-                            icon = AbIcons.Tag,
-                            title = "还没有分类",
-                            message = "在下面添加一个分类名，它必须和 iCost 里的名字一致。",
-                        )
-                    } else {
-                        groups.forEachIndexed { index, group ->
-                            GroupRow(
-                                group = group,
-                                dividerAbove = index > 0,
-                                onClick = { if (!sorting) openGroup = group.name },
-                                trailing = if (sorting) {
-                                    { MoveButtons(group.name, index, groups.size) { from, to -> LedgerConfig.moveGroup(type, from, to); version++ } }
-                                } else null,
+                item(key = "groups") {
+                    InsetGroup {
+                        if (groups.isEmpty()) {
+                            EmptyState(
+                                icon = AbIcons.Tag,
+                                title = "还没有分类",
+                                message = "在下面添加一个分类名，它必须和 iCost 里的名字一致。",
                             )
+                        } else {
+                            groups.forEachIndexed { index, group ->
+                                GroupRow(
+                                    group = group,
+                                    dividerAbove = index > 0,
+                                    onClick = { if (!sorting) openGroup = group.name },
+                                    trailing = if (sorting) {
+                                        { MoveButtons(group.name, index, groups.size) { from, to -> LedgerConfig.moveGroup(type, from, to); version++ } }
+                                    } else null,
+                                )
+                            }
                         }
                     }
                 }
-            }
 
-            if (!sorting) item(key = "add") {
-                InsetGroup {
-                    InputRow(
-                        label = "添加",
-                        value = newGroup,
-                        onValueChange = { newGroup = it },
-                        placeholder = "新分类名",
-                        onDone = {
-                            LedgerConfig.addGroup(type, newGroup)
-                            newGroup = ""
-                            version++
-                        },
-                    )
+                if (!sorting) item(key = "add") {
+                    InsetGroup {
+                        InputRow(
+                            label = "添加",
+                            value = newGroup,
+                            onValueChange = { newGroup = it },
+                            placeholder = "新分类名",
+                            onDone = {
+                                LedgerConfig.addGroup(type, newGroup)
+                                newGroup = ""
+                                version++
+                            },
+                        )
+                    }
                 }
+
             }
 
-            if (!sorting) {
+            if (!sorting && (presetsOnly || fixedTab == null)) {
                 // 预设：市面上大多数记账 App 都有的那一批名字。只补「当前还没有的」，
                 // 点一下就连同二级分类一起建好；之后和手工添加的分类没有任何区别。
                 val presets = CategoryPresets.forType(tab == 1)
@@ -194,38 +204,40 @@ fun LedgerConfigPage(
                                         }
                                     }
                                 }
-                                Text("点一下就把名字和二级分类建好，之后可以照常改名或删除。",
-                                    style = AbType.caption1, color = p.secondaryLabel)
                             }
                         }
+                    }
+                } else if (presetsOnly) {
+                    item(key = "presets-complete") {
+                        InsetGroup { ListRow(title = "常用预设已齐全", subtitle = "现有分类已包含全部常用预设") }
                     }
                 }
             }
 
-            item(key = "accounts-hdr") { SortableHeader("账户", sorting) { sorting = !sorting } }
-
-            item(key = "accounts") {
-                if (sorting) SortableAccounts(version = version, onChanged = { version++ })
-                else AccountsSection(version = version, onChanged = { version++ })
+            if (presetsOnly) item(key = "meal-presets") {
+                InsetGroup {
+                    ListRow(title = "补齐餐饮子类", subtitle = "为支出餐饮添加缺少的早餐、午餐、晚餐、夜宵",
+                        onClick = {
+                            resetError = null
+                            runCatching { LedgerConfig.addMealSubCategories() }
+                                .onSuccess { version++ }
+                                .onFailure { resetError = it.message ?: "补齐餐饮子类失败，请重试" }
+                        })
+                }
+                if (resetError != null && !resetConfirm) InlineMessage(resetError.orEmpty(), isError = true, announce = true)
             }
 
-            if (!sorting) item(key = "reset") {
+            if (!sorting && (presetsOnly || fixedTab == null)) item(key = "reset") {
                 InsetGroup {
                     ListRow(
-                        title = "恢复默认清单",
+                        title = "恢复默认分类",
                         destructive = true,
-                        subtitle = "替换支出、收入分类和账户；保留账单、历史与备注模板",
+                        subtitle = "替换支出与收入分类，保留账户和历史账单",
                         onClick = { resetError = null; resetConfirm = true },
                     )
                 }
             }
 
-            item(key = "footer") {
-                GroupFooter(
-                    if (sorting) "确认卡按这里的顺序排列，常用的放前面。调整顺序不会改动已记账的旧账单，备份恢复后顺序不变。"
-                    else "名字要和 iCost 里已有的完全一致，否则导入后会归到「未分类」。点右上「排序」调整确认卡里的先后。"
-                )
-            }
         }
     }
 }
@@ -240,7 +252,7 @@ private fun GroupRow(group: CategoryGroup, dividerAbove: Boolean, onClick: () ->
         dividerAbove = dividerAbove,
         chevron = trailing == null,
         trailing = trailing,
-        leading = { CategoryBadge(category = group.name, tint = tint, size = 32.dp) },
+        leading = { CategoryBadge(category = group.name, tint = tint, size = AbCardDensity.settingsIcon) },
         onClick = onClick,
     )
 }
@@ -265,7 +277,7 @@ private fun SubCategoryPage(
     }
 
     SubPageScaffold(title = fresh.name, onBack = onBack) { padding ->
-        LazyColumn(
+        com.example.autobook.ui.design.SectionLazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 start = AbSpacing.page,
@@ -352,9 +364,6 @@ private fun SubCategoryPage(
                 }
             }
 
-            item(key = "footer") {
-                GroupFooter("删除一级分类不会改动已记账的旧账单，只是以后不再建议这个名字。")
-            }
         }
     }
 }
@@ -408,7 +417,6 @@ private fun AccountsSection(version: Int, onChanged: () -> Unit) {
             )
         }
         if (accountError != null) InlineMessage(accountError.orEmpty(), isError = true, announce = true)
-        GroupFooter("账户名同样要与 iCost 一致；识别时会按支付方式自动匹配。移除即归档，余额与历史保留；同名归档账户请在资产页恢复。")
     }
 }
 
@@ -496,6 +504,78 @@ internal fun RestoreLedgerDefaultsDialog(onDismiss: () -> Unit, onConfirm: () ->
             if (errorMessage != null) InlineMessage(errorMessage, isError = true, announce = true)
         } },
         confirmButton = { androidx.compose.material3.TextButton(onClick = onConfirm) { Text("恢复默认清单") } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("取消") } },
+    )
+}
+
+
+/** 资产 → 账户管理：与确认卡共用同一份账户候选清单。 */
+@Composable
+internal fun AccountCandidatesPage(onBack: () -> Unit) {
+    val accounts by com.example.autobook.data.AssetStore.accounts.collectAsStateWithLifecycle()
+    val ready by com.example.autobook.data.AssetStore.ready.collectAsStateWithLifecycle()
+    val storeError by com.example.autobook.data.AssetStore.error.collectAsStateWithLifecycle()
+    var sorting by rememberSaveable { mutableStateOf(false) }
+    var version by remember { mutableStateOf(0) }
+    var resetConfirm by rememberSaveable { mutableStateOf(false) }
+    var resetError by remember { mutableStateOf<String?>(null) }
+    // Store emissions also refresh the candidate projection when this page stays on screen.
+    val listVersion = version + accounts.hashCode()
+    SubPageScaffold(title = "账户管理", onBack = onBack) { padding ->
+        com.example.autobook.ui.design.SectionLazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = AbSpacing.page, end = AbSpacing.page,
+                top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding()),
+            verticalArrangement = Arrangement.spacedBy(AbSpacing.m),
+        ) {
+            if (storeError != null) item { InlineMessage(storeError.orEmpty(), isError = true, announce = true) }
+            if (ready) {
+                item { SortableHeader("确认卡账户清单", sorting) { sorting = !sorting } }
+                item {
+                    if (sorting) SortableAccounts(version = listVersion, onChanged = { version++ })
+                    else AccountsSection(version = listVersion, onChanged = { version++ })
+                }
+                if (!sorting) item {
+                    InsetGroup {
+                        ListRow(title = "恢复默认账户清单", destructive = true,
+                            subtitle = "恢复默认候选，保留账户余额与流水",
+                            onClick = { resetError = null; resetConfirm = true })
+                    }
+                }
+            }
+        }
+    }
+    if (resetConfirm) androidx.compose.material3.AlertDialog(
+        onDismissRequest = { resetConfirm = false },
+        title = { Text("恢复默认账户清单？") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
+                Text("将恢复默认账户候选和顺序；其他账户归档，同名已归档默认账户会恢复。全部账户余额、流水、账单和分类保留。")
+                if (resetError != null) InlineMessage(resetError.orEmpty(), isError = true, announce = true)
+            }
+        },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = {
+            resetError = null
+            runCatching { LedgerConfig.resetAccountsToDefault() }
+                .onSuccess { version++; resetConfirm = false }
+                .onFailure { resetError = it.message ?: "恢复默认账户清单失败，请重试" }
+        }) { Text("恢复默认账户") } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = { resetConfirm = false }) { Text("取消") } },
+    )
+}
+
+@Composable
+private fun RestoreCategoriesDefaultsDialog(onDismiss: () -> Unit, onConfirm: () -> Unit, errorMessage: String?) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("恢复默认分类？") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
+                Text("将替换全部支出分类、收入分类和二级分类。账户清单、账户余额、资产流水、账单、识别历史、备注模板和识别设置保留。")
+                if (errorMessage != null) InlineMessage(errorMessage, isError = true, announce = true)
+            }
+        },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = onConfirm) { Text("恢复默认分类") } },
         dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("取消") } },
     )
 }

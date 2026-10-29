@@ -44,6 +44,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.autobook.ui.design.amountTint
 import com.example.autobook.ui.design.AbIcons
 import com.example.autobook.ui.design.AbRadius
 import com.example.autobook.ui.design.AbSpacing
@@ -76,7 +77,7 @@ fun ConfirmResultSheet(
     val keyboard = LocalSoftwareKeyboardController.current
     LaunchedEffect(Unit) { focus.clearFocus(force = true); keyboard?.hide() }
     if (androidx.activity.compose.LocalOnBackPressedDispatcherOwner.current != null) {
-        BackHandler(onBack = onDismiss)
+        ActiveBackHandler(onBack = onDismiss)
     }
     val type = when (draft.type) {
         BillType.EXPENSE -> "支出"
@@ -128,10 +129,10 @@ fun ConfirmResultSheet(
                     Text(it, style = AbType.footnote, color = p.secondaryLabel)
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
-                    draft.merchant?.takeIf { it.isNotBlank() }?.let {
+                    draft.note?.takeIf { it.isNotBlank() }?.let {
                         Text(it, style = AbType.body.copy(fontWeight = FontWeight.Medium), color = p.label)
                     }
-                    Text("¥ $amount", style = AbType.amountEntry.copy(fontSize = amountSize.sp, lineHeight = (amountSize * 1.2f).sp), color = p.label, maxLines = 1,
+                    Text("¥ $amount", style = AbType.amountEntry.copy(fontSize = amountSize.sp, lineHeight = (amountSize * 1.2f).sp), color = amountTint(p, draft.type.name), maxLines = 1,
                         modifier = Modifier.semantics { contentDescription = "$type，金额$amount 元" })
                     Text("$type · $date", style = AbType.footnote, color = p.secondaryLabel)
                 }

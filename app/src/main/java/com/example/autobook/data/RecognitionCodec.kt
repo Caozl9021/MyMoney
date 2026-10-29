@@ -13,7 +13,8 @@ object RecognitionCodec {
         "transactionKey" to row.transactionKey, "hasExplicitTime" to row.hasExplicitTime,
         "captureSessionId" to row.captureSessionId, "recognizedAt" to row.recognizedAt,
         "updatedAt" to row.updatedAt, "status" to row.status, "billId" to row.billId,
-        "shareState" to row.shareState, "protectedFields" to row.protectedFields, "reviewOf" to row.reviewOf)
+        "shareState" to row.shareState, "protectedFields" to row.protectedFields, "reviewOf" to row.reviewOf, "productName" to row.productName, "productSource" to row.productSource,
+        "noteOrigin" to row.noteOrigin, "noteTemplateSnapshot" to row.noteTemplateSnapshot, "transferAccountId" to row.transferAccountId)
     fun decode(raw: Any?): RecognitionEntity {
         val m = raw as? Map<*, *> ?: error("识别历史不是对象")
         fun string(key: String) = (m[key] as? String)?.takeIf { it.isNotBlank() } ?: error("识别历史缺少$key")
@@ -45,6 +46,9 @@ object RecognitionCodec {
             hasExplicitTime = m["hasExplicitTime"] as? Boolean ?: false,
             captureSessionId = m["captureSessionId"] as? String, recognizedAt = number("recognizedAt"),
             updatedAt = number("updatedAt"), status = status, billId = (m["billId"] as? Number)?.toLong(), shareState = share,
-            protectedFields = protectedFields, reviewOf = reviewOf)
+            protectedFields = protectedFields, reviewOf = reviewOf, productName = m["productName"] as? String,
+            productSource = m["productSource"] as? String, noteOrigin = m["noteOrigin"] as? String,
+            noteTemplateSnapshot = m["noteTemplateSnapshot"] as? String,
+            transferAccountId = when(val value = m["transferAccountId"]) { null -> null; is String -> value.takeIf { it.isNotBlank() } ?: error("转入账户ID无效"); else -> error("转入账户ID必须为文字") })
     }
 }

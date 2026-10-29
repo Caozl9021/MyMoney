@@ -1,8 +1,5 @@
 package com.example.billkit
 
-import android.graphics.Bitmap
-import com.example.billkit.ocr.OcrEngine
-import com.example.billkit.ocr.OcrFallback
 
 /**
  * 识别配置。宿主把自己的设置映射成它，然后 [BillKit.updateConfig]。
@@ -10,8 +7,6 @@ import com.example.billkit.ocr.OcrFallback
 data class BillKitConfig(
     /** 只处理这些包（微信/支付宝/…），其余一律不看 */
     val acceptedPackages: Set<String> = Packages.defaultWhitelist,
-    /** 分类未命中 / 命中但无金额时，是否允许宿主再送一张截图进来做 OCR */
-    val ocrEnabled: Boolean = true,
     /** 同一应用两次回调的最小间隔 */
     val minIntervalMs: Long = 1_500L,
     /** 同指纹在这个窗口内不重复回调（防重复弹窗/重复入账） */
@@ -27,9 +22,8 @@ fun interface BillSink {
  * 模块入口。宿主要做的只有三步：
  *
  * ```kotlin
- * BillKit.install(config, sink = { draft -> /* 存库/通知 */ }, ocrEngine = MlKitOcrEngine())
- * BillKit.offer(UiSnapshot(pkg, activity, textItems))        // 无障碍 / uiautomator dump 送进来
- * BillKit.offerOcr(pkg, activity, screenshot, statusBarPx)   // 前一步 needsOcr 时才截图送我
+ * BillKit.install(config, sink = { draft -> /* 存库/通知 */ })
+ * BillKit.offer(UiSnapshot(pkg, activity, textItems))   // 无障碍服务送进来
  * ```
  *
  * 库内部负责：分类 → 状态/金额/方向校验 → 节流 → 去重 → 回调 sink → 写 DebugBus。
@@ -44,9 +38,6 @@ object BillKit {
 
     @Volatile
     private var sink: BillSink? = null
-
-    @Volatile
-    private var ocrFallback: OcrFallback? = null
 
     private val lastSeen = LinkedHashMap<String, Long>()
     private var lastAcceptedAt = 0L
@@ -65,13 +56,11 @@ object BillKit {
     fun install(
         config: BillKitConfig = BillKitConfig(),
         sink: BillSink,
-        ocrEngine: OcrEngine? = null,
         pageSessionProvider: ((UiSnapshot) -> String)? = null,
     ) {
         this.config = config
         this.pageSessionProvider = pageSessionProvider
         this.sink = sink
-        this.ocrFallback = ocrEngine?.let { OcrFallback(it) }
         reset()
     }
 
@@ -95,34 +84,6 @@ object BillKit {
     fun offer(snapshot: UiSnapshot, now: Long = System.currentTimeMillis()): BillPipeline.Outcome {
         val outcome = pipeline.process(snapshot, now)
         dispatch(outcome, snapshot, now)
-        return outcome
-    }
-
-    /**
-     * OCR 兜底：只有在 [offer] 返回 `needsOcr == true` 且配置允许时才值得调用，
-     * 因为一次识别要 150~400ms。截图由宿主负责（库不申请任何截图权限）。
-     */
-    suspend fun offerOcr(
-        packageName: String,
-        activityClass: String?,
-        screenshot: Bitmap,
-        statusBarPx: Int = 0,
-        now: Long = System.currentTimeMillis(),
-        configurationToken: String? = null,
-    ): BillPipeline.Outcome? {
-        if (!config.ocrEnabled) return null
-        val fallback = ocrFallback ?: return null
-
-        val snapshot = fallback.snapshot(
-            packageName = packageName,
-            activityClass = activityClass,
-            screenshot = screenshot,
-            statusBarPx = statusBarPx,
-        ) ?: return null
-
-        val captured = snapshot.copy(configurationToken = configurationToken)
-        val outcome = pipeline.process(captured, now)
-        dispatch(outcome, captured, now)
         return outcome
     }
 

@@ -1,8 +1,12 @@
 package com.example.billkit
 
 /**
- * 统一的上游输入：无论是无障碍读树，还是 root 的 uiautomator dump，
- * 都归一化成「一个包名 + 一屏有序文本」，后续分类/抽取只认这个结构。
+ * 统一的上游输入：把无障碍读到的节点树归一化成「一个包名 + 一屏有序文本」，
+ * 后续分类/抽取只认这个结构。
+ *
+ * 历史上还有 root 的 uiautomator dump 与截图 OCR 两个来源，已随 Root 页面轮询一起删除
+ * （见 docs/SPEC_INTEGRATION.md）。[Source] 里保留的 ROOT_DUMP/ROOT_OCR 是为了让旧备份、
+ * 旧识别历史里的 `source` 字段还能被解析出来，新增代码不应再产生这两个值。
  */
 data class UiSnapshot(
     val packageName: String,
@@ -12,7 +16,17 @@ data class UiSnapshot(
     val source: Source = Source.ACCESSIBILITY,
     val configurationToken: String? = null,
 ) {
-    enum class Source { ACCESSIBILITY, ROOT_DUMP, ROOT_OCR }
+    enum class Source {
+        ACCESSIBILITY,
+
+        /** @deprecated 只用于解析历史数据；Root 页面轮询已删除，新代码不会再产生。 */
+        @Deprecated("Root 页面轮询已删除，仅解析历史数据时出现")
+        ROOT_DUMP,
+
+        /** @deprecated 只用于解析历史数据；OCR 已删除，新代码不会再产生。 */
+        @Deprecated("OCR 已随 Root 页面轮询删除，仅解析历史数据时出现")
+        ROOT_OCR,
+    }
 
     fun diagnostic(description: String): String = description + if (truncated) " [截断]" else ""
 

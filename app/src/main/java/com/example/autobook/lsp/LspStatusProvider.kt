@@ -7,16 +7,40 @@ import android.net.Uri
 import android.os.Binder
 import android.os.Bundle
 import android.os.Process
-import com.example.autobook.capture.XposedModuleDetector
+import com.example.autobook.capture.HookIngress
+import com.example.autobook.capture.HookTargetMonitor
 
-/** Exported solely for the system-server reply; no caller can query or edit app data here. */
+/** Target receipt and loading acknowledgement endpoint; it exposes no app data queries or edits. */
 class LspStatusProvider : ContentProvider() {
     override fun onCreate() = true
+
     override fun call(method: String, arg: String?, extras: Bundle?): Bundle? {
-        if (Binder.getCallingUid() != Process.SYSTEM_UID) throw SecurityException("system UID required")
-        if (method == LspProtocol.METHOD && extras != null) XposedModuleDetector.receive(extras)
+        if (method == HookProtocol.STATUS_METHOD) {
+            val ctx = getContext()
+            if (extras != null && ctx != null) HookTargetMonitor.accept(ctx, extras, callerPackages())
+            return null
+        }
+        if (method == HookProtocol.METHOD) {
+            val ctx = getContext()
+            if (extras != null && ctx != null && HookTargetRegistry.acceptsCaller(
+                    extras.getString(HookProtocol.EXTRA_APP), callerPackages(), HookProtocol.hookedPackages))
+                HookIngress.offer(ctx, extras)
+            return null
+        }
+        // Unknown methods, including the removed system report, have no side effects.
         return null
     }
+
+    /**
+     * UID 由内核填，应用无法伪造；再比对它名下确实有被 hook 的包名，
+     * 就等价于「这条数据确实来自微信/支付宝进程里的模块」。
+     */
+    private fun callerPackages(): Set<String> = runCatching {
+        val uid = Binder.getCallingUid()
+        if (uid / 100000 != Process.myUid() / 100000) emptySet()
+        else getContext()?.packageManager?.getPackagesForUid(uid).orEmpty().toSet()
+    }.getOrDefault(emptySet())
+
     override fun query(uri: Uri, projection: Array<out String>?, selection: String?, selectionArgs: Array<out String>?, sortOrder: String?): Cursor? = null
     override fun getType(uri: Uri): String? = null
     override fun insert(uri: Uri, values: ContentValues?): Uri? = null

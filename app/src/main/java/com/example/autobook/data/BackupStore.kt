@@ -34,7 +34,9 @@ object BackupStore {
         AssetStore.init(context)
         AssetStore.awaitReady()
         val db = AppDb.get(context)
+        var importRows = emptyList<ImportIdentity>()
         val (data, captureRows) = db.withTransaction {
+            importRows = db.imports().all()
             Triple(db.bills().allOnce(), db.recognitions().allOnce(), AssetSnapshot(db.assets().accounts(), db.assets().entries())) to
                 CaptureSnapshot(db.capture().aliases(), db.capture().exportEvidence(), db.capture().deliveries())
         }
@@ -57,15 +59,17 @@ object BackupStore {
                     category = r.category,
                     subCategory = r.subCategory,
                     account = r.account,
-                    note = r.note,
+                    note = r.note, productName = r.productName, productSource = r.productSource,
+                    noteOrigin = r.noteOrigin, noteTemplateSnapshot = r.noteTemplateSnapshot,
                     recognitionId = r.recognitionId,
                     id = r.id,
                     accountId = r.accountId, transferAccountId = r.transferAccountId,
                     assetLinked = r.assetLinked, assetKey = r.assetKey,
-                    transferFeeCents = r.transferFeeCents, feeParentKey = r.feeParentKey,
+                    transferFeeCents = r.transferFeeCents, feeParentKey = r.feeParentKey, transferAccount = r.transferAccount,
                 )
             },
             history = historyRows,
+            imports = importRows,
             capture = CaptureMetadataCodec.portable(captureRows),
             assets = assetRows,
             ledger = Backup.Ledger(
@@ -74,11 +78,11 @@ object BackupStore {
                 accounts = assetRows.accounts.filterNot { it.archived }.sortedBy { it.sortOrder }.map { it.name },
                 noteTemplate = LedgerConfig.noteTemplate,
                 localRules = LocalRuleStore.snapshot(),
+                monthStartDay = LedgerPeriodStore.read(context),
             ),
             settings = Backup.SettingsSnapshot(
                 whitelist = settings.whitelist.toList().sorted(),
                 minIntervalMs = settings.minIntervalMs,
-                ocrFallback = settings.ocrFallback,
                 rootMode = settings.rootMode,
             ),
         ).let { Backup.encode(it) }
@@ -129,6 +133,12 @@ object BackupStore {
                     if (mode == Mode.MERGE) AssetBackupCodec.merge(localAssetSnapshot, incoming) else incoming
                 }
                 val existingBills = db.bills().allOnce()
+                val existingImports = db.imports().all()
+                val importedKeys = existingImports.map { it.sourceKey }.toSet()
+                val existingFingerprints = existingBills.map { it.fingerprint }.toSet()
+                val targetImports = snapshot.imports?.let {
+                    if (mode == Mode.MERGE) ImportIdentityCodec.merge(existingImports, it) else it.also(ImportIdentityCodec::validate)
+                }
                 if (mode == Mode.MERGE && snapshot.assets != null) {
                     val byKey = existingBills.filter { it.assetKey.isNotBlank() }.associateBy { it.assetKey }
                     snapshot.bills.forEach { incoming ->
@@ -166,6 +176,9 @@ object BackupStore {
                 val recognitionBills = HashMap<String, Long>()
                 var inserted = 0
                 snapshot.bills.forEach { b ->
+                    // A local import tombstone wins during merge; explicit full replacement restores its snapshot.
+                    if (mode == Mode.MERGE && b.fingerprint in importedKeys &&
+                        b.fingerprint !in existingFingerprints) return@forEach
                     val recognitionId = b.recognitionId?.let { canonical[it] ?: it }
                     // Legacy backups have no stable UUID: keep their original fingerprint compatibility.
                     val stableLocal = b.assetKey.takeIf { it.isNotBlank() }?.let { key ->
@@ -190,16 +203,23 @@ object BackupStore {
                             orderTail = b.orderTail, sourcePkg = b.sourcePkg, strategy = b.strategy,
                             fingerprint = b.fingerprint, createdAt = b.createdAt, category = b.category,
                             subCategory = b.subCategory, account = b.account, note = b.note,
+                            productName = b.productName, productSource = b.productSource, noteOrigin = b.noteOrigin, noteTemplateSnapshot = b.noteTemplateSnapshot,
                             recognitionId = recognitionId,
                             accountId = if (snapshot.assets != null) b.accountId else null,
                             transferAccountId = if (snapshot.assets != null) b.transferAccountId else null,
                             assetLinked = snapshot.assets != null && b.assetLinked,
                             assetKey = b.assetKey.takeIf { snapshot.assets != null && it.isNotBlank() } ?: java.util.UUID.randomUUID().toString(),
                             transferFeeCents = if (snapshot.assets != null) b.transferFeeCents else 0,
-                            feeParentKey = if (snapshot.assets != null) b.feeParentKey else null))
+                            feeParentKey = if (snapshot.assets != null) b.feeParentKey else null,
+                            transferAccount = b.transferAccount))
                     }
                     b.id?.let { idMap[it] = billId }
                     recognitionId?.let { recognitionBills[it] = billId }
+                }
+                targetImports?.let { rows ->
+                    if (mode == Mode.REPLACE) db.imports().clear()
+                    val existingKeys = if (mode == Mode.REPLACE) emptySet() else existingImports.map { it.sourceKey }.toSet()
+                    rows.filterNot { it.sourceKey in existingKeys }.forEach { db.imports().insert(it) }
                 }
                 snapshot.history.orEmpty().forEach { incoming ->
                     val local = existingHistory[incoming.id]
@@ -254,6 +274,8 @@ object BackupStore {
         val assetsPresent = journal["assetsPresent"] as? Boolean ?: error("恢复配置日志损坏")
         val config = Backup.decode(journal["snapshot"] as? String ?: error("恢复配置日志损坏"))
         config.ledger?.let {
+            val periodDay = LedgerMonthPeriod.restoredDay(LedgerPeriodStore.read(context), it.monthStartDay)
+            if (it.monthStartDay != null) LedgerPeriodStore.save(context, periodDay)
             LedgerConfig.restore(it.expense.takeIf { _ -> it.hasExpense }, it.income.takeIf { _ -> it.hasIncome },
                 it.accounts.takeIf { _ -> it.hasAccounts && !assetsPresent }, it.noteTemplate.takeIf { _ -> it.hasNoteTemplate })
             it.localRules?.let(LocalRuleStore::restore)
@@ -265,7 +287,7 @@ object BackupStore {
     private fun assetBillModel(b: BillEntity) = Backup.Bill(
         b.priceCents, b.type, b.timeMillis, b.merchant, b.method, b.orderTail, b.sourcePkg, b.strategy,
         b.fingerprint, b.createdAt, b.category, b.subCategory, b.account, b.note, b.recognitionId, b.id,
-        b.accountId, b.transferAccountId, b.assetLinked, b.assetKey, b.transferFeeCents, b.feeParentKey)
+        b.accountId, b.transferAccountId, b.assetLinked, b.assetKey, b.transferFeeCents, b.feeParentKey, b.transferAccount, b.productName, b.productSource, b.noteOrigin, b.noteTemplateSnapshot)
 
     private fun sameAssetBill(local: BillEntity, incoming: Backup.Bill): Boolean =
         local.priceCents == incoming.priceCents && local.type == incoming.type && local.timeMillis == incoming.timeMillis &&
@@ -273,7 +295,7 @@ object BackupStore {
             local.sourcePkg == incoming.sourcePkg && local.strategy == incoming.strategy && local.fingerprint == incoming.fingerprint &&
             local.createdAt == incoming.createdAt && local.category == incoming.category && local.subCategory == incoming.subCategory &&
             local.account == incoming.account && local.note == incoming.note && local.accountId == incoming.accountId &&
-            local.transferAccountId == incoming.transferAccountId && local.assetLinked == incoming.assetLinked &&
+            local.transferAccount == incoming.transferAccount && local.transferAccountId == incoming.transferAccountId && local.assetLinked == incoming.assetLinked &&
             local.assetKey == incoming.assetKey && local.transferFeeCents == incoming.transferFeeCents && local.feeParentKey == incoming.feeParentKey
 
     /** 备份默认文件名：`autobook-backup-20261021-2015.json` */
@@ -289,7 +311,6 @@ object BackupStore {
         val oldWhitelist = settings.whitelist
         if (snapshot.whitelist.isNotEmpty()) settings.whitelist = snapshot.whitelist.toSet()
         if (snapshot.minIntervalMs in 300L..10_000L) settings.minIntervalMs = snapshot.minIntervalMs
-        settings.ocrFallback = snapshot.ocrFallback
         val restoredMode = CaptureModePolicy.restore(settings.captureMode, snapshot.rootMode)
         if (settings.captureMode == null && restoredMode != null) settings.captureMode = restoredMode
         com.example.autobook.capture.CaptureModeManager.reconcile(context)
@@ -323,5 +344,5 @@ internal fun mergeRecognition(local: RecognitionEntity?, incoming: RecognitionEn
     return if (local.protectedFields == 0L) merged else merged.copy(
         priceCents = local.priceCents, type = local.type, timeMillis = local.timeMillis,
         merchant = local.merchant, method = local.method, category = local.category,
-        subCategory = local.subCategory, account = local.account, note = local.note)
+        subCategory = local.subCategory, account = local.account, transferAccountId = local.transferAccountId, note = local.note)
 }

@@ -52,16 +52,16 @@ class MonthlyExpenseWidget : AppWidgetProvider() {
                 if (ids.isEmpty()) return@withLock
                 val zone = ZoneId.systemDefault()
                 val now = Instant.now()
-                val month = SystemEntryPolicy.monthWindow(now, zone)
+                val month = SystemEntryPolicy.monthWindow(now, zone, com.example.autobook.data.LedgerPeriodStore.read(app))
                 val amount = runCatching {
                     val rows = AppDb.get(app).bills().range(month.from, month.to)
                     val cents = SystemEntryPolicy.expenseCents(rows, month)
                     String.format(Locale.US, "¥%,d.%02d", cents / 100, cents % 100)
                 }.getOrElse { "暂不可用" }
                 val views = RemoteViews(app.packageName, R.layout.widget_monthly_expense).apply {
-                    setTextViewText(R.id.widget_month, "本月原支出 · ${month.month.monthValue}月")
+                    setTextViewText(R.id.widget_month, if (month.startDay == 1) "本月原支出 · ${month.month.monthValue}月" else "本期原支出 · ${month.shortLabel}")
                     setTextViewText(R.id.widget_amount, amount)
-                    setContentDescription(R.id.widget_amount, "${month.month.year}年${month.month.monthValue}月原支出 $amount，退款单独计算")
+                    setContentDescription(R.id.widget_amount, "${month.rangeLabel}原支出 $amount，退款单独计算")
                     setOnClickPendingIntent(R.id.widget_add, PendingIntent.getActivity(app, 9101,
                         SystemIntegration.addBillIntent(app),
                         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))

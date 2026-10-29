@@ -55,6 +55,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -373,8 +375,12 @@ fun PageScaffold(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     compact: Boolean = false,
+    floatingHeader: Boolean = false,
+    titleActive: Boolean = false,
+    titleStateDescription: String? = null,
+    onTitleClick: (() -> Unit)? = null,
     /**
-     * 传非 null 时改用固定子页导航栏（左「返回」、中标题、右动作），
+     * 传非 null 时改用固定子页导航栏（居中标题、右动作；系统返回），
      * 大标题的滚动收缩随之关闭。
      *
      * 明细这种**压在其他 Tab 之上的整页**必须走这条路：大标题栏只在滚动时
@@ -387,6 +393,13 @@ fun PageScaffold(
     // Tab 栏离屏幕底边的距离：导航条 inset + 视觉留白（别贴着右下角）。
     // 内容底部再额外留一档，滚到最后一行不会被胶囊压住。
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
+    if (floatingHeader && onBack == null) {
+        FloatingPageScaffold(title = title, bottomPadding = dockHeight() + navBottom + AbLayout.pageBottom,
+            modifier = modifier, titleActive = titleActive, titleStateDescription = titleStateDescription,
+            onTitleClick = onTitleClick, actions = actions, content = content)
+        return
+    }
 
     Box(modifier.fillMaxSize()) {
         Column(Modifier.widthIn(max = 560.dp).fillMaxSize().align(Alignment.TopCenter)) {
@@ -404,7 +417,8 @@ fun PageScaffold(
             content(
                 androidx.compose.foundation.layout.PaddingValues(
                     // 明细页把胶囊 Tab 栏留在原位（可以在明细里直接切页），所以照样留白。
-                    bottom = dockHeight() + navBottom + AbSpacing.xxl,
+                    top = if (onBack != null) AbLayout.pageTop else 0.dp,
+                    bottom = dockHeight() + navBottom + AbLayout.pageBottom,
                 ),
             )
         }
@@ -430,7 +444,7 @@ private fun ScrollingTitleBar(
 }
 
 /**
- * 子页导航栏：左返回、中标题、右动作。玻璃背板 + 底部一根 0.5dp 分隔线。
+ * 子页导航栏：独立居中标题与右侧动作，系统负责返回。
  *
  * 用于设置里的二级页 —— iOS 里子页标题是居中的 17sp，不是大标题。
  */
@@ -443,65 +457,23 @@ fun SubPageBar(
 ) {
     val p = LocalAbPalette.current
     val reduce = LocalReduceTransparency.current
-    val haptic = rememberAbHaptic()
-    Box(modifier.fillMaxWidth()) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .background(if (reduce) p.cardBg else p.glassTint),
-        )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .heightIn(min = AbSize.navBarHeight)
-                .padding(horizontal = AbSpacing.page),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(AbRadius.capsule))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                    ) {
-                        haptic.tick()
-                        onBack()
-                    }
-                    .padding(end = 12.dp, top = 6.dp, bottom = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    imageVector = AbIcons.ChevronLeft,
-                    contentDescription = "返回",
-                    modifier = Modifier.height(18.dp),
-                    tint = p.accent,
-                )
-                Text("返回", style = AbType.body, color = p.accent)
-            }
-
-            Text(
-                title,
-                style = AbType.navTitle,
-                color = p.label,
-                modifier = Modifier.weight(1f).padding(start = 8.dp),
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-            )
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
-                verticalAlignment = Alignment.CenterVertically,
-                content = actions,
-            )
+    // The title owns the geometric centre, independently of trailing actions.
+    androidx.compose.ui.layout.SubcomposeLayout(modifier.fillMaxWidth().background(if (reduce) p.cardBg else p.glassTint).statusBarsPadding()) { constraints ->
+        val inset = AbSpacing.page.roundToPx()
+        val available = (constraints.maxWidth - inset * 2).coerceAtLeast(0)
+        val action = subcompose("actions") {
+            Row(horizontalArrangement = Arrangement.spacedBy(AbSpacing.s), verticalAlignment = Alignment.CenterVertically, content = actions)
+        }.first().measure(constraints.copy(minWidth = 0, minHeight = 0, maxWidth = available / 3))
+        val titleWidth = (available - action.width * 2).coerceAtLeast(0)
+        val heading = subcompose("title") {
+            Text(title, style = AbType.navTitle, color = p.label, textAlign = TextAlign.Center,
+                maxLines = 2, modifier = Modifier.fillMaxWidth().semantics { heading() })
+        }.first().measure(constraints.copy(minWidth = titleWidth, maxWidth = titleWidth, minHeight = 0))
+        val height = maxOf(AbSize.navBarHeight.roundToPx(), heading.height + 8.dp.roundToPx(), action.height)
+        layout(constraints.maxWidth, height) {
+            heading.placeRelative((constraints.maxWidth - heading.width) / 2, (height - heading.height) / 2)
+            action.placeRelative(constraints.maxWidth - inset - action.width, (height - action.height) / 2)
         }
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(0.5.dp)
-                .align(Alignment.BottomCenter)
-                .background(p.separator),
-        )
     }
 }
 
@@ -532,7 +504,8 @@ fun SubPageScaffold(
         SubPageBar(title = title, onBack = onBack, actions = actions)
         content(
             androidx.compose.foundation.layout.PaddingValues(
-                bottom = if (reserveDock) dockHeight() + navBottom + AbSpacing.xxl else navBottom + AbSpacing.l,
+                top = AbLayout.pageTop,
+                bottom = if (reserveDock) dockHeight() + navBottom + AbLayout.pageBottom else navBottom + AbLayout.pageBottom,
             ),
         )
     }

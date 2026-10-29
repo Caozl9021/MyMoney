@@ -33,7 +33,7 @@ import com.example.autobook.ui.MainActivity
  * 3. 连续 [GuardianPolicy.ALERT_AFTER_MISSES] 次未启用（约 60s）才报警，避开切换抖动；
  * 4. `START_STICKY`：被系统杀掉后由系统重建。
  *
- * 只有在「已选择无障碍模式 + 识别总开关开启」时由 [CaptureModeManager] 拉起；
+ * 只有在「已选择无障碍模式 + 识别总开关开启 + 页面辅助开启」时由 [CaptureModeManager] 拉起；
  * 切到 Root 模式或暂停识别时会被停掉，不留后台空转。
  */
 class AccessibilityGuardian : Service() {
@@ -70,10 +70,10 @@ class AccessibilityGuardian : Service() {
             )
         }
 
-        /** 是否应该跑守护：识别开启且当前是无障碍模式。 */
+        /** 是否应该跑守护：识别和页面辅助开启，且当前是无障碍模式。 */
         fun shouldRun(context: Context): Boolean {
             val settings = Settings(context)
-            return settings.enabled && settings.captureMode == CaptureMode.ACCESSIBILITY
+            return settings.enabled && settings.pageEnabled && settings.captureMode == CaptureMode.ACCESSIBILITY
         }
 
         fun start(context: Context) {

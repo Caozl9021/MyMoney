@@ -116,6 +116,8 @@ object CategoryIcons {
         "pets" -> R.drawable.cat_pets
         "flight" -> R.drawable.cat_flight
         "smartphone" -> R.drawable.cat_smartphone
+        "shield" -> R.drawable.cat_shield
+        "work_history" -> R.drawable.cat_work_history
         "card_giftcard" -> R.drawable.cat_card_giftcard
         "redeem" -> R.drawable.cat_redeem
         "work" -> R.drawable.cat_work
@@ -131,26 +133,27 @@ object CategoryIcons {
     }
 }
 
-/** 分类图标徽章：淡色圆角底 + 实心图标，和账单行、分类管理页共用。 */
+/** 分类图标徽章：实色圆角底 + 对比前景，和账单行、分类管理页共用。 */
 @Composable
 fun CategoryBadge(
     category: String?,
     tint: Color,
     modifier: Modifier = Modifier,
     size: Dp = 38.dp,
+    foreground: Color? = null,
 ) {
     Box(
         modifier = modifier
             .size(size)
             .clip(RoundedCornerShape(if (size >= 40.dp) 12.dp else 9.dp))
-            .background(tint.copy(alpha = 0.14f)),
+            .background(tint),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             painter = painterResource(CategoryIcons.resourceFor(CategoryIcons.keyFor(category))),
             contentDescription = null,
             modifier = Modifier.size(size * 0.56f),
-            tint = tint,
+            tint = foreground ?: badgeForeground(tint),
         )
     }
 }

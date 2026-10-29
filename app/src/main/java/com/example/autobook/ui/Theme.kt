@@ -113,6 +113,7 @@ fun AutoBookTheme(
     CompositionLocalProvider(
         LocalAbPalette provides palette,
         LocalReduceMotion provides reduceMotion,
+        LocalPredictiveBackEnabled provides prefs.getBoolean(Appearance.PREDICTIVE_BACK, Appearance.DEFAULT_PREDICTIVE_BACK),
         LocalDensity provides scaledDensity,
         LocalReduceTransparency provides reduce,
     ) {

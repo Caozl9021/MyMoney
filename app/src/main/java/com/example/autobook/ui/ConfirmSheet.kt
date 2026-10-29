@@ -96,7 +96,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.example.autobook.R
 import com.example.autobook.data.LedgerConfig
+import com.example.autobook.data.NoteTemplate
 import com.example.autobook.data.NoteSuggester
+import com.example.autobook.ui.design.amountTint
 import com.example.autobook.ui.design.AbIcons
 import com.example.autobook.ui.design.AbMotion
 import com.example.autobook.ui.design.AbRadius
@@ -119,8 +121,8 @@ import kotlinx.coroutines.launch
 /**
  * 确认卡本体（紧凑底部 Sheet，plan1.0 批次1）。
  *
- * 识别卡先呈现商户、金额与可操作分类/账户摘要；更多字段渐进展开。
- * 手动新建和编辑保持完整字段；保存后的分享由结果卡提供。
+ * 金额、分类、账户与可选备注直接可编辑，来源信息折叠。
+ * 手动新建/编辑支持账本时间；宿主仅在真实保存成功后收起。
  *
  * **两种关闭要分开**（用户确认的规则）：
  *  - [onIgnore]：右上角「忽略」，宿主保存 IGNORED，仍可在识别历史重新打开；
@@ -161,11 +163,18 @@ fun ConfirmSheet(
     val haptic = rememberAbHaptic()
 
     var type by rememberSaveable { mutableStateOf(draft.type) }
-    var merchant by rememberSaveable { mutableStateOf(draft.merchant.orEmpty()) }
+    val merchant = draft.merchant.orEmpty()
+    var timeMillis by rememberSaveable { mutableStateOf(draft.timeMillis) }
+    var timeOpen by remember { mutableStateOf(false) }
     var category by rememberSaveable { mutableStateOf(draft.category) }
     var subCategory by rememberSaveable { mutableStateOf(draft.subCategory) }
     var account by rememberSaveable { mutableStateOf(draft.account) }
+    var transferAccountId by rememberSaveable { mutableStateOf(draft.transferAccountId) }
     var note by rememberSaveable { mutableStateOf(draft.note.orEmpty()) }
+    var noteOrigin by rememberSaveable { mutableStateOf(draft.noteOrigin) }
+    val templateSnapshot = rememberSaveable { draft.noteTemplateSnapshot ?: LedgerConfig.noteTemplate }
+    var discardPrompt by remember { mutableStateOf(false) }
+    var discardAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     // 仅挡住宿主saving重组前的连续点按，不能在失败后留下永久锁。
     var dispatching by remember { mutableStateOf(false) }
     LaunchedEffect(dispatching) {
@@ -179,7 +188,7 @@ fun ConfirmSheet(
     var accountOpen by rememberSaveable { mutableStateOf(false) }
     var importError by remember { mutableStateOf<String?>(null) }
     /** 点气泡前的字段；非空时显示「撤销」 */
-    var undo by remember { mutableStateOf<NoteSuggester.Fields?>(null) }
+    var undo by remember { mutableStateOf<String?>(null) }
 
     var configVersion by remember { mutableStateOf(0) }
     val groups = remember(type, configVersion) { LedgerConfig.groupsFor(type) }
@@ -199,40 +208,47 @@ fun ConfirmSheet(
     fun current(): BillDraft = draft.copy(
         priceCents = validAmount ?: draft.priceCents,
         type = type,
-        merchant = merchant.trim().ifBlank { null },
-        category = category,
-        subCategory = subCategory,
+        merchant = draft.merchant,
+        timeMillis = timeMillis,
+        category = category.takeUnless { type == BillType.TRANSFER },
+        subCategory = subCategory.takeUnless { type == BillType.TRANSFER },
+        transferAccountId = transferAccountId.takeIf { type == BillType.TRANSFER },
         account = account,
         note = note.trim().ifBlank { null },
+        noteOrigin = noteOrigin, noteTemplateSnapshot = templateSnapshot,
     )
+    LaunchedEffect(type, category, subCategory, account, transferAccountId, timeMillis) {
+        if (noteOrigin == NoteTemplate.TEMPLATE) note = NoteTemplate.render(current(), templateSnapshot)
+    }
     val editedDraft = current()
     val latestDraftChange by rememberUpdatedState(onDraftChange)
     LaunchedEffect(editedDraft) { latestDraftChange(editedDraft) }
     // noteSuggestions 本身也是 key：最近账单是异步读的，读完换了一个新的 lambda，要重算
-    val suggestions = remember(noteSuggestions, type, merchant, category, account, note) { noteSuggestions(current()) }
+    val suggestions = remember(noteSuggestions, editedDraft) { noteSuggestions(current()) }
     var closing by remember { mutableStateOf(false) }
     val locked = saving || dispatching || closing
     val picker = remember { CategoryPickerState() }
+    var categoryViewport by remember { mutableStateOf(Rect.Zero) }
     var hostOrigin by remember { mutableStateOf(Offset.Zero) }
     val currentLocked by rememberUpdatedState(locked)
-    fun selectSub(group: String, sub: String) {
+    fun selectSub(group: String, sub: String, pulse: Boolean = true) {
         if (locked || groups.none { it.name == group && sub in it.subs }) return
-        haptic.tick()
+        if (pulse) haptic.tick()
         category = group
         subCategory = sub
         undo = null
     }
-    val currentSelectSub by rememberUpdatedState(::selectSub)
+    val currentSelectSub by rememberUpdatedState<(String, String) -> Unit>({ group, sub -> selectSub(group, sub, false) })
     val currentOpenPicker by rememberUpdatedState<(String, Rect, Boolean) -> Unit>({ group, anchor, sliding ->
         if (!locked) groups.firstOrNull { it.name == group }?.takeIf { it.subs.isNotEmpty() }?.let {
             haptic.select()
             picker.show(CategoryPickerRequest(group, it.subs, anchor,
-                subCategory.takeIf { category == group }, sliding))
+                subCategory.takeIf { category == group }, sliding, categoryViewport))
         }
     })
     LaunchedEffect(locked) { if (locked) picker.cancel() }
     DisposableEffect(onPickerBackHandler) {
-        onPickerBackHandler?.invoke { if (picker.open) { picker.cancel(); true } else false }
+        onPickerBackHandler?.invoke { when { timeOpen -> { timeOpen = false; true }; picker.open -> { picker.cancel(); true }; else -> false } }
         onDispose { onPickerBackHandler?.invoke(null) }
     }
 
@@ -277,11 +293,20 @@ fun ConfirmSheet(
             }
         }
     }
-    fun dismiss() { if (locked) return; if (picker.open) picker.cancel() else { haptic.select(); closeAnimated { onDismiss(current()) } } }
-    fun ignore() { if (!locked) { haptic.warn(); closeAnimated(onIgnore) } }
+    fun requestClose(action: () -> Unit) {
+        if (locked) return
+        if (editableDetails && editorFieldsChanged(draft, current(), amount.text)) {
+            discardAction = action
+            discardPrompt = true
+        } else closeAnimated(action)
+    }
+    fun dismiss() { if (locked) return; if (timeOpen) { timeOpen = false; return }; if (picker.open) picker.cancel() else { haptic.select(); requestClose { onDismiss(current()) } } }
+    fun ignore() { if (!locked) { haptic.warn(); requestClose(onIgnore) } }
+    if (discardPrompt) DiscardChangesDialog(onContinue = { discardPrompt = false; discardAction = null },
+        onDiscard = { val action = discardAction; discardPrompt = false; discardAction = null; if (action != null) closeAnimated(action) })
     // 悬浮窗没有 OnBackPressedDispatcher（宿主在 View 层自己接返回键），只在 Activity 宿主里注册
     if (androidx.activity.compose.LocalOnBackPressedDispatcherOwner.current != null) {
-        BackHandler { if (!locked) dismiss() }
+        ActiveBackHandler { if (!locked) dismiss() }
     }
 
     val scrimAlpha = (0.32f * (1f - (displayedOffset / (screenHeightPx * 0.7f)))).coerceIn(0f, 0.32f)
@@ -357,55 +382,6 @@ fun ConfirmSheet(
                     Modifier.verticalScroll(rememberScrollState()).padding(bottom = AbSpacing.l),
                     verticalArrangement = Arrangement.spacedBy(AbSpacing.s),
                 ) {
-                    // ---- 头部：品牌 + 标题/副标题（点开看详情）+ 忽略 ----
-                    Row(
-                        Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xl),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(AbSpacing.m),
-                    ) {
-                        Image(
-                            painter = painterResource(R.drawable.ic_brand_color),
-                            contentDescription = null,
-                            modifier = Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(Color.White),
-                        )
-                        Column(
-                            Modifier.weight(1f).heightIn(min = 48.dp)
-                                .clip(RoundedCornerShape(AbRadius.row))
-                                .clickable(remember { MutableInteractionSource() }, indication = null, enabled = !locked) {
-                                    haptic.tick(); detailsOpen = !detailsOpen
-                                }
-                                .semantics { role = Role.Button; contentDescription = if (detailsOpen) "收起账单详情" else "展开账单详情"; stateDescription = if (detailsOpen) "已展开" else "已收起" },
-                        ) {
-                            Text(
-                                merchant.ifBlank { if (editableDetails && isNew) "记一笔" else typeLabel(type) },
-                                style = AbType.headline, color = p.label, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                buildString {
-                                    append(typeLabel(type))
-                                    draft.method?.let { append(" · ").append(it) }
-                                    append(" · ").append(SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(draft.timeMillis)))
-                                },
-                                style = AbType.caption1, color = p.secondaryLabel, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        Column(
-                            modifier = Modifier.heightIn(min = 48.dp)
-                                .clip(RoundedCornerShape(100.dp))
-                                .clickable(remember { MutableInteractionSource() }, indication = null, enabled = !locked) { ignore() }
-                                .padding(horizontal = 10.dp, vertical = 8.dp)
-                                .semantics {
-                                    role = Role.Button
-                                    if (!editableDetails) contentDescription = "$ignoreLabel，可在识别历史重新打开"
-                                },
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center,
-                        ) {
-                            Text(ignoreLabel, style = AbType.body, color = p.secondaryLabel)
-                            if (!editableDetails) Text("历史可重开", style = AbType.caption1, color = p.tertiaryLabel)
-                        }
-                    }
-
                     // ---- 金额 ----
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xl)
@@ -413,15 +389,13 @@ fun ConfirmSheet(
                             .graphicsLayer { alpha = if (amountVisibility) 1f else 0f },
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Column(Modifier.padding(end = AbSpacing.s), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(typeLabel(type), style = AbType.caption1.copy(fontWeight = FontWeight.SemiBold), color = p.secondaryLabel)
-                            Text("¥", style = AbType.amountTitle, color = p.secondaryLabel)
-                        }
-                        val amountStyle = AbType.amountEntry.copy(color = p.label,
+                        Text("¥", style = AbType.amountTitle, color = amountTint(p, type.name), modifier = Modifier.padding(end = 6.dp))
+                        val amountStyle = AbType.amountEntry.copy(color = amountTint(p, type.name),
                             fontSize = AbType.amountEntry.fontSize / density.fontScale.coerceAtLeast(1f))
                         BasicTextField(
                             value = amount,
                             onValueChange = { next ->
+                                undo = null
                                 amount = if (forceSelectAll) {
                                     forceSelectAll = false
                                     next.copy(selection = TextRange(0, next.text.length))
@@ -450,209 +424,95 @@ fun ConfirmSheet(
                                 }
                             },
                         )
+                        Box(Modifier.heightIn(min = 48.dp).widthIn(min = 48.dp)
+                            .clickable(enabled = !locked) { ignore() }.semantics { role = Role.Button; contentDescription = if (editableDetails) "取消编辑" else "忽略，可在识别历史重新打开" },
+                            contentAlignment = Alignment.Center) { Text(ignoreLabel, style = AbType.footnote, color = p.secondaryLabel) }
                     }
-                    if (amountInvalid) {
-                        Text("金额有误：请输入大于0且不超过一百万元的金额", color = p.red, style = AbType.caption1,
-                            modifier = Modifier.padding(horizontal = AbSpacing.xl).semantics { liveRegion = LiveRegionMode.Polite; error("金额无效") })
-                    }
-
-                    if (editableDetails) {
-                        Segmented(
-                            options = BillType.entries.map(::typeLabel),
-                            selected = BillType.entries.indexOf(type),
-                            enabled = !locked,
-                            onSelect = { index ->
-                                if (saving || dispatching) return@Segmented
+                    if (amountInvalid) Text("请输入有效金额", color = p.red, style = AbType.caption1,
+                        modifier = Modifier.padding(horizontal = AbSpacing.xl).semantics { liveRegion = LiveRegionMode.Polite; error("金额无效") })
+                    Segmented(
+                        options = BillType.entries.map(::typeLabel), selected = BillType.entries.indexOf(type), enabled = !locked,
+                        onSelect = { index ->
+                            if (!locked) {
                                 val next = BillType.entries[index]
-                                if (type != next) { haptic.tick(); type = next; category = null; subCategory = null; undo = null }
+                                if (type != next) { haptic.tick(); picker.cancel(); type = next; category = null; subCategory = null }
                                 importError = null
-                            },
-                            modifier = Modifier.padding(horizontal = AbSpacing.xl),
-                        )
-                    }
-
+                            }
+                        }, modifier = Modifier.padding(horizontal = AbSpacing.xl),
+                    )
                     val assetAccounts by com.example.autobook.data.AssetStore.accounts.collectAsStateWithLifecycle()
                     val assetAccount = assetAccounts.firstOrNull { it.name == account }
-                    val balanceHint = assetHint ?: when {
-                        type == BillType.TRANSFER -> "此转账尚未补全双账户。先保存账单，再从账单操作页补全；当前不改变余额。"
-                        assetAccount?.initialized != true -> "所选账户未设置余额：本次只记账，不联动余额。可稍后在资产页设置。"
-                        else -> "保存后立即更新账户余额，含补记和未来日期；账户应选择实际扣款来源。"
+                    val transferEligible = assetAccounts.filter { !it.archived && it.initialized }
+                    val fromTransfer = transferEligible.firstOrNull { it.name == account }
+                    val toTransfer = transferEligible.firstOrNull { it.id == transferAccountId }
+                    val transferValid = type != BillType.TRANSFER || fromTransfer != null && toTransfer != null && fromTransfer.id != toTransfer.id
+                    if (type == BillType.TRANSFER) {
+                        ChipRow(label = "转出账户", items = transferEligible.map { it.name }, selected = account, enabled = !locked,
+                            onToggle = { name -> haptic.tick(); account = name })
+                        ChipRow(label = "转入账户", items = transferEligible.map { it.name }, selected = toTransfer?.name, enabled = !locked,
+                            onToggle = { name -> haptic.tick(); transferAccountId = transferEligible.firstOrNull { it.name == name }?.id })
+                        if (transferEligible.size < 2) Text("请先在设置→资产为至少两个账户设置余额", style = AbType.caption1, color = p.secondaryLabel,
+                            modifier = Modifier.padding(horizontal = AbSpacing.xl))
+                        else if (fromTransfer != null && fromTransfer.id == toTransfer?.id) Text("转出和转入账户不能相同", style = AbType.caption1, color = p.red,
+                            modifier = Modifier.padding(horizontal = AbSpacing.xl))
+                    } else {
+                    if (groups.isEmpty()) EmptyLedgerPickerActions("分类", !locked,
+                        onAdd = { LedgerConfig.addGroup(type, it); configVersion++ }, onRestored = { configVersion++ })
+                    ChipRow(
+                        label = "分类", items = groups.map { it.name }, selected = category, enabled = !locked,
+                        displayName = { name -> if (category == name && subCategory != null) "$name · $subCategory" else name },
+                        onViewport = { categoryViewport = it },
+                        slideFor = { name -> groups.firstOrNull { it.name == name }?.subs?.isNotEmpty() == true },
+                        onSlideStart = { name, anchor -> currentOpenPicker(name, anchor, true) }, onSlideMove = picker::move,
+                        onSlideRelease = { picker.release()?.let { (group, sub) -> currentSelectSub(group, sub) } }, onSlideCancel = picker::cancel,
+                        onOpenSub = { name, anchor -> currentOpenPicker(name, anchor, false) },
+                        onToggle = { name -> if (!currentLocked) { haptic.tick(); category = if (category == name) null else name; subCategory = null } },
+                    )
+                    if (accounts.isEmpty()) EmptyLedgerPickerActions("账户", !locked,
+                        onAdd = { LedgerConfig.addAccount(it); configVersion++ }, onRestored = { configVersion++ })
+                    ChipRow(label = "账户", items = accounts, selected = account, enabled = !locked,
+                        onToggle = { name -> haptic.tick(); account = if (account == name) null else name })
                     }
-                    Text(balanceHint, style = AbType.caption1, color = p.secondaryLabel,
-                        modifier = Modifier.padding(horizontal = AbSpacing.xl))
-
-                    if (!editableDetails) {
-                        Column(
-                            Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xl)
-                                .clip(RoundedCornerShape(AbRadius.row)).background(p.fill),
-                        ) {
-                            ReceiptSummaryRow("分类", listOfNotNull(category, subCategory).joinToString(" · ").ifBlank { "未分类" }, categoryOpen, !locked) {
-                                haptic.tick(); picker.cancel(); categoryOpen = !categoryOpen
-                            }
-                            Box(Modifier.fillMaxWidth().padding(horizontal = AbSpacing.l).height(0.5.dp).background(p.separator))
-                            ReceiptSummaryRow("账户", account ?: "未指定", accountOpen, !locked) {
-                                haptic.tick(); picker.cancel(); accountOpen = !accountOpen
-                            }
-                        }
+                    Column(Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xl)) {
+                        CompactNoteField(note, !locked) { note = it; noteOrigin = NoteTemplate.USER; undo = null }
                     }
-                    AnimatedVisibility(
-                        visible = editableDetails || categoryOpen,
-                        enter = if (reduceMotion) fadeIn(tween(0)) else expandVertically(tween(AbMotion.detail)) + fadeIn(tween(AbMotion.selection)),
-                        exit = if (reduceMotion) fadeOut(tween(0)) else shrinkVertically(tween(AbMotion.detail)) + fadeOut(tween(AbMotion.selection)),
+                    if (suggestions.isNotEmpty() || undo != null) LazyRow(
+                        contentPadding = PaddingValues(horizontal = AbSpacing.xl), horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
+                        modifier = Modifier.fillMaxWidth().semantics { contentDescription = "备注建议" },
                     ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
-                            // ---- 分类 / 二级 / 账户：各一行横滑 ----
-                            if (groups.isEmpty()) EmptyLedgerPickerActions("分类", !locked,
-                                onAdd = { LedgerConfig.addGroup(type, it); configVersion++ },
-                                onRestored = { configVersion++ })
-                            ChipRow(
-                                label = "分类",
-                                items = groups.map { it.name },
-                                selected = category,
-                                tintFor = { swatchFor(it) },
-                                enabled = !locked,
-                                slideFor = { name -> groups.firstOrNull { it.name == name }?.subs?.isNotEmpty() == true },
-                                onSlideStart = { name, anchor -> currentOpenPicker(name, anchor, true) },
-                                onSlideMove = picker::move,
-                                onSlideRelease = { picker.release()?.let { (group, sub) -> currentSelectSub(group, sub) } },
-                                onSlideCancel = picker::cancel,
-                                onOpenSub = { name, anchor -> currentOpenPicker(name, anchor, false) },
-                                onToggle = { name ->
-                                    if (currentLocked) return@ChipRow
-                                    haptic.tick()
-                                    category = if (category == name) null else name
-                                    subCategory = null
-                                },
-                            )
-                            AnimatedVisibility(
-                                visible = subs.isNotEmpty(),
-                                enter = if (reduceMotion) fadeIn(tween(0)) else expandVertically(tween(AbMotion.detail)) + fadeIn(tween(AbMotion.selection)),
-                                exit = if (reduceMotion) fadeOut(tween(0)) else shrinkVertically(tween(AbMotion.detail)) + fadeOut(tween(AbMotion.selection)),
-                            ) {
-                                ChipRow(
-                                    label = "二级",
-                                    items = subs,
-                                    selected = subCategory,
-                                    tintFor = { swatchFor(category ?: "") },
-                                    // 换一级分类时整行重建：旧二级的滚动位置/选中态不能残留
-                                    key = category,
-                                    enabled = !locked,
-                                    onLabelClick = { anchor -> category?.let { currentOpenPicker(it, anchor, false) } },
-                                    onToggle = { sub -> haptic.tick(); subCategory = if (subCategory == sub) null else sub },
-                                )
+                        undo?.let { previous -> item(key = "undo") { SuggestionBubble("撤销", accent = true, enabled = !locked) {
+                            haptic.tick(); note = previous; noteOrigin = NoteTemplate.USER; undo = null
+                        } } }
+                        itemsIndexed(suggestions, key = { _, suggestion -> "s:" + suggestion.label }) { _, suggestion ->
+                            SuggestionBubble(suggestion.label, enabled = !locked) {
+                                haptic.tick(); undo = note; note = suggestion.note; noteOrigin = NoteTemplate.SUGGESTION
                             }
-                            if (groups.any { it.subs.isNotEmpty() }) Text(
-                                "长按分类滑选二级，也可点「二级」选择",
-                                style = AbType.caption1, color = p.secondaryLabel,
-                                modifier = Modifier.padding(horizontal = AbSpacing.xl),
-                            )
                         }
                     }
-                    AnimatedVisibility(
-                        visible = editableDetails || accountOpen,
-                        enter = if (reduceMotion) fadeIn(tween(0)) else expandVertically(tween(AbMotion.detail)) + fadeIn(tween(AbMotion.selection)),
-                        exit = if (reduceMotion) fadeOut(tween(0)) else shrinkVertically(tween(AbMotion.detail)) + fadeOut(tween(AbMotion.selection)),
-                    ) {
-                        Column {
-                            if (accounts.isEmpty()) EmptyLedgerPickerActions("账户", !locked,
-                                onAdd = { LedgerConfig.addAccount(it); configVersion++ }, onRestored = { configVersion++ })
-                            ChipRow(
-                                label = "账户",
-                                items = accounts,
-                                selected = account,
-                                enabled = !locked,
-                                onToggle = { name -> haptic.tick(); account = if (account == name) null else name },
-                            )
-                        }
+                    Row(Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xl).heightIn(min = 48.dp)
+                        .then(if (editableDetails || type == BillType.TRANSFER) Modifier.clickable(enabled = !locked) { picker.cancel(); timeOpen = true }
+                            .semantics { role = Role.Button; contentDescription = "选择记账日期和时间" } else Modifier),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AbSpacing.m)) {
+                        Text("时间", style = AbType.caption1, color = p.secondaryLabel)
+                        Text(SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(timeMillis)), style = AbType.footnote, color = p.label, modifier = Modifier.weight(1f))
+                        if (editableDetails || type == BillType.TRANSFER) Icon(AbIcons.ChevronRight, null, Modifier.size(16.dp), tint = p.secondaryLabel)
                     }
-                    if (!editableDetails) {
-                        Row(
-                            Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xl).heightIn(min = 48.dp)
-                                .clip(RoundedCornerShape(AbRadius.row))
-                                .clickable(enabled = !locked) { haptic.tick(); detailsOpen = !detailsOpen }
-                                .padding(horizontal = AbSpacing.l, vertical = AbSpacing.s)
-                                .semantics { role = Role.Button; stateDescription = if (detailsOpen) "已展开" else "已收起" },
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
-                        ) {
-                            Text(if (detailsOpen) "收起更多信息" else "更多信息", style = AbType.footnote.copy(fontWeight = FontWeight.Medium), color = p.secondaryLabel, modifier = Modifier.weight(1f))
-                            Text(if (detailsOpen) "−" else "+", style = AbType.body, color = p.secondaryLabel)
+                    if (editableDetails && timeMillis > System.currentTimeMillis() && assetAccount?.initialized == true)
+                        Text("保存即更新当前余额", style = AbType.caption1, color = p.secondaryLabel, modifier = Modifier.padding(horizontal = AbSpacing.xl))
+                    if (merchant.isNotBlank() || draft.method != null || draft.orderTail != null || sourceLabel(draft) != null || assetHint != null) {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xl).heightIn(min = 48.dp)
+                            .clickable(enabled = !locked) { picker.cancel(); detailsOpen = !detailsOpen }
+                            .semantics { role = Role.Button; stateDescription = if (detailsOpen) "已展开" else "已收起" }, verticalAlignment = Alignment.CenterVertically) {
+                            Text("来源信息", style = AbType.caption1, color = p.secondaryLabel, modifier = Modifier.weight(1f))
+                            Text(if (detailsOpen) "−" else "+", style = AbType.footnote, color = p.secondaryLabel)
                         }
-                    }
-                    AnimatedVisibility(
-                        visible = editableDetails || detailsOpen,
-                        enter = if (reduceMotion) fadeIn(tween(0)) else expandVertically(tween(AbMotion.detail)) + fadeIn(tween(AbMotion.selection)),
-                        exit = if (reduceMotion) fadeOut(tween(0)) else shrinkVertically(tween(AbMotion.detail)) + fadeOut(tween(AbMotion.selection)),
-                    ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-                            if (!editableDetails) {
-                                Segmented(
-                                    options = BillType.entries.map(::typeLabel),
-                                    selected = BillType.entries.indexOf(type),
-                                    enabled = !locked,
-                                    onSelect = { index ->
-                                        if (saving || dispatching) return@Segmented
-                                        val next = BillType.entries[index]
-                                        if (type != next) { haptic.tick(); type = next; category = null; subCategory = null; undo = null }
-                                        importError = null
-                                    },
-                                    modifier = Modifier.padding(horizontal = AbSpacing.xl),
-                                )
-                            }
-
-                            // ---- 备注 + 建议气泡（编辑器里商户也在这一组） ----
-                            Column(
-                                Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xl)
-                                    .clip(RoundedCornerShape(AbRadius.row)).background(p.fill),
-                            ) {
-                                if (editableDetails) {
-                                    InlineField("商户", merchant, "可留空", enabled = !locked) { merchant = it; undo = null }
-                                    Box(Modifier.fillMaxWidth().height(0.5.dp).padding(start = AbSpacing.l).background(p.separator))
-                                }
-                                InlineField("备注", note, "可留空，导出时写备注列", enabled = !locked) { note = it; undo = null }
-                            }
-                            if (suggestions.isNotEmpty() || undo != null) {
-                                LazyRow(
-                                    contentPadding = PaddingValues(horizontal = AbSpacing.xl),
-                                    horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
-                                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = "备注建议" },
-                                ) {
-                                    undo?.let { previous ->
-                                        item(key = "undo") {
-                                            SuggestionBubble("撤销", accent = true, enabled = !locked) {
-                                                haptic.tick()
-                                                note = previous.note; merchant = previous.merchant; category = previous.category
-                                                subCategory = previous.subCategory; account = previous.account; undo = null
-                                            }
-                                        }
-                                    }
-                                    itemsIndexed(suggestions, key = { _, s -> "s:" + s.label }) { _, s ->
-                                        SuggestionBubble(s.label, enabled = !locked) {
-                                            haptic.tick()
-                                            val before = NoteSuggester.Fields(note, merchant, category, subCategory, account)
-                                            val after = NoteSuggester.apply(before, s)
-                                            // 只接受当前清单里还存在的名字，历史账单可能引用已删掉的分类/账户
-                                            val group = LedgerConfig.groupsFor(type).firstOrNull { it.name == after.category }
-                                            note = after.note
-                                            merchant = after.merchant
-                                            category = group?.name ?: before.category
-                                            subCategory = after.subCategory?.takeIf { group != null && it in group.subs } ?: before.subCategory.takeIf { group?.name == before.category }
-                                            account = after.account?.takeIf { it in LedgerConfig.accounts } ?: before.account
-                                            undo = before
-                                        }
-                                    }
-                                }
-                            }
-
-                            Column(
-                                Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xl, vertical = AbSpacing.s),
-                                verticalArrangement = Arrangement.spacedBy(AbSpacing.s),
-                            ) {
-                                DetailLine("时间", SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(draft.timeMillis)))
+                        AnimatedVisibility(visible = detailsOpen) {
+                            Column(Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xl), verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
+                                if (merchant.isNotBlank()) DetailLine("商户", merchant)
                                 draft.method?.let { DetailLine("支付方式", it) }
                                 draft.orderTail?.let { DetailLine("单号尾号", it) }
                                 sourceLabel(draft)?.let { DetailLine("来源", it) }
-                                if (!editableDetails) Text("忽略后仍可在识别历史重新打开", style = AbType.caption1, color = p.secondaryLabel)
+                                assetHint?.let { Text(it, style = AbType.caption1, color = p.secondaryLabel) }
                             }
                         }
                     }
@@ -673,7 +533,7 @@ fun ConfirmSheet(
                             text = saveLabel,
                             busy = saving,
                             busyLabel = busyLabel,
-                            enabled = validAmount != null && !locked,
+                            enabled = validAmount != null && transferValid && !locked,
                             onClick = {
                                 if (validAmount != null && !saving && !dispatching) {
                                     dispatching = true
@@ -690,6 +550,7 @@ fun ConfirmSheet(
                 }
             }
         }
+        if (timeOpen) LedgerDateTimeDialog(timeMillis, onDismiss = { timeOpen = false }, onConfirm = { timeMillis = it; timeOpen = false })
         CategoryPicker(picker, hostOrigin) { group, sub -> selectSub(group, sub) }
     }
 }
@@ -731,6 +592,8 @@ private fun ChipRow(
     onSlideCancel: () -> Unit = {},
     onOpenSub: (String, Rect) -> Unit = { _, _ -> },
     onLabelClick: ((Rect) -> Unit)? = null,
+    displayName: (String) -> String = { it },
+    onViewport: (Rect) -> Unit = {},
 ) {
     val p = LocalAbPalette.current
     val reduceMotion = LocalReduceMotion.current
@@ -770,16 +633,20 @@ private fun ChipRow(
             state = state,
             contentPadding = PaddingValues(start = AbSpacing.s, end = AbSpacing.xl),
             horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).onGloballyPositioned { onViewport(it.boundsInRoot()) },
         ) {
             itemsIndexed(items, key = { _, name -> name }) { _, name ->
+                var suppressHeldClick by remember { mutableStateOf(false) }
+                val gestureScope = rememberCoroutineScope()
+                fun endHeldClick() { gestureScope.launch { withFrameNanos { }; suppressHeldClick = false } }
                 var coordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
                 val hasSubs = slideFor(name)
-                SheetChip(name, selected == name, tintFor?.invoke(name), enabled = enabled,
+                SheetChip(displayName(name), selected == name, tintFor?.invoke(name), enabled = enabled,
                     modifier = Modifier.onGloballyPositioned { coordinates = it }
                         .categorySlide(name, enabled && hasSubs, { coordinates },
-                            onStart = { currentStart(name, it) }, onMove = { currentMove(it) },
-                            onRelease = { currentRelease() }, onCancel = { currentCancel() })
+                            onStart = { suppressHeldClick = true; currentStart(name, it) }, onMove = { currentMove(it) },
+                            onRelease = { currentRelease(); endHeldClick() }, onCancel = { currentCancel(); endHeldClick() },
+                            onPress = { suppressHeldClick = false })
                         .semantics {
                             if (hasSubs && enabled) customActions = listOf(
                                 androidx.compose.ui.semantics.CustomAccessibilityAction("选择${name}二级分类") {
@@ -787,7 +654,11 @@ private fun ChipRow(
                                     true
                                 })
                         },
-                ) { onToggle(name) }
+                ) {
+                    if (suppressHeldClick) return@SheetChip
+                    if (hasSubs && selected == name) coordinates?.takeIf { it.isAttached }?.let { currentOpen(name, it.boundsInRoot()) }
+                    else onToggle(name)
+                }
             }
         }
     }
@@ -824,9 +695,20 @@ private fun SheetChip(text: String, selected: Boolean, tint: Color?, modifier: M
 @Composable
 private fun SuggestionBubble(text: String, accent: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
     val p = LocalAbPalette.current
+    var preview by remember { mutableStateOf(false) }
+    if (preview) androidx.compose.ui.window.Dialog(onDismissRequest = { preview = false }) {
+        androidx.compose.material3.Surface(shape = RoundedCornerShape(AbRadius.card), color = p.cardBg) {
+            Column(Modifier.padding(AbSpacing.l), verticalArrangement = Arrangement.spacedBy(AbSpacing.m)) {
+                Text("使用这条备注？", style = AbType.navTitle, color = p.label)
+                Text(text.removePrefix("商品 · "), style = AbType.body, color = p.label)
+                PrimaryButton("填入备注", onClick = { preview = false; onClick() }, enabled = enabled)
+                com.example.autobook.ui.design.SecondaryButton("取消", onClick = { preview = false })
+            }
+        }
+    }
     Box(
         Modifier.heightIn(min = 48.dp)
-            .clickable(remember { MutableInteractionSource() }, indication = null, enabled = enabled, onClick = onClick)
+            .clickable(remember { MutableInteractionSource() }, indication = null, enabled = enabled, onClick = { if (!accent && text.codePointCount(0, text.length) > 18) preview = true else onClick() })
             .semantics { role = Role.Button; contentDescription = if (accent) "撤销建议" else "用作备注：$text" },
         contentAlignment = Alignment.Center,
     ) {
@@ -838,39 +720,26 @@ private fun SuggestionBubble(text: String, accent: Boolean = false, enabled: Boo
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            if (!accent) Icon(AbIcons.Note, contentDescription = null, tint = p.secondaryLabel, modifier = Modifier.size(13.dp))
             Text(text, style = AbType.footnote, color = if (!enabled) p.secondaryLabel else if (accent) p.accent else p.label, maxLines = 1,
                 overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 220.dp))
         }
     }
 }
 
-/** 灰底分组里的一行输入（左标签 + 输入框），比 InputRow 紧凑。 */
+/** No label icon or reserved multiline space; content grows to three lines. */
 @Composable
-private fun InlineField(label: String, value: String, placeholder: String, enabled: Boolean, onChange: (String) -> Unit) {
+private fun CompactNoteField(value: String, enabled: Boolean, onChange: (String) -> Unit) {
     val p = LocalAbPalette.current
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = AbSpacing.l),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(AbSpacing.m),
-    ) {
-        Text(label, style = AbType.body, color = p.label)
-        BasicTextField(
-            value = value,
-            onValueChange = onChange,
-            enabled = enabled,
-            singleLine = true,
-            textStyle = AbType.body.copy(color = p.label),
-            cursorBrush = SolidColor(p.accent),
-            modifier = Modifier.weight(1f).semantics { contentDescription = label },
-            decorationBox = { inner ->
-                Box(contentAlignment = Alignment.CenterStart) {
-                    if (value.isEmpty()) Text(placeholder, style = AbType.body, color = p.tertiaryLabel, maxLines = 1)
-                    inner()
-                }
-            },
-        )
-    }
+    BasicTextField(value = value, onValueChange = onChange, enabled = enabled,
+        minLines = 1, maxLines = 3, textStyle = AbType.body.copy(color = p.label), cursorBrush = SolidColor(p.accent),
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(AbRadius.row)).background(p.fill)
+            .heightIn(min = 44.dp).padding(horizontal = AbSpacing.l, vertical = 10.dp)
+            .semantics { contentDescription = "备注（可选）" },
+        decorationBox = { inner -> Box(contentAlignment = Alignment.CenterStart) {
+            if (value.isEmpty()) Text("备注（可选）", style = AbType.body, color = p.tertiaryLabel)
+            inner()
+        } },
+    )
 }
 
 @Composable

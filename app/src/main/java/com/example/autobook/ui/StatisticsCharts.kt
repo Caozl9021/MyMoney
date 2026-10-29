@@ -155,7 +155,7 @@ internal fun StatisticsMonthHeatmap(
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                "${date.dayOfMonth}",
+                                if (date.dayOfMonth == 1 && days.first().date.month != date.month) "${date.monthValue}/1" else "${date.dayOfMonth}",
                                 style = AbType.caption2,
                                 color = when {
                                     level >= 4 -> onStrong

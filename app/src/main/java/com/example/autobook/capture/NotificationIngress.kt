@@ -88,7 +88,8 @@ object NotificationIngress {
     fun configurationToken(context: Context): String {
         val s = Settings(context)
         return CaptureMergePolicy.digest(MiniJson.encode(listOf(s.captureRevision, s.enabled,
-            s.notificationCaptureEnabled, s.pageFallbackEnabled, s.captureMode?.name, s.autoConfirm, s.whitelist.sorted())))
+            s.notificationCaptureEnabled, s.smsCaptureEnabled, s.hookCaptureEnabled, s.pageEnabled,
+            s.captureMode?.name, s.autoConfirm, s.whitelist.sorted())))
     }
     fun offer(context: Context, observation: NotificationObservation) {
         if (!events.trySend(context.applicationContext to observation).isSuccess) publish(
@@ -97,7 +98,7 @@ object NotificationIngress {
     }
     private fun allowed(context: Context, o: NotificationObservation): Boolean {
         val s = Settings(context)
-        return s.enabled && s.notificationCaptureEnabled && o.packageName in s.whitelist &&
+        return s.captureMode != CaptureMode.ROOT && s.enabled && s.notificationCaptureEnabled && o.packageName in s.whitelist &&
             o.configurationToken == configurationToken(context) && PaymentNotificationListener.isAuthorized(context)
     }
     private suspend fun process(context: Context, observation: NotificationObservation) {
@@ -116,10 +117,25 @@ object NotificationIngress {
         val db = AppDb.get(context)
         val eventId = CaptureMergePolicy.digest(observation.observationKey + ":" + observation.contentHash)
         var reviewSummary: String? = null
-        val outcome = if (result is NotificationParseResult.Candidate) {
-            val suggestion = CategorySuggester.suggest(result.draft, candidates = ExternalRuleStore.candidates())
-            val named = result.draft.copy(category = suggestion.category, subCategory = suggestion.subCategory, account = suggestion.account)
-            val enriched = named.copy(note = NoteTemplate.render(named).ifBlank { null })
+        var specRule: String? = null
+        val draft = (result as? NotificationParseResult.Candidate)?.draft ?: run {
+            // 已验证模板不认的通知，交给 163 条规则里的 NOTICE 通道兜底（SPEC §8 阶段 1）。
+            // 顺序固定：模板优先——它的显式成功语来自真实样本复核，规则只是覆盖面。
+            val hit = specHit(context, observation)
+            if (hit == null) null else {
+                specRule = hit.ruleName
+                hit.draft
+            }
+        }
+        val outcome = if (draft != null) {
+            val suggestion = SpecCategoryStore.fill(context, draft,
+                CategorySuggester.suggest(draft, candidates = ExternalRuleStore.candidates()))
+            val named = draft.copy(category = suggestion.category, subCategory = suggestion.subCategory,
+                account = suggestion.account ?: draft.account)
+            // SPEC §8 阶段 6：把规则原文的账户名换成账本里真实存在的账户。
+            // method 保留原文（规则写的是什么就存什么），account 只放映射结果。
+            val accounted = SpecAccountStore.fill(context, named, preferred = suggestion.account)
+            val enriched = accounted.copy(note = NoteTemplate.render(accounted).ifBlank { null })
             val accepted = CaptureCoordinator.accept(context, CaptureCoordinator.Input(enriched, "NOTIFICATION",
                 observation.observationKey, eventId, observation.receivedAt, observation.reviewSlotKey), allowed = { allowed(context, observation) }) ?: return
             // Say why a real notification produced no card: the review gate is invisible otherwise.
@@ -140,10 +156,30 @@ object NotificationIngress {
         publish(NotificationDiagnostic(eventId, observation.packageName, observation.receivedAt,
             outcome, when {
                 observation.isGroupSummary -> "分组汇总已跳过；不代表交易子通知未到，可查看近期事件和有效子通知样本"
+                specRule != null -> "规则命中：$specRule"
                 result is NotificationParseResult.NeedsEvidence -> "此通知未匹配已支持模板；未生成账单或弹框"
                 reviewSummary != null -> reviewSummary
                 else -> "通知输入已处理，正文不写入诊断记录"
             }))
+    }
+
+    /**
+     * 规则通道兜底。
+     *
+     * 只把 `{title,text,t}` 三个字段喂给规则——这是 SPEC §2.4 的数据契约，规则只读这三个键。
+     * `t` 用 postTime（通知自身的发布时间）而不是 receivedAt：用户翻旧通知时两者会差很久，
+     * 用 receivedAt 会把昨天的账记成今天的。缺失时退回 receivedAt。
+     */
+    private suspend fun specHit(context: Context, observation: NotificationObservation): SpecRuleStore.Hit? {
+        if (!SpecRuleStore.coversNotice(observation.packageName)) return null
+        val body = observation.bigText?.takeIf { it.isNotBlank() } ?: observation.text.orEmpty()
+        if (body.isBlank() && observation.title.isNullOrBlank()) return null
+        val payload = MiniJson.encode(mapOf<String, Any?>(
+            "title" to observation.title.orEmpty(),
+            "text" to body,
+            "t" to (if (observation.postTime > 0) observation.postTime else observation.receivedAt),
+        ))
+        return runCatching { SpecRuleStore.parse(context, observation.packageName, "NOTICE", payload) }.getOrNull()
     }
 
     /** Keep only format words and currency amounts, not free-form names, chats or order numbers. */
@@ -152,6 +188,23 @@ object NotificationIngress {
         tokens.findAll(text.take(2048)).joinToString(" … ") { it.value }.ifBlank { "[自由文本已隐藏]" }
     }
     fun clearInvalidSample(context: Context) = refreshSamples(context)
+
+    /**
+     * 丢弃在途通知与已采样本。
+     *
+     * 通知通道在 `ROOT` 与 `ACCESSIBILITY` 之间切换时调用：两种实现看到的通知对象不同
+     * （Listener 拿得到 extras、dumpsys 只有渲染后的文本），不清的话切换瞬间
+     * 会把同一条通知当成新的再走一遍判定。去重本身在 [RootNotificationIngress] 与
+     * [CaptureCoordinator] 的观察键里，这里只清掉还没处理的队列。
+     */
+    fun resetDedup() {
+        while (events.tryReceive().isSuccess) {
+            // 排空即可
+        }
+        buffer.clear()
+        mutableSampleOptions.value = emptyList()
+    }
+
     fun sampleForExport(id: String? = null): String? {
         val context = sampleContext ?: return null
         refreshSamples(context)

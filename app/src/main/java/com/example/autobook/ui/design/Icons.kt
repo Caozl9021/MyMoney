@@ -98,6 +98,7 @@ object AbIcons {
     )
     val Clock = line("clock", "M12 3.2a8.8 8.8 0 1 0 0 17.6 8.8 8.8 0 0 0 0-17.6", "M12 7.4v5l3.4 2")
     val Store = line("store", "M4 9.2l1.6-5h12.8L20 9.2", "M4 9.2h16V20H4z", "M9.2 20v-6h5.6v6")
+    val Pencil = line("pencil", "M4 20l4.5-1L20 7.5 16.5 4 5 15.5 4 20z", "M14.5 6l3.5 3.5")
     val Note = line("note", "M4.6 4.6h14.8v14.8H4.6z", "M8 9h8", "M8 12.5h8", "M8 16h4")
     val Accessibility = line(
         "accessibility",

@@ -96,8 +96,10 @@ object CostShare {
         kind: ExportRange.Kind,
         onlyTarget: Boolean = true,
         today: java.time.LocalDate = java.time.LocalDate.now(),
+        monthStartDay: Int = com.example.autobook.data.LedgerPeriodStore.read(context),
+        zone: java.time.ZoneId = java.time.ZoneId.systemDefault(),
     ): Int {
-        val span = ExportRange.span(kind, today)
+        val span = ExportRange.span(kind, today, zone, monthStartDay)
         val entities = withContext(Dispatchers.IO) {
             AppDb.get(context).bills().range(span.from, span.to)
         }

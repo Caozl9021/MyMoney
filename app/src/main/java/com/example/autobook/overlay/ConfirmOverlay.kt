@@ -262,7 +262,7 @@ object ConfirmOverlay {
     }
 
     private fun save(app: Context, card: Session, edited: BillDraft) {
-        if (session !== card || card.saving) return
+        if (session !== card || card.saving || card.result != null) return
         // Native back and screen-off consult this same synchronous flag.
         card.saving = true
         card.error = null
@@ -273,7 +273,10 @@ object ConfirmOverlay {
                 card.result = stored
                 card.saving = false
                 card.pickerBackHandler = null
-                if (session === card) rootView?.let { AbHaptic(it).confirm() }
+                if (session === card) {
+                    rootView?.let { AbHaptic(it).confirm() }
+                    if (ConfirmFeedback.closeAfterSave(stored)) dismissOnMain()
+                }
             },
             onError = {
                 card.saving = false

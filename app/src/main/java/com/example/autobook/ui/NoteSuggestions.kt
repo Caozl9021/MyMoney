@@ -11,6 +11,7 @@ import com.example.autobook.data.AppDb
 import com.example.autobook.data.BillEntity
 import com.example.autobook.data.LocalRuleStore
 import com.example.autobook.data.NoteSuggester
+import com.example.autobook.data.LedgerConfig
 import com.example.autobook.data.NoteTemplate
 import com.example.billkit.BillDraft
 import kotlinx.coroutines.Dispatchers
@@ -37,7 +38,7 @@ fun rememberNoteSuggestions(excludeId: Long? = null): (BillDraft) -> List<NoteSu
                 history = history,
                 mealWindows = rules.mealWindows,
                 learningEnabled = rules.learningEnabled,
-                templateNote = NoteTemplate.render(current).ifBlank { null },
+                templateNote = NoteTemplate.render(current, current.noteTemplateSnapshot ?: LedgerConfig.noteTemplate).ifBlank { null },
                 currentNote = current.note,
             )
         }

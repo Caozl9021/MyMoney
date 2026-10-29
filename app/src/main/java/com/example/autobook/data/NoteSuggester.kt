@@ -9,7 +9,7 @@ import java.time.ZoneId
  *
  * 三个来源，按可信度排：
  * 1. 同商户以前写过的备注（常常就是商品名：「黄焖鸡米饭」「美式」）；
- * 2. 商户未知时（手动新建）：同一餐段里常去的「商户·备注」组合，点了顺带填空着的商户/分类/账户；
+ * 2. 商户未知时（手动新建）：同一餐段里常去的「商户·备注」组合，仅将建议文字填入备注；
  * 3. 备注模板的渲染结果（原先就默认填进去的那一句）。
  *
  * 纯函数，不读数据库、不碰 Android；调用方把最近账单传进来。
@@ -18,13 +18,14 @@ object NoteSuggester {
 
     data class Suggestion(
         val note: String,
-        /** 下面四项只在「时段习惯」建议里有值；点击时只填当前为空的字段 */
+        /** 下面四项只在「时段习惯」建议里有值；仅用于标识建议来源，不作为隐式编辑 */
         val merchant: String? = null,
         val category: String? = null,
         val subCategory: String? = null,
         val account: String? = null,
+        val source: String? = null,
     ) {
-        val label: String get() = if (merchant != null && merchant != note) "$merchant · $note" else note
+        val label: String get() = if (source == "商品") "商品 · $note" else if (merchant != null && merchant != note) "$merchant · $note" else note
     }
 
     const val MAX = 6
@@ -43,10 +44,13 @@ object NoteSuggester {
         val current = currentNote?.trim().orEmpty()
         fun add(s: Suggestion) {
             val note = s.note.trim()
-            if (note.isEmpty() || note == current || note.length > 60 || out.size >= MAX) return
-            out.putIfAbsent(s.label, s.copy(note = note))
+            if (note.isEmpty() || note == current || note.codePointCount(0, note.length) > 60 || out.size >= MAX) return
+            out.putIfAbsent(note, s.copy(note = note))
         }
 
+        NoteTemplate.productSuggestion(draft, draft.noteTemplateSnapshot ?: "{商户}")?.let {
+            add(Suggestion(it, source = "商品"))
+        }
         if (learningEnabled) {
             val merchant = RuleLearning.normalizeMerchant(draft.merchant)
             val sameType = history.filter { it.type == draft.type.name && !it.note.isNullOrBlank() }
@@ -79,15 +83,10 @@ object NoteSuggester {
         return out.values.toList()
     }
 
-    /** 点气泡后的结果：备注替换，其余只填空位；返回值连同原值一起交给 UI 做撤销。 */
+    /** 点气泡后的结果：仅替换备注，其余字段不变；返回值连同原值一起交给 UI 做撤销。 */
     data class Fields(val note: String, val merchant: String, val category: String?,
         val subCategory: String?, val account: String?)
 
-    fun apply(fields: Fields, s: Suggestion): Fields = fields.copy(
-        note = s.note,
-        merchant = fields.merchant.ifBlank { s.merchant.orEmpty() },
-        category = fields.category ?: s.category,
-        subCategory = if (fields.category == null) s.subCategory else fields.subCategory,
-        account = fields.account ?: s.account,
-    )
+    /** Suggestions replace only the optional note; metadata is context, never an implicit edit. */
+    fun apply(fields: Fields, s: Suggestion): Fields = fields.copy(note = s.note)
 }

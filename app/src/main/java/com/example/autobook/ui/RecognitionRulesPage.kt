@@ -40,7 +40,6 @@ import com.example.autobook.ui.design.AbType
 import com.example.autobook.ui.design.CapsuleChip
 import com.example.autobook.ui.design.EmptyState
 import com.example.autobook.ui.design.GroupFooter
-import com.example.autobook.ui.design.GroupHeader
 import com.example.autobook.ui.design.IconBadge
 import com.example.autobook.ui.design.InsetDivider
 import com.example.autobook.ui.design.InsetGroup
@@ -59,13 +58,17 @@ private enum class AppFilter(val label: String) {
     ALL("全部"), ATTENTION("待处理"), READY("可用"),
 }
 
-/**
- * 「识别与规则」：把原先分散的「支持的应用」与「本地规则」合并成唯一入口。
- *
- * 六组：应用通道 / 学习记忆 / 通知模板与样本 / 规则文件 / 餐段 / 识别统计。
- * 通道结论一律来自 [appChannelState]，与首页健康卡共用同一个 [CaptureHealthInput]，
- * 本文件不读任何系统权限。
- */
+/** 自动记账下的六个独立设置页，复用同一套规则状态与操作。 */
+internal enum class RecognitionRuleSection(val title: String) {
+    APPS("应用与通道"),
+    LEARNING("学习记忆"),
+    TEMPLATES("通知模板"),
+    FILES("规则文件"),
+    MEALS("餐段设置"),
+    STATISTICS("识别统计"),
+}
+
+/** 通道结论来自 [appChannelState]，与首页健康卡共用 [CaptureHealthInput]。 */
 @Composable
 internal fun RecognitionRulesPage(
     whitelist: Set<String>,
@@ -74,6 +77,7 @@ internal fun RecognitionRulesPage(
     onToggleApp: (String) -> Unit,
     onAddApp: (String) -> Unit,
     onOpenDebug: () -> Unit,
+    section: RecognitionRuleSection = RecognitionRuleSection.APPS,
 ) {
     val p = LocalAbPalette.current
     val ruleState by LocalRuleStore.state.collectAsStateWithLifecycle()
@@ -135,148 +139,21 @@ internal fun RecognitionRulesPage(
         if (error == null) newPackage = ""
     }
 
-    SubPageScaffold(title = "识别与规则", onBack = onBack) { padding ->
-        LazyColumn(
+    SubPageScaffold(title = section.title, onBack = onBack) { padding ->
+        com.example.autobook.ui.design.SectionLazyColumn(
             Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 start = AbSpacing.page, end = AbSpacing.page,
-                top = padding.calculateTopPadding() + AbSpacing.s,
-                bottom = padding.calculateBottomPadding() + AbSpacing.xl,
+                top = padding.calculateTopPadding(),
+                bottom = padding.calculateBottomPadding(),
             ),
-            verticalArrangement = Arrangement.spacedBy(AbSpacing.xs),
+            verticalArrangement = Arrangement.spacedBy(com.example.autobook.ui.design.AbCardDensity.gap),
         ) {
+            rulesSections.message?.let { message ->
+                item { InsetGroup { ListRow(title = message) } }
+            }
             // ------------------------------------------------------------ 应用通道
-            item { GroupHeader("应用通道") }
-            item {
-                GroupFooter(
-                    if (attentionApps > 0) "$activeApps 个应用可用 · $attentionApps 个需要处理"
-                    else "$activeApps 个应用可用",
-                )
-            }
-            item {
-                InsetGroup {
-                    Row(
-                        Modifier.fillMaxWidth().padding(horizontal = AbSpacing.l, vertical = AbSpacing.s),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
-                    ) {
-                        IconBadge(AbIcons.Search, p.tertiaryLabel, size = 26.dp)
-                        AbTextField(
-                            value = appQuery,
-                            onValueChange = { appQuery = it },
-                            modifier = Modifier.weight(1f),
-                            placeholder = "搜索应用或包名",
-                        )
-                        if (appQuery.isNotEmpty()) {
-                            androidx.compose.material3.TextButton(onClick = { appQuery = "" }) {
-                                Text("清除", color = p.secondaryLabel)
-                            }
-                        }
-                    }
-                }
-            }
-            item {
-                Row(
-                    Modifier.fillMaxWidth().padding(vertical = AbSpacing.xs),
-                    horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
-                ) {
-                    AppFilter.entries.forEach { filter ->
-                        CapsuleChip(filter.label, appFilter == filter, { appFilter = filter }, Modifier.weight(1f))
-                    }
-                }
-            }
-            if (visibleApps.isEmpty()) {
-                item { EmptyState(AbIcons.Search, "没有匹配的应用", "换个关键词，或把筛选切回「全部」。") }
-            }
-            items(visibleApps, key = { it.packageName }) { state ->
-                val expanded = expandedApp == state.packageName
-                InsetGroup {
-                    ListRow(
-                        title = appLabel(state.packageName),
-                        subtitle = "${state.packageName}${recentByPackage[state.packageName]?.let { " · 最近 $it" }.orEmpty()}",
-                        // 真机教训：两个「XX未生效」长徽标吃掉近半行宽，支付宝与京东的包名会从中间折断。
-                        // 徽标收成「图标 + 通道名」，状态由图标与底色表达；完整包名在展开详情里给。
-                        subtitleMaxLines = 1,
-                        leading = { IconBadge(if (state.anyActive) AbIcons.Check else AbIcons.Close,
-                            if (state.anyActive) p.green else p.tertiaryLabel, size = 26.dp) },
-                        trailing = {
-                            Row(horizontalArrangement = Arrangement.spacedBy(AbSpacing.xs),
-                                verticalAlignment = Alignment.CenterVertically) {
-                                ChannelChip("通知", state.notification.active)
-                                ChannelChip("页面", state.page.active)
-                            }
-                        },
-                        chevron = true,
-                        onClick = { expandedApp = if (expanded) null else state.packageName },
-                    )
-                    if (expanded) {
-                        InsetDivider()
-                        ChannelDetail(state, onToggleApp)
-                    }
-                }
-            }
-            item {
-                InsetGroup {
-                    Row(
-                        Modifier.fillMaxWidth().padding(horizontal = AbSpacing.l, vertical = AbSpacing.s),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
-                    ) {
-                        AbTextField(
-                            value = newPackage,
-                            onValueChange = { newPackage = it; addError = null },
-                            modifier = Modifier.weight(1f),
-                            placeholder = "com.example.app",
-                            onDone = { submit() },
-                        )
-                        PrimaryButton("添加", { submit() }, Modifier.width(88.dp))
-                    }
-                }
-            }
-            item {
-                if (addError != null) GroupFooter(addError!!)
-                else GroupFooter(
-                    "只按包名管理，不读取已安装应用列表，也不读取运行中的进程。" +
-                        "分身或宿主包（例如某些 ROM 上的支付宝）在预设里看不到时，在这里直接填包名。",
-                )
-            }
-
-            // ------------------------------------------------------------ 学习记忆
-            item { GroupHeader("学习记忆") }
-            item {
-                InsetGroup {
-                    ListRow(
-                        title = "使用本地学习",
-                        subtitle = "手改后立即记住；同一结果确认 ${LearningRules.PROMOTION_THRESHOLD} 次后记住",
-                        trailing = { AbSwitch(ruleState.learningEnabled) { LocalRuleStore.setLearningEnabled(it) } },
-                    )
-                    InsetDivider()
-                    ListRow(
-                        title = "已学习 ${ruleState.learned.size} 条",
-                        subtitle = if (showLearned) "收起" else "查看、检索与删除",
-                        chevron = true,
-                        onClick = { showLearned = !showLearned },
-                    )
-                    InsetDivider()
-                    ListRow(
-                        title = "待生效 ${effectivePending.size} 条",
-                        subtitle = if (showPending) "收起" else "同一结果累计到 ${LearningRules.PROMOTION_THRESHOLD} 次才生效",
-                        chevron = true,
-                        onClick = { showPending = !showPending },
-                    )
-                    InsetDivider()
-                    ListRow(
-                        title = "清空全部学习记忆",
-                        subtitle = "已生效 ${ruleState.learned.size} 条与待生效 ${effectivePending.size} 条一并清除",
-                        destructive = true,
-                        onClick = { confirmClearLearned = true },
-                    )
-                }
-            }
-            if (!ruleState.learningEnabled) {
-                item { GroupFooter("本地学习已关闭：下面仍会显示已记住的内容，但不会用于推荐，也不会继续累计。") }
-            }
-            if (showLearned) {
+            if (section == RecognitionRuleSection.APPS) {
                 item {
                     InsetGroup {
                         Row(
@@ -285,138 +162,248 @@ internal fun RecognitionRulesPage(
                             horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
                         ) {
                             IconBadge(AbIcons.Search, p.tertiaryLabel, size = 26.dp)
-                            AbTextField(learningQuery, { learningQuery = it }, Modifier.weight(1f), "搜索商户、分类或账户")
+                            AbTextField(
+                                value = appQuery,
+                                onValueChange = { appQuery = it },
+                                modifier = Modifier.weight(1f),
+                                placeholder = "搜索应用或包名",
+                            )
+                            if (appQuery.isNotEmpty()) {
+                                androidx.compose.material3.TextButton(onClick = { appQuery = "" }) {
+                                    Text("清除", color = p.secondaryLabel)
+                                }
+                            }
                         }
                     }
                 }
                 item {
-                    Column(Modifier.padding(vertical = AbSpacing.xs), verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-                            BillType.entries.forEach { type ->
-                                CapsuleChip(billTypeLabel(type), learningType == type, {
-                                    learningType = if (learningType == type) null else type
-                                }, Modifier.weight(1f))
-                            }
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-                            LearningField.entries.forEach { field ->
-                                CapsuleChip(learningFieldLabel(field), learningField == field, {
-                                    learningField = field
-                                }, Modifier.weight(1f))
-                            }
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-                            listOf(LearningSourceOption.MANUAL, LearningSourceOption.LEARNED).forEach { option ->
-                                CapsuleChip(option.label, learningSource == option.source, {
-                                    learningSource = if (learningSource == option.source) null else option.source
-                                }, Modifier.weight(1f))
-                            }
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = AbSpacing.xs),
+                        horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
+                    ) {
+                        AppFilter.entries.forEach { filter ->
+                            CapsuleChip(filter.label, appFilter == filter, { appFilter = filter }, Modifier.weight(1f))
                         }
                     }
                 }
-                if (learnedRows.isEmpty()) {
-                    item {
-                        EmptyState(
-                            AbIcons.Filter,
-                            if (ruleState.learned.isEmpty()) "还没有学习记忆" else "没有匹配的记忆",
-                            if (ruleState.learned.isEmpty())
-                                "保存账单时改过分类或账户，这里就会出现记住的偏好。"
-                            else "换个关键词，或把筛选切回全部。",
-                        )
-                    }
+                if (visibleApps.isEmpty()) {
+                    item { EmptyState(AbIcons.Search, "没有匹配的应用", "换个关键词，或把筛选切回「全部」。") }
                 }
-                items(learnedRows, key = { it.id }) { rule ->
+                items(visibleApps, key = { it.packageName }) { state ->
+                    val expanded = expandedApp == state.packageName
                     InsetGroup {
                         ListRow(
-                            title = rule.merchant,
-                            subtitle = listOfNotNull(
-                                billTypeLabel(rule.type), rule.category, rule.subCategory,
-                                rule.account, rule.method, rule.source.label,
-                                "命中 ${rule.hits} 次", learnedDate(rule.updatedAt),
-                            ).joinToString(" · "),
+                            title = appLabel(state.packageName),
+                            subtitle = "${state.packageName}${recentByPackage[state.packageName]?.let { " · 最近 $it" }.orEmpty()}",
+                            // 真机教训：两个「XX未生效」长徽标吃掉近半行宽，支付宝与京东的包名会从中间折断。
+                            // 徽标收成「图标 + 通道名」，状态由图标与底色表达；完整包名在展开详情里给。
+                            subtitleMaxLines = 1,
+                            leading = { IconBadge(if (state.anyActive) AbIcons.Check else AbIcons.Close,
+                                if (state.anyActive) p.green else p.tertiaryLabel, size = 26.dp) },
                             trailing = {
-                                androidx.compose.material3.TextButton(onClick = { pendingDelete = rule.id }) {
-                                    Text("删除", color = p.red)
+                                Row(horizontalArrangement = Arrangement.spacedBy(AbSpacing.xs),
+                                    verticalAlignment = Alignment.CenterVertically) {
+                                    ChannelChip("通知", state.notification.active)
+                                    // 页面徽标只在该模式下存在页面通道时才画：root 模式没有页面采集，
+                                    // 画一个永远灰着的徽标等于告诉用户"功能坏了"。
+                                    state.page?.let { ChannelChip("页面", it.active) }
+                                    state.hook?.let { ChannelChip("LSP", it.active) }
                                 }
                             },
+                            chevron = true,
+                            onClick = { expandedApp = if (expanded) null else state.packageName },
                         )
-                    }
-                }
-                item { GroupFooter("删除后这条偏好立即失效，要重新累计确认次数。账单本身不受影响。") }
-            }
-            if (showPending) {
-                if (effectivePending.isEmpty()) {
-                    item {
-                        GroupFooter(
-                            "暂无待生效的确认。同一店铺改同一个结果累计到 " +
-                                "${LearningRules.PROMOTION_THRESHOLD} 次才会变成记忆，第 1、2 次会出现在这里。",
-                        )
-                    }
-                }
-                items(effectivePending, key = { it.key }) { pending ->
-                    InsetGroup {
-                        ListRow(
-                            title = LearningRules.pendingLabels(pending).joinToString(" · "),
-                            subtitle = LearningRules.progress(pending),
-                            trailing = {
-                                androidx.compose.material3.TextButton(onClick = { LocalRuleStore.deletePending(pending.key) }) {
-                                    Text("删除", color = p.red)
-                                }
-                            },
-                        )
-                    }
-                }
-                if (effectivePending.isNotEmpty()) {
-                    item {
-                        InsetGroup {
-                            ListRow(title = "清除全部待生效确认", subtitle = "不清除已生效的记忆",
-                                destructive = true, onClick = { LocalRuleStore.clearPending() })
+                        if (expanded) {
+                            InsetDivider()
+                            ChannelDetail(state, onToggleApp)
                         }
                     }
-                    item { GroupFooter("清除只影响还没生效的候选；已经记住的偏好保持不变。") }
                 }
+                item {
+                    InsetGroup {
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = AbSpacing.l, vertical = AbSpacing.s),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
+                        ) {
+                            AbTextField(
+                                value = newPackage,
+                                onValueChange = { newPackage = it; addError = null },
+                                modifier = Modifier.weight(1f),
+                                placeholder = "com.example.app",
+                                onDone = { submit() },
+                            )
+                            PrimaryButton("添加", { submit() }, Modifier.width(88.dp))
+                        }
+                    }
+                }
+                item {
+                    if (addError != null) GroupFooter(addError!!)
+                    else Unit
+                }
+
             }
 
-            // ------------------------------------------------------------ 通知模板与样本
-            item { GroupHeader("通知模板与样本") }
-            item {
-                InsetGroup {
-                    ListRow(
-                        title = "支付宝交易提醒",
-                        subtitle = "模板 alipay-trade-expense-v1 · 仅限已验证的渠道与「交易提醒」标题",
-                        leading = { IconBadge(AbIcons.Note, p.accent, size = 26.dp) },
-                    )
-                    val untemplated = appStates.filter { it.whitelisted && !it.hasTemplate }
-                    if (untemplated.isNotEmpty()) {
+            // ------------------------------------------------------------ 学习记忆
+            if (section == RecognitionRuleSection.LEARNING) {
+                item {
+                    InsetGroup {
+                        ListRow(
+                            title = "使用本地学习",
+                            subtitle = "手改后立即记住；同一结果确认 ${LearningRules.PROMOTION_THRESHOLD} 次后记住",
+                            trailing = { AbSwitch(ruleState.learningEnabled) { LocalRuleStore.setLearningEnabled(it) } },
+                        )
                         InsetDivider()
                         ListRow(
-                            title = "尚无已验证模板",
-                            subtitle = untemplated.joinToString("、") { appLabel(it.packageName) } +
-                                " · 这些应用的通知不会自动记账，页面辅助仍可用",
-                            leading = { IconBadge(AbIcons.Close, p.tertiaryLabel, size = 26.dp) },
+                            title = "已学习 ${ruleState.learned.size} 条",
+                            subtitle = if (showLearned) "收起" else "查看、检索与删除",
+                            chevron = true,
+                            onClick = { showLearned = !showLearned },
+                        )
+                        InsetDivider()
+                        ListRow(
+                            title = "待生效 ${effectivePending.size} 条",
+                            subtitle = if (showPending) "收起" else "同一结果累计到 ${LearningRules.PROMOTION_THRESHOLD} 次才生效",
+                            chevron = true,
+                            onClick = { showPending = !showPending },
+                        )
+                        InsetDivider()
+                        ListRow(
+                            title = "清空全部学习记忆",
+                            subtitle = "已生效 ${ruleState.learned.size} 条与待生效 ${effectivePending.size} 条一并清除",
+                            destructive = true,
+                            onClick = { confirmClearLearned = true },
                         )
                     }
-                    InsetDivider()
-                    ListRow(
-                        title = "打开识别排查",
-                        subtitle = "最近事件、脱敏样本与导出",
-                        leading = { IconBadge(AbIcons.Terminal, p.accent, size = 26.dp) },
-                        chevron = true,
-                        onClick = onOpenDebug,
-                    )
                 }
+                if (showLearned) {
+                    item {
+                        InsetGroup {
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = AbSpacing.l, vertical = AbSpacing.s),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
+                            ) {
+                                IconBadge(AbIcons.Search, p.tertiaryLabel, size = 26.dp)
+                                AbTextField(learningQuery, { learningQuery = it }, Modifier.weight(1f), "搜索商户、分类或账户")
+                            }
+                        }
+                    }
+                    item {
+                        Column(Modifier.padding(vertical = AbSpacing.xs), verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
+                                BillType.entries.forEach { type ->
+                                    CapsuleChip(billTypeLabel(type), learningType == type, {
+                                        learningType = if (learningType == type) null else type
+                                    }, Modifier.weight(1f))
+                                }
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
+                                LearningField.entries.forEach { field ->
+                                    CapsuleChip(learningFieldLabel(field), learningField == field, {
+                                        learningField = field
+                                    }, Modifier.weight(1f))
+                                }
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
+                                listOf(LearningSourceOption.MANUAL, LearningSourceOption.LEARNED).forEach { option ->
+                                    CapsuleChip(option.label, learningSource == option.source, {
+                                        learningSource = if (learningSource == option.source) null else option.source
+                                    }, Modifier.weight(1f))
+                                }
+                            }
+                        }
+                    }
+                    if (learnedRows.isEmpty()) {
+                        item {
+                            EmptyState(
+                                AbIcons.Filter,
+                                if (ruleState.learned.isEmpty()) "还没有学习记忆" else "没有匹配的记忆",
+                                if (ruleState.learned.isEmpty())
+                                    "保存账单时改过分类或账户，这里就会出现记住的偏好。"
+                                else "换个关键词，或把筛选切回全部。",
+                            )
+                        }
+                    }
+                    items(learnedRows, key = { it.id }) { rule ->
+                        InsetGroup {
+                            ListRow(
+                                title = rule.merchant,
+                                subtitle = listOfNotNull(
+                                    billTypeLabel(rule.type), rule.category, rule.subCategory,
+                                    rule.account, rule.method, rule.source.label,
+                                    "命中 ${rule.hits} 次", learnedDate(rule.updatedAt),
+                                ).joinToString(" · "),
+                                trailing = {
+                                    androidx.compose.material3.TextButton(onClick = { pendingDelete = rule.id }) {
+                                        Text("删除", color = p.red)
+                                    }
+                                },
+                            )
+                        }
+                    }
+                }
+                if (showPending) {
+                    items(effectivePending, key = { it.key }) { pending ->
+                        InsetGroup {
+                            ListRow(
+                                title = LearningRules.pendingLabels(pending).joinToString(" · "),
+                                subtitle = LearningRules.progress(pending),
+                                trailing = {
+                                    androidx.compose.material3.TextButton(onClick = { LocalRuleStore.deletePending(pending.key) }) {
+                                        Text("删除", color = p.red)
+                                    }
+                                },
+                            )
+                        }
+                    }
+                    if (effectivePending.isNotEmpty()) {
+                        item {
+                            InsetGroup {
+                                ListRow(title = "清除全部待生效确认", subtitle = "不清除已生效的记忆",
+                                    destructive = true, onClick = { LocalRuleStore.clearPending() })
+                            }
+                        }
+                    }
+                }
+
             }
-            item {
-                GroupFooter(
-                    "通知只在命中已验证模板时生成草稿。模板范围外的新通知类型需要真实样本验证后才会加入；" +
-                        "${NotificationParser.TEMPLATE_PACKAGES.size} 个应用有模板，微信、银行等仍待适配。",
-                )
+
+            // ------------------------------------------------------------ 通知模板
+            if (section == RecognitionRuleSection.TEMPLATES) {
+                item {
+                    InsetGroup {
+                        ListRow(
+                            title = "支付宝交易提醒",
+                            subtitle = "模板 alipay-trade-expense-v1 · 仅限已验证的渠道与「交易提醒」标题",
+                            leading = { IconBadge(AbIcons.Note, p.accent, size = 26.dp) },
+                        )
+                        val untemplated = appStates.filter { it.whitelisted && !it.hasTemplate }
+                        if (untemplated.isNotEmpty()) {
+                            InsetDivider()
+                            ListRow(
+                                title = "尚无已验证模板",
+                                subtitle = untemplated.joinToString("、") { appLabel(it.packageName) } +
+                                    " · 尚无单独验证的通知模板，通知仍可能由本地规则识别",
+                                leading = { IconBadge(AbIcons.Close, p.tertiaryLabel, size = 26.dp) },
+                            )
+                        }
+                        InsetDivider()
+                        ListRow(
+                            title = "通知诊断与样本",
+                            subtitle = "最近事件、脱敏样本与导出",
+                            leading = { IconBadge(AbIcons.Terminal, p.accent, size = 26.dp) },
+                            chevron = true,
+                            onClick = onOpenDebug,
+                        )
+                    }
+                }
             }
 
             // ------------------------------------------------------------ 规则文件 / 餐段 / 统计
-            rulesFileSection(rulesSections)
-            mealSection(rulesSections)
-            statisticsSection(rulesSections)
+            if (section == RecognitionRuleSection.FILES) rulesFileSection(rulesSections)
+            if (section == RecognitionRuleSection.MEALS) mealSection(rulesSections)
+            if (section == RecognitionRuleSection.STATISTICS) statisticsSection(rulesSections)
         }
     }
 
@@ -481,17 +468,14 @@ private fun ChannelDetail(state: AppChannelState, onToggleApp: (String) -> Unit)
         verticalArrangement = Arrangement.spacedBy(AbSpacing.s),
     ) {
         ChannelLine("通知", state.notification)
-        ChannelLine("页面", state.page)
-        if (!state.hasTemplate) {
-            Text(
-                "该应用没有已验证的交易通知模板，通知通道即使全开也不会自动记账。",
-                style = AbType.footnote, color = p.secondaryLabel,
-            )
-        }
+        state.page?.let { ChannelLine("页面", it) }
+        state.hook?.let { ChannelLine("LSPosed", it) }
+        Text("可用表示识别方式已就绪，具体交易仍需匹配本地规则。",
+            style = AbType.footnote, color = p.secondaryLabel)
         ListRow(
             title = if (state.whitelisted) "从清单移除" else "加入清单",
             subtitle = if (state.whitelisted) "移除后不再识别该应用，已生成的待确认不受影响"
-            else "加入后按上面两条通道的条件识别",
+            else "加入后按上方可用方式识别",
             destructive = state.whitelisted,
             onClick = { onToggleApp(state.packageName) },
         )

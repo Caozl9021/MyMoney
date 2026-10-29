@@ -11,9 +11,12 @@ import androidx.compose.ui.platform.LocalContext
 object Appearance {
     enum class Theme { SYSTEM, LIGHT, DARK }
     enum class TextSize(val multiplier: Float) { STANDARD(1f), LARGE(1.15f), EXTRA_LARGE(1.3f) }
+    const val PREDICTIVE_BACK = "predictive_back"
+    const val DEFAULT_PREDICTIVE_BACK = false
     fun prefs(context: Context) = context.getSharedPreferences("appearance", Context.MODE_PRIVATE)
 }
 val LocalReduceMotion = compositionLocalOf { false }
+val LocalPredictiveBackEnabled = compositionLocalOf { Appearance.DEFAULT_PREDICTIVE_BACK }
 
 @Composable
 fun appearanceRevision(): Int {

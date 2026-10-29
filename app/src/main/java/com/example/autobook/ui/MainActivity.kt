@@ -70,6 +70,9 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         foregroundRefreshRate.resume()
+        val capture = CaptureModeManager.state.value
+        if (capture.mode == com.example.autobook.data.CaptureMode.ROOT && capture.hookEnabled)
+            com.example.autobook.capture.HookTargetMonitor.detect(this)
     }
 
     override fun onPause() {
@@ -293,7 +296,18 @@ private fun AppContent(tabState: MutableIntState, requestAdd: Int, onEditorVisib
             if (detailsOpen) detailsOpen = false
         }
     }
-    fun openDetails() { detailAddRequest = 0; detailsOpen = true }
+    val backPixels = RememberBackPixels()
+    var detailPreview by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    val navigationScope = androidx.compose.runtime.rememberCoroutineScope()
+    var openingDetails by remember { mutableStateOf(false) }
+    fun openDetails() {
+        if (openingDetails || detailsOpen) return
+        openingDetails = true
+        navigationScope.launch {
+            try { detailPreview = backPixels.snapshot(); detailAddRequest = 0; detailsOpen = true }
+            finally { openingDetails = false }
+        }
+    }
     val tabStates = rememberSaveableStateHolder()
     var captureSettingsDestination by androidx.compose.runtime.saveable.rememberSaveable {
         mutableStateOf<CaptureSettingsDestination?>(null)
@@ -304,13 +318,14 @@ private fun AppContent(tabState: MutableIntState, requestAdd: Int, onEditorVisib
         .collectAsStateWithLifecycle(initialValue = emptyList())
 
     // 返回 / 侧滑：非首页 → 回首页；已在首页 → 交给系统退出（符合 Android 惯例）
-    BackHandler(enabled = captureState.configured && tab != 0) { tabState.intValue = 0 }
+    ActiveBackHandler(enabled = captureState.configured && tab != 0) { tabState.intValue = 0 }
 
     if (!captureState.configured) {
         CaptureModeScreen()
         return
     }
 
+    BackSurface(enabled = detailsOpen, onBack = { detailsOpen = false }, routeKey = detailsOpen, preview = detailPreview, pixels = backPixels) {
     Box(Modifier.fillMaxSize().background(p.pageBg)) {
         AnimatedContent(
             targetState = tab,
@@ -323,12 +338,12 @@ private fun AppContent(tabState: MutableIntState, requestAdd: Int, onEditorVisib
             label = "tabSwitch",
             modifier = Modifier.fillMaxSize(),
         ) { current ->
+            androidx.compose.runtime.CompositionLocalProvider(LocalBackActive provides (current == tab)) {
             tabStates.SaveableStateProvider(current) {
                 when (current) {
                     0 -> HomeScreen(
                         bills = bills,
                         onEditorVisibilityChanged = { editorChanged(0, it) },
-                        onSeeAll = { openDetails() },
                         onOpenAssets = { tabState.intValue = 2 },
                         onOpenSettings = { destination -> captureSettingsDestination = destination; tabState.intValue = 3 },
                     )
@@ -336,13 +351,14 @@ private fun AppContent(tabState: MutableIntState, requestAdd: Int, onEditorVisib
                     2 -> AssetsScreen(onBack = { tabState.intValue = 0 }, isTab = true,
                         onSubpageVisibilityChanged = { editorChanged(2, it) })
                     else -> SettingsScreen(destination = captureSettingsDestination, onDestinationHandled = { captureSettingsDestination = null },
-                        onEditorVisibilityChanged = { editorChanged(3, it) }, onOpenAssets = { tabState.intValue = 2 })
+                        onEditorVisibilityChanged = { editorChanged(3, it) }, onReturnToOrigin = { tabState.intValue = 0 })
                 }
             }
         }
+        }
         if (detailsOpen) {
-            BackHandler { detailsOpen = false }
             BillsScreen(requestAdd = detailAddRequest, onBack = { detailsOpen = false })
         }
+    }
     }
 }

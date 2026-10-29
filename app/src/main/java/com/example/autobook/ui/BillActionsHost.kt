@@ -1,5 +1,7 @@
 package com.example.autobook.ui
 
+import kotlinx.coroutines.launch
+
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -42,6 +44,7 @@ fun BillActionsHost(
     billId: Long,
     onClose: () -> Unit,
     onEditorVisibilityChanged: (Boolean) -> Unit = {},
+    sourcePreview: androidx.compose.ui.graphics.ImageBitmap? = null,
 ) {
     val app = LocalContext.current.applicationContext
     val dao = remember(app) { AppDb.get(app).bills() }
@@ -58,6 +61,8 @@ fun BillActionsHost(
     var recognitionExpanded by rememberSaveable(billId) { mutableStateOf(false) }
     var editing by rememberSaveable(billId) { mutableStateOf(false) }
     var deleting by remember(billId) { mutableStateOf(false) }
+    var sharing by remember(billId) { mutableStateOf(false) }
+    var shareMessage by remember(billId) { mutableStateOf<String?>(null) }
     var deleteError by remember(billId) { mutableStateOf<String?>(null) }
     var linkConfirm by remember(billId) { mutableStateOf(false) }
     var linking by remember(billId) { mutableStateOf(false) }
@@ -86,15 +91,26 @@ fun BillActionsHost(
         if (detail) detail = false else close()
     }
     val bill = read.bill
-    BackHandler(enabled = !editing || bill == null) { back() }
+    val backPixels = RememberBackPixels()
+    val navigationScope = rememberCoroutineScope()
+    var detailPreview by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    var openingDetail by remember { mutableStateOf(false) }
+    fun openDetail() {
+        if (openingDetail || detail) return
+        openingDetail = true
+        navigationScope.launch {
+            try { detailPreview = backPixels.snapshot(); detail = true } finally { openingDetail = false }
+        }
+    }
+    BackSurface(enabled = !editing || bill == null, onBack = ::back, routeKey = listOf(billId, detail, editing), preview = if (detail) detailPreview else sourcePreview, pixels = backPixels) {
     Box(Modifier.fillMaxSize().pointerInput(billId) { detectTapGestures { } }) {
         if (!editing || bill == null) {
-            SubPageScaffold(title = if (detail) "账单详情" else "账单操作", onBack = { back() }) { padding ->
-                LazyColumn(
+            SubPageScaffold(title = if (detail) "账单详情" else "账单操作", onBack = { back() }, reserveDock = false) { padding ->
+                com.example.autobook.ui.design.SectionLazyColumn(
                     state = if (detail) detailScroll else summaryScroll,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(start = AbSpacing.page, end = AbSpacing.page,
-                        bottom = padding.calculateBottomPadding()),
+                        top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding()),
                     verticalArrangement = Arrangement.spacedBy(AbSpacing.m),
                 ) {
                     when {
@@ -118,13 +134,12 @@ fun BillActionsHost(
                                     BillField("金额", formatAmount(bill.priceCents))
                                     BillField("类型", billTypeLabel(bill.type))
                                     BillField("账单时间", billTime(bill.timeMillis))
-                                    BillField("商户", bill.merchant)
+                                    bill.note?.takeIf { it.isNotBlank() }?.let { BillField("备注", it) }
                                     BillField("分类", bill.category)
                                     BillField("二级分类", bill.subCategory)
                                     BillField("账户", assetAccounts.firstOrNull { it.id == bill.accountId }?.name ?: bill.account)
-                                    if (bill.type == "TRANSFER") BillField("转入账户", assetAccounts.firstOrNull { it.id == bill.transferAccountId }?.name ?: "未补全")
+                                    if (bill.type == "TRANSFER") BillField("转入账户", assetAccounts.firstOrNull { it.id == bill.transferAccountId }?.name ?: bill.transferAccount ?: "未补全")
                                     BillField("余额联动", if (bill.assetLinked) "已计入账户余额" else "未计入余额；历史账单不会自动重复扣减")
-                                    BillField("备注", bill.note)
                                 }
                             }
                             item("source") {
@@ -142,6 +157,7 @@ fun BillActionsHost(
                                             style = AbType.footnote, color = p.accent) })
                                     if (recognitionExpanded) {
                                         InsetDivider()
+                                        BillField("商户", bill.merchant)
                                         BillField("来源包名", bill.sourcePkg)
                                         BillField("识别策略 / 记账方式", bill.strategy)
                                         BillField("本地创建时间", billTime(bill.createdAt))
@@ -157,17 +173,16 @@ fun BillActionsHost(
                                 InsetGroup {
                                     Column(Modifier.fillMaxWidth().padding(AbSpacing.l),
                                         verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-                                        Text(formatAmount(bill.priceCents), style = AbType.amountEntry, color = p.label,
+                                        Text(formatAmount(bill.priceCents), style = AbType.amountEntry, color = amountTint(p, bill.type),
                                             modifier = Modifier.onGloballyPositioned { amountBounds = it.boundsInRoot() })
                                         Text(billTypeLabel(bill.type), style = AbType.headline, color = p.secondaryLabel)
                                     }
-                                    BillField("商户", bill.merchant)
+                                    bill.note?.takeIf { it.isNotBlank() }?.let { BillField("备注", it) }
                                     BillField("账单时间", billTime(bill.timeMillis))
                                     BillField("分类", bill.category)
                                     BillField("账户", assetAccounts.firstOrNull { it.id == bill.accountId }?.name ?: bill.account)
-                                    if (bill.type == "TRANSFER") BillField("转入账户", assetAccounts.firstOrNull { it.id == bill.transferAccountId }?.name ?: "未补全")
+                                    if (bill.type == "TRANSFER") BillField("转入账户", assetAccounts.firstOrNull { it.id == bill.transferAccountId }?.name ?: bill.transferAccount ?: "未补全")
                                     BillField("余额联动", if (bill.assetLinked) "已计入账户余额" else "未计入余额；历史账单不会自动重复扣减")
-                                    BillField("备注", bill.note)
                                 }
                             }
                             item("actions") {
@@ -183,7 +198,7 @@ fun BillActionsHost(
                                         subtitle = "仅在当前余额尚未包含这笔账单时使用", chevron = true,
                                         onClick = if (deleting || linking) null else { { if (bill.type == "TRANSFER") editing = true else linkConfirm = true } })
                                     ListRow(title = "详情", chevron = true, dividerAbove = true,
-                                        onClick = if (deleting) null else { { detail = true } })
+                                        onClick = if (deleting) null else { { openDetail() } })
                                     InsetDivider()
                                     Column(Modifier.fillMaxWidth().padding(AbSpacing.l),
                                         verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
@@ -200,6 +215,25 @@ fun BillActionsHost(
                                     }
                                 }
                             }
+                        }
+                    }
+                    if (bill != null && bill.type in listOf("EXPENSE", "INCOME")) item("share") {
+                        InsetGroup {
+                            ListRow(title = if (sharing) "正在启动分享…" else "分享至 iCost", subtitle = shareMessage,
+                                onClick = if (sharing) null else { {
+                                    sharing = true; shareMessage = null
+                                    navigationScope.launch {
+                                        try {
+                                            val current = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { dao.byId(billId) }
+                                                ?: error("账单已不存在，无法分享")
+                                            val launched = com.example.autobook.export.CostShare.shareBills(app, listOf(BillWriter.toDraft(current))) != null
+                                            shareMessage = if (launched) "已发起分享，请在目标 App 确认导入" else "分享未启动，可重试"
+                                            current.recognitionId?.let { com.example.autobook.data.RecognitionStore.markShare(it, launched) }
+                                        } catch (failure: Exception) {
+                                            shareMessage = failure.message ?: "分享失败，可重试"
+                                        } finally { sharing = false }
+                                    }
+                                } })
                         }
                     }
                     if (deleteError != null) item("delete-error") {
@@ -225,10 +259,11 @@ fun BillActionsHost(
         }
         parentId?.let { id -> BillActionsHost(id, onClose = { parentId = null }) }
         if (editing && bill != null) {
-            if (bill.type == "TRANSFER") AssetTransferScreen(original = bill, onBack = { editing = false; detail = false })
+            if (bill.type == "TRANSFER") AssetTransferScreen(original = bill, onBack = { editing = false })
             else BillEditorDialog(original = bill, newSource = bill.sourcePkg, newTime = bill.timeMillis,
-                sourceAmountBounds = amountBounds, onClose = { editing = false; detail = false })
+                sourceAmountBounds = amountBounds, onClose = { editing = false })
         }
+    }
     }
 }
 
@@ -251,7 +286,7 @@ fun BillUndoStack() {
                         }
                     }) { Text("撤销") }
                 }, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
-                    Text("已删除 ${item.bill.merchant?.takeIf { it.isNotBlank() } ?: formatAmount(item.bill.priceCents)}")
+                    Text("已删除 ${item.bill.note?.takeIf { it.isNotBlank() } ?: item.bill.merchant?.takeIf { it.isNotBlank() } ?: formatAmount(item.bill.priceCents)}")
                 }
             }
         }

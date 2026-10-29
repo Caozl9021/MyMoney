@@ -15,7 +15,7 @@ package com.example.autobook.data
  */
 object Backup {
 
-    const val FORMAT = 4
+    const val FORMAT = 8
     const val KIND = "AutoBookBackup"
 
     data class Bill(
@@ -41,6 +41,11 @@ object Backup {
         val assetKey: String = "",
         val transferFeeCents: Long = 0,
         val feeParentKey: String? = null,
+        val transferAccount: String? = null,
+        val productName: String? = null,
+        val productSource: String? = null,
+        val noteOrigin: String? = null,
+        val noteTemplateSnapshot: String? = null,
     )
 
     data class Ledger(
@@ -53,13 +58,13 @@ object Backup {
         val hasIncome: Boolean = true,
         val hasAccounts: Boolean = true,
         val hasNoteTemplate: Boolean = true,
+        val monthStartDay: Int? = null,
     )
 
     /** 只备份"用户重新配起来很烦"的开关；识别开不开这类不备份，恢复后由用户自己决定 */
     data class SettingsSnapshot(
         val whitelist: List<String>,
         val minIntervalMs: Long,
-        val ocrFallback: Boolean,
         val rootMode: Boolean,
     )
 
@@ -71,6 +76,7 @@ object Backup {
         val history: List<RecognitionEntity>? = null,
         val assets: AssetSnapshot? = null,
         val capture: CaptureSnapshot? = null,
+        val imports: List<ImportIdentity>? = null,
     )
 
     /**
@@ -94,6 +100,10 @@ object Backup {
         root["kind"] = KIND
         root["format"] = FORMAT
         root["exportedAt"] = snapshot.exportedAt
+        snapshot.imports?.let { rows ->
+            ImportIdentityCodec.validate(rows)
+            root["imports"] = rows.map { mapOf("key" to it.sourceKey, "hash" to it.contentHash) }
+        }
         root["bills"] = snapshot.bills.map { b ->
             linkedMapOf(
                 "p" to b.priceCents,
@@ -109,12 +119,13 @@ object Backup {
                 "cg" to b.category,
                 "sc" to b.subCategory,
                 "ac" to b.account,
-                "no" to b.note,
+                "no" to b.note, "pn" to b.productName, "ps" to b.productSource,
+                "noOrigin" to b.noteOrigin, "nt" to b.noteTemplateSnapshot,
                 "rid" to b.recognitionId,
                 "id" to b.id,
                 "aid" to b.accountId, "taid" to b.transferAccountId,
                 "al" to b.assetLinked, "ak" to b.assetKey,
-                "tf" to b.transferFeeCents, "fpk" to b.feeParentKey,
+                "tf" to b.transferFeeCents, "fpk" to b.feeParentKey, "tac" to b.transferAccount,
             )
         }
         snapshot.assets?.let { root["assets"] = AssetBackupCodec.encode(it) }
@@ -130,6 +141,10 @@ object Backup {
                 "noteTemplate" to l.noteTemplate,
                 "localRules" to l.localRules?.let { MiniJson.decode(LocalRuleCodec.encode(it)) },
             ).apply {
+                l.monthStartDay?.let { day ->
+                    require(day in 1..31) { "每月起始日须为1–31日" }
+                    put("monthStartDay", day)
+                }
                 if (!l.hasExpense) remove("expense")
                 if (!l.hasIncome) remove("income")
                 if (!l.hasAccounts) remove("accounts")
@@ -140,7 +155,6 @@ object Backup {
             root["settings"] = linkedMapOf(
                 "whitelist" to s.whitelist,
                 "minIntervalMs" to s.minIntervalMs,
-                "ocrFallback" to s.ocrFallback,
                 "rootMode" to s.rootMode,
             )
         }
@@ -182,7 +196,8 @@ object Backup {
                 category = m.str("cg"),
                 subCategory = m.str("sc"),
                 account = m.str("ac"),
-                note = m.str("no"),
+                note = m.str("no"), productName = m.str("pn"), productSource = m.str("ps"),
+                noteOrigin = m.str("noOrigin"), noteTemplateSnapshot = m.str("nt"),
                 recognitionId = m.str("rid"),
                 id = if (m["id"] == null) null else m.num("id"),
                 accountId = if (format >= 3) m.optionalAssetText("aid") else null,
@@ -192,6 +207,7 @@ object Backup {
                 assetKey = if (format >= 3) m.optionalAssetText("ak").orEmpty() else "",
                 transferFeeCents = if (format >= 3) m.num("tf").also { require(it >= 0) { "转账手续费无效" } } else 0,
                 feeParentKey = if (format >= 3) m.optionalAssetText("fpk") else null,
+                transferAccount = if (format >= 5) m.optionalAssetText("tac") else null,
             )
         }
         val ledger = (root["ledger"] as? Map<*, *>)?.let { l ->
@@ -204,13 +220,18 @@ object Backup {
                 localRules = l["localRules"]?.let { LocalRuleCodec.decode(MiniJson.encode(it)) },
                 hasExpense = l.containsKey("expense"), hasIncome = l.containsKey("income"),
                 hasAccounts = l.containsKey("accounts"), hasNoteTemplate = l.containsKey("noteTemplate"),
+                monthStartDay = if (l.containsKey("monthStartDay")) {
+                    require(format >= 6) { "旧备份版本不能包含记账周期" }
+                    l.num("monthStartDay").also { require(l["monthStartDay"] != null && it in 1L..31L) { "每月起始日须为1–31日" } }.toInt()
+                } else null,
             )
         }
         val settings = (root["settings"] as? Map<*, *>)?.let { s ->
             SettingsSnapshot(
                 whitelist = (s["whitelist"] as? List<*>).orEmpty().mapNotNull { it as? String },
                 minIntervalMs = s.num("minIntervalMs"),
-                ocrFallback = s["ocrFallback"] as? Boolean ?: true,
+                // 旧备份（JSON ≤7）里还有 "ocrFallback"，OCR 删除后直接忽略：
+                // 恢复时不该因为一个已废弃的开关而失败。
                 rootMode = s["rootMode"] as? Boolean ?: false,
             )
         }
@@ -240,6 +261,10 @@ object Backup {
             assets = assets,
             history = history,
             capture = capture,
+            imports = if (root.containsKey("imports")) {
+                require(format >= 5) { "旧格式不能包含导入身份" }
+                ImportIdentityCodec.decode(root["imports"])
+            } else null,
         )
     }
 

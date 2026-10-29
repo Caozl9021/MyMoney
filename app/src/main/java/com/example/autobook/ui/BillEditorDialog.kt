@@ -25,6 +25,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.example.autobook.ui.design.LocalReduceMotion
 import com.example.autobook.ui.design.LocalAbPalette
 import com.example.autobook.ui.design.AbType
+import com.example.autobook.ui.design.amountTint
 import com.example.autobook.ui.design.formatAmount
 import com.example.autobook.ui.design.rememberAbHaptic
 import androidx.compose.ui.unit.lerp
@@ -72,7 +73,7 @@ fun BillEditorDialog(original: BillEntity?, newSource: String, newTime: Long, so
         if (reduceMotion) progress.snapTo(1f)
         else if (target != null) progress.animateTo(1f, tween(380))
     }
-    BackHandler { if (!operation.saving) onClose() }
+
     Box(Modifier.fillMaxSize().onGloballyPositioned { hostOrigin = it.boundsInRoot().topLeft }) {
         ConfirmSheet(
             draft = draft,
@@ -96,7 +97,6 @@ fun BillEditorDialog(original: BillEntity?, newSource: String, newTime: Long, so
                         result.fold(
                             onSuccess = {
                                 operation.onStored?.invoke()
-                                Toast.makeText(app, if (original == null) "已记一笔" else "已保存修改", Toast.LENGTH_SHORT).show()
                                 operation.completed = true
                             },
                             onFailure = {
@@ -117,7 +117,7 @@ fun BillEditorDialog(original: BillEntity?, newSource: String, newTime: Long, so
             val y = sourceAmountBounds.top + (destination.top - sourceAmountBounds.top) * fraction - hostOrigin.y
             Text(formatAmount(draft.priceCents),
                 style = AbType.amountRow.copy(fontSize = lerp(AbType.amountRow.fontSize, AbType.amountEntry.fontSize, fraction)),
-                color = p.label,
+                color = amountTint(p, draft.type.name),
                 maxLines = 1,
                 modifier = Modifier.graphicsLayer { translationX = x; translationY = y }
                     .clearAndSetSemantics {},

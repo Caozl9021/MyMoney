@@ -16,12 +16,6 @@ class BillPipeline(
     sealed interface Outcome {
         data class Draft(val draft: BillDraft, val match: PageMatch) : Outcome
         data class Skipped(val reason: String) : Outcome
-
-        /** 值得再走一次 OCR 的失败原因（分类没命中 / 分类命中但没金额） */
-        val needsOcr: Boolean
-            get() = this is Skipped && (
-                reason.startsWith("not-a-bill-page") || reason.startsWith("no-amount")
-                )
     }
 
     fun process(snapshot: UiSnapshot, now: Long = System.currentTimeMillis()): Outcome {
@@ -61,6 +55,7 @@ class BillPipeline(
         val transactionKey = fields.orderId?.takeIf { it.isNotBlank() }?.let { orderId ->
             TransactionIdentity.key(snapshot.packageName, type, orderId)
         }
+        val product = ProductExtractor.extract(snapshot.items, snapshot.truncated)
         val draft = BillDraft(
             priceCents = hit.cents,
             type = type,
@@ -75,6 +70,8 @@ class BillPipeline(
             orderTail = FieldExtractor.orderIdTail(fields.orderId),
             sourcePkg = snapshot.packageName,
             strategy = "${match.strategy}/${hit.source}",
+            productName = product,
+            productSource = product?.let { ProductExtractor.RULE + ":" + snapshot.source.name },
         )
         return Outcome.Draft(draft, match)
     }

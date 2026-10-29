@@ -1,5 +1,7 @@
 package com.example.autobook.ui
 
+import kotlinx.coroutines.launch
+
 import android.widget.Toast
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -49,6 +51,7 @@ fun BillsScreen(requestAdd: Int = 0, onEditorVisibilityChanged: (Boolean) -> Uni
     val dao = remember(app) { AppDb.get(app).bills() }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val clock = rememberLedgerClock()
+    val monthStartDay = rememberMonthStartDay()
     val listState = rememberLazyListState()
     var keyword by rememberSaveable { mutableStateOf("") }
     var dateMode by rememberSaveable { mutableStateOf("ALL") }
@@ -59,7 +62,7 @@ fun BillsScreen(requestAdd: Int = 0, onEditorVisibilityChanged: (Boolean) -> Uni
     var limit by rememberSaveable { mutableStateOf(100) }
     var resetPosition by rememberSaveable { mutableStateOf(false) }
     var retry by remember { mutableStateOf(0) }
-    val dateWindow = remember(dateMode, start, end, clock) { ledgerFilterWindow(dateMode, start, end, clock.date, clock.zone) }
+    val dateWindow = remember(dateMode, start, end, clock, monthStartDay) { ledgerFilterWindow(dateMode, start, end, clock.date, clock.zone, monthStartDay) }
     val query = remember(keyword, dateWindow, category, type) {
         LedgerQuery(keyword, dateWindow.fromMillis, dateWindow.toMillis, category, type)
     }
@@ -124,6 +127,18 @@ fun BillsScreen(requestAdd: Int = 0, onEditorVisibilityChanged: (Boolean) -> Uni
     }
     // 明细是压在 Tab 之上的整页，不是 Tab 之一：必须自己铺不透明底，
     // 否则下面的统计/首页会从行缝里透出来（曾经的「串页」）。
+    val pagePixels = RememberBackPixels()
+    val navigationScope = androidx.compose.runtime.rememberCoroutineScope()
+    var sourcePreview by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    var openingBill by remember { mutableStateOf(false) }
+    fun openBill(id: Long) {
+        if (openingBill || selectedId != null) return
+        openingBill = true
+        navigationScope.launch {
+            try { sourcePreview = pagePixels.snapshot(); selectedId = id } finally { openingBill = false }
+        }
+    }
+    BackSurface(enabled = false, onBack = {}, pixels = pagePixels) {
     Box(Modifier.fillMaxSize().background(LocalAbPalette.current.pageBg)) {
         PageScaffold(title = "明细", listState = listState, onBack = onBack,
             actions = {
@@ -137,7 +152,7 @@ fun BillsScreen(requestAdd: Int = 0, onEditorVisibilityChanged: (Boolean) -> Uni
                 LedgerFilters(keyword, { keyword = it; changed() }, dateMode, start, end, clock.date,
                     { mode, from, to -> dateMode = mode; start = from; end = to; changed() },
                     category, categoryOptions, { category = it; changed() }, type, { type = it; changed() }, active, { clear() },
-                    summaryLabel = window.summary?.let { "${if (active) "匹配" else "共"} ${it.count} 笔" }
+                    monthStartDay = monthStartDay, summaryLabel = window.summary?.let { "${if (active) "匹配" else "共"} ${it.count} 笔" }
                         ?: if (window.error != null) "读取失败" else "正在读取账单…")
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     // Keep a restored deep position untouched until its saved window is available.
@@ -176,7 +191,7 @@ fun BillsScreen(requestAdd: Int = 0, onEditorVisibilityChanged: (Boolean) -> Uni
                                         .fillMaxWidth().clip(shape).background(LocalAbPalette.current.cardBg)) {
                                         if (index > 0) InsetDivider()
                                         SwipeableBillRow(bill, onAmountBounds = {}, hideAmount = false,
-                                            onEdit = { selectedId = bill.id; newSource = null },
+                                            onEdit = { openBill(bill.id); newSource = null },
                                             onDelete = { BillWriter.deleteUndoably(app, bill.id) { Toast.makeText(app, it, Toast.LENGTH_LONG).show() } })
                                     }
                                 }
@@ -198,14 +213,15 @@ fun BillsScreen(requestAdd: Int = 0, onEditorVisibilityChanged: (Boolean) -> Uni
             }
         }
         if (historyOpen) Box(Modifier.fillMaxSize().zIndex(9f)) {
-            RecognitionHistoryScreen(onBack = { historyOpen = false })
+            RecognitionHistoryScreen(onBack = { historyOpen = false }, reserveDock = false)
         }
         selectedId?.let { id ->
-            Box(Modifier.fillMaxSize().zIndex(10f)) { BillActionsHost(billId = id, onClose = { selectedId = null }) }
+            Box(Modifier.fillMaxSize().zIndex(10f)) { BillActionsHost(billId = id, onClose = { selectedId = null; sourcePreview = null }, sourcePreview = sourcePreview) }
         }
         if (newSource != null) key(newSource) {
             Box(Modifier.fillMaxSize().zIndex(10f)) { BillEditorDialog(null, newSource.orEmpty(), newTime, onClose = { newSource = null }) }
         }
+    }
     }
 }
 

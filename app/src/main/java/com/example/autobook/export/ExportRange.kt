@@ -23,27 +23,27 @@ object ExportRange {
     /** 毫秒区间，左闭右开；[ALL] 返回 0 到 `Long.MAX_VALUE` 让 SQL 全通过 */
     data class Span(val from: Long, val to: Long)
 
-    fun span(kind: Kind, today: LocalDate, zone: ZoneId = ZoneId.systemDefault()): Span {
-        val thisMonth = YearMonth.from(today)
+    fun span(kind: Kind, today: LocalDate, zone: ZoneId = ZoneId.systemDefault(), monthStartDay: Int = 1): Span {
+        val current = com.example.autobook.data.LedgerMonthPeriod.containing(today, monthStartDay, zone)
         return when (kind) {
-            Kind.THIS_MONTH -> Span(startOf(thisMonth, zone), startOf(thisMonth.plusMonths(1), zone))
-            Kind.LAST_MONTH -> {
-                val last = thisMonth.minusMonths(1)
-                Span(startOf(last, zone), startOf(thisMonth, zone))
-            }
-            // 含本月，所以是 3 个月而不是 3 个"过去月份"
-            Kind.LAST_3_MONTHS -> Span(startOf(thisMonth.minusMonths(2), zone), startOf(thisMonth.plusMonths(1), zone))
+            Kind.THIS_MONTH -> Span(current.fromMillis, current.toMillis)
+            Kind.LAST_MONTH -> current.shift(-1).let { Span(it.fromMillis, it.toMillis) }
+            Kind.LAST_3_MONTHS -> Span(current.shift(-2).fromMillis, current.toMillis)
             Kind.ALL -> Span(0L, Long.MAX_VALUE)
         }
     }
 
-    private fun startOf(month: YearMonth, zone: ZoneId): Long =
-        month.atDay(1).atStartOfDay(zone).toInstant().toEpochMilli()
+    fun label(kind: Kind, monthStartDay: Int = 1): String = if (monthStartDay == 1) kind.label else when(kind) {
+        Kind.THIS_MONTH -> "本期"
+        Kind.LAST_MONTH -> "上期"
+        Kind.LAST_3_MONTHS -> "最近3期"
+        Kind.ALL -> "全部"
+    }
 
     /** 给 UI 的一行说明，例如「2026年9月1日 – 9月30日」；[ALL] 返回「全部记录」 */
-    fun describe(kind: Kind, today: LocalDate, zone: ZoneId = ZoneId.systemDefault()): String {
+    fun describe(kind: Kind, today: LocalDate, zone: ZoneId = ZoneId.systemDefault(), monthStartDay: Int = 1): String {
         if (kind == Kind.ALL) return "全部记录"
-        val span = span(kind, today, zone)
+        val span = span(kind, today, zone, monthStartDay)
         val from = Instant.ofEpochMilli(span.from).atZone(zone).toLocalDate()
         val to = Instant.ofEpochMilli(span.to - 1).atZone(zone).toLocalDate()
         return if (from == to) "${from}（一天）" else "$from – $to"

@@ -1,7 +1,8 @@
 package com.example.autobook.ui
 
+import kotlinx.coroutines.launch
+
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -36,14 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.map
-import com.example.autobook.data.AppDb
 import androidx.compose.ui.unit.dp
 import com.example.autobook.data.CaptureMode
 import com.example.autobook.data.BillEntity
@@ -53,7 +47,7 @@ import com.example.autobook.ui.design.AbIcons
 import com.example.autobook.ui.design.AbRadius
 import com.example.autobook.ui.design.AbSpacing
 import com.example.autobook.ui.design.AbType
-import com.example.autobook.ui.design.BillListRow
+import com.example.autobook.ui.design.sectionHeader
 import com.example.autobook.ui.design.EmptyState
 import com.example.autobook.ui.design.GroupFooter
 import com.example.autobook.ui.design.GroupHeader
@@ -64,11 +58,10 @@ import com.example.autobook.ui.design.LocalAbPalette
 import com.example.autobook.ui.design.PageScaffold
 import com.example.autobook.ui.design.formatAmount
 
-/** 首页：完整今日摘要、待处理与紧凑月概览、最近几笔。 */
+/** 首页：紧凑月概览、待处理与按完整自然日分组的账单卡片。 */
 @Composable
 fun HomeScreen(
     bills: List<BillEntity>,
-    onSeeAll: () -> Unit,
     onOpenAssets: () -> Unit = {},
     onOpenSettings: (CaptureSettingsDestination) -> Unit,
     onEditorVisibilityChanged: (Boolean) -> Unit = {},
@@ -77,6 +70,17 @@ fun HomeScreen(
     val context = LocalContext.current
     val listState = rememberLazyListState()
     val clock = rememberLedgerClock()
+    val monthStartDay = rememberMonthStartDay()
+    var periodBack by androidx.compose.runtime.saveable.rememberSaveable(monthStartDay) { mutableIntStateOf(0) }
+    val homePeriod = remember(clock, monthStartDay, periodBack) {
+        com.example.autobook.data.LedgerMonthPeriod.containing(clock.date, monthStartDay, clock.zone)
+            .shift(-periodBack.toLong())
+    }
+    val homePeriodKey = "${homePeriod.month}:${homePeriod.day}:${homePeriod.zone.id}"
+    var visiblePeriodKey by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(homePeriodKey) }
+    LaunchedEffect(homePeriodKey) {
+        if (visiblePeriodKey != homePeriodKey) { listState.scrollToItem(0); visiblePeriodKey = homePeriodKey }
+    }
     var selectedId by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<Long?>(null) }
     var historyOpen by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     var historyFilter by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("ALL") }
@@ -93,8 +97,7 @@ fun HomeScreen(
             prefs.edit().putBoolean("recognized", true).apply()
         }
     }
-    val steps = FirstRunGuide.steps(mode, healthInput.enabled, healthInput.rootRunning,
-        healthInput.accessibilityAuthorized && healthInput.accessibilityBound, healthInput.overlayAllowed, recognized)
+    val steps = FirstRunGuide.steps(healthInput, recognized)
     LaunchedEffect(steps) {
         if (steps.all { it.complete }) {
             guideComplete = true
@@ -112,13 +115,26 @@ fun HomeScreen(
     LaunchedEffect(newSource, historyOpen, selectedId) { currentVisibilityChanged(newSource != null || historyOpen || selectedId != null) }
     DisposableEffect(Unit) { onDispose { currentVisibilityChanged(false) } }
     var recentRetry by remember { mutableIntStateOf(0) }
-    val recentState = rememberHomeRecentState(recentRetry)
-    val recent = (recentState as? HomeRecentState.Ready)?.bills.orEmpty()
+    var anchorLimit by androidx.compose.runtime.saveable.rememberSaveable(homePeriodKey) { mutableIntStateOf(HOME_DAILY_PAGE_SIZE) }
+    val dailyState = rememberHomeDailyState(clock, homePeriod, anchorLimit, recentRetry)
+    val dailySnapshot = dailyState.snapshot
     val history by RecognitionStore.records.collectAsStateWithLifecycle()
     val historyReady by RecognitionStore.ready.collectAsStateWithLifecycle()
     val historyError by RecognitionStore.error.collectAsStateWithLifecycle()
     val pending = remember(history) { history.filter { it.status == RecognitionStatus.PENDING } }
 
+    val pagePixels = RememberBackPixels()
+    val navigationScope = androidx.compose.runtime.rememberCoroutineScope()
+    var sourcePreview by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    var openingBill by remember { mutableStateOf(false) }
+    fun openBill(id: Long) {
+        if (openingBill || selectedId != null) return
+        openingBill = true
+        navigationScope.launch {
+            try { sourcePreview = pagePixels.snapshot(); selectedId = id } finally { openingBill = false }
+        }
+    }
+    BackSurface(enabled = false, onBack = {}, pixels = pagePixels) {
     Box(Modifier.fillMaxSize()) {
     LaunchedEffect(pending) {
         if (pending.isNotEmpty()) {
@@ -129,11 +145,12 @@ fun HomeScreen(
     PageScaffold(
         title = "账本",
         compact = true,
+        floatingHeader = true,
+        titleActive = healthInput.recognitionReady,
+        titleStateDescription = if (healthInput.recognitionReady) "自动记账运行中" else health.title,
+        onTitleClick = { onOpenSettings(CaptureSettingsDestination.MODE) },
         actions = {
-            Button(onClick = { addBill() }, modifier = Modifier.heightIn(min = 48.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = p.accent, contentColor = p.onAccent)) {
-                Text("＋ 记一笔")
-            }
+            com.example.autobook.ui.design.FloatingHeaderAction(AbIcons.Plus, "记一笔") { addBill() }
         },
         listState = listState,
         subtitle = clock.date.format(java.time.format.DateTimeFormatter.ofPattern("M月d日 EEEE", java.util.Locale.CHINA)),
@@ -148,20 +165,27 @@ fun HomeScreen(
             contentPadding = PaddingValues(
                 start = AbSpacing.page,
                 end = AbSpacing.page,
-                top = AbSpacing.xs,
+                top = padding.calculateTopPadding(),
                 bottom = padding.calculateBottomPadding(),
             ),
-            verticalArrangement = Arrangement.spacedBy(AbSpacing.l),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
-            // 本月支出是首页的主视觉，放在第一屏最上面；今日摘要降为它下面的一行辅助信息。
-            item(key = "summary") { MonthlySummaryCard(clock) }
-            if (health.attention) item(key = "runtime-attention") {
+            item(key = "today-date") {
+                Text(clock.date.format(java.time.format.DateTimeFormatter.ofPattern("M月d日 · EEEE", java.util.Locale.CHINA)),
+                    style = AbType.caption1, color = p.secondaryLabel,
+                    modifier = Modifier.padding(start = AbSpacing.xs, bottom = AbSpacing.xs))
+            }
+            // 本期支出保持主视觉，日期移到正文，不撑高四页统一顶栏。
+            homeCardItem(key = "summary") {
+                MonthlySummaryCard(clock, homePeriod, periodBack) { periodBack = it.coerceAtLeast(0) }
+            }
+            if (health.attention) homeCardItem(key = "runtime-attention") {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
                     Column(Modifier.weight(1f).clip(RoundedCornerShape(AbRadius.row))
                         .clickable { healthDetails = true }.heightIn(min = 48.dp)
                         .padding(vertical = AbSpacing.xs), verticalArrangement = Arrangement.Center) {
-                        Text(health.title, style = AbType.footnote, color = p.label)
+                        Text(if (health.title.startsWith("已开启")) "自动记账需处理" else health.title, style = AbType.footnote, color = p.label)
                         Text("点此查看原因", style = AbType.caption1, color = p.secondaryLabel)
                     }
                     health.actions.firstOrNull()?.let { action ->
@@ -173,7 +197,7 @@ fun HomeScreen(
                     }
                 }
             }
-            if (!historyReady || historyError != null || pending.isNotEmpty()) item(key = "pending") {
+            if (!historyReady || historyError != null || pending.isNotEmpty()) homeCardItem(key = "pending") {
                 Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
                     InsetGroup {
                         ListRow(
@@ -188,65 +212,45 @@ fun HomeScreen(
                     }
                 }
             }
-            if (recentState == HomeRecentState.Loading) {
-                item(key = "recent-loading") {
-                    InsetGroup { ListRow(title = "正在读取最近记录…") }
+            if (dailySnapshot == null && dailyState.loading) {
+                homeCardItem(key = "daily-loading") {
+                    InsetGroup { ListRow(title = "正在读取账单…") }
                 }
-            } else if (recentState == HomeRecentState.Failed) {
-                item(key = "recent-error") {
+            } else if (dailySnapshot == null && dailyState.failed) {
+                homeCardItem(key = "daily-error") {
+                    InsetGroup { ListRow(title = "账单读取失败", subtitle = "点此重新加载", onClick = { recentRetry++ }) }
+                }
+            } else if (dailySnapshot != null && dailySnapshot.days.isEmpty()) {
+                homeCardItem(key = "empty") {
                     InsetGroup {
-                        ListRow(title = "最近记录读取失败", subtitle = "点此重新加载",
-                            onClick = { recentRetry++ })
+                        EmptyState(icon = AbIcons.Wallet,
+                            title = "这个账期还没有账单",
+                            message = "可切换账期查看其他记录。",
+                            actionLabel = "记一笔", onAction = { addBill() })
                     }
                 }
-            } else if (recent.isEmpty()) {
-                item(key = "empty") {
-                    InsetGroup {
-                        EmptyState(
-                            icon = AbIcons.Wallet,
-                            title = "还没有记录",
-                            message = "先记下一笔，也可以按上方引导开启自动识别。",
-                            actionLabel = "记一笔",
-                            onAction = { addBill() },
-                        )
-                    }
-                }
-            } else {
-                item(key = "recent-header") {
-                    Row(
-                        Modifier.fillMaxWidth().padding(start = AbSpacing.xs, end = AbSpacing.xs),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        GroupHeader("最近记录")
-                        Text(
-                            "全部",
-                            style = AbType.footnote,
-                            color = p.accent,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(AbRadius.capsule))
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null,
-                                    onClick = onSeeAll,
-                                )
-                                .heightIn(min = 48.dp)
-                                .padding(horizontal = 6.dp, vertical = 14.dp),
-                        )
-                    }
-                }
-
-                item(key = "recent-list") {
-                    InsetGroup {
-                        recent.forEachIndexed { index, bill ->
-                            if (index > 0) InsetDivider(inset = 62.dp)
-                            BillListRow(bill, modifier = Modifier.clickable { selectedId = bill.id })
-                        }
-                    }
-                }
-
+            } else if (dailySnapshot != null) {
+                homeDailyCards(dailySnapshot, clock) { openBill(it) }
             }
-            item(key = "history") {
+            if (dailySnapshot != null && (dailyState.failed || dailyState.loading || dailySnapshot.hasMore)) {
+                homeCardItem(key = "daily-more") {
+                    InsetGroup {
+                        ListRow(
+                            title = when {
+                                dailyState.failed -> "加载失败 · 重试"
+                                dailyState.loading -> "正在加载…"
+                                else -> "加载更早记录"
+                            },
+                            subtitle = "已显示 ${dailySnapshot.loadedCount} 笔",
+                            onClick = if (dailyState.loading) null else ({
+                                if (dailyState.failed) recentRetry++
+                                else anchorLimit = nextHomeDailyAnchorLimit(anchorLimit, dailySnapshot.loadedCount)
+                            }),
+                        )
+                    }
+                }
+            }
+            homeCardItem(key = "history") {
                 InsetGroup {
                     ListRow(title = "识别历史",
                         subtitle = when {
@@ -257,40 +261,11 @@ fun HomeScreen(
                         chevron = true, onClick = { historyFilter = "ALL"; historyOpen = true })
                 }
             }
-            if (!health.attention) item(key = "runtime") {
+            if (!guideComplete && healthInput.recognitionReady) homeCardItem(key = "guide") {
                 InsetGroup {
-                    CaptureHealthCard(health) { action ->
-                        performCaptureAction(context, action, onOpenSettings) {
-                            historyFilter = RecognitionStatus.PENDING; historyOpen = true
-                        }
-                    }
-                }
-            }
-            if (!guideComplete && healthInput.pageFallbackEnabled) item(key = "guide") {
-                Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
-                    GroupHeader("开始自动记账")
-                    InsetGroup {
-                        steps.forEachIndexed { index, step ->
-                            if (index > 0) InsetDivider()
-                            ListRow(title = "${if (step.complete) "✓" else "${index + 1}."} ${step.label}",
-                                onClick = {
-                                    val action = when (index) {
-                                        0 -> when {
-                                            mode == null -> CaptureAction.SELECT_MODE
-                                            !healthInput.enabled -> CaptureAction.RESUME
-                                            mode == CaptureMode.ROOT -> CaptureAction.ROOT_STATUS
-                                            else -> CaptureAction.ACCESSIBILITY
-                                        }
-                                        1 -> CaptureAction.OVERLAY
-                                        else -> CaptureAction.SUPPORTED_APPS
-                                    }
-                                    performCaptureAction(context, action, onOpenSettings) {
-                                        historyFilter = RecognitionStatus.PENDING; historyOpen = true
-                                    }
-                                })
-                        }
-                    }
-                    GroupFooter("完成一次真实识别后，引导会自动收起。也可以随时手动记账。")
+                    ListRow(title = "识别第一笔账单",
+                        subtitle = "在所选应用收到交易通知或打开支付结果后，识别结果会进入待确认。",
+                        chevron = true, onClick = { onOpenSettings(CaptureSettingsDestination.MODE) })
                 }
             }
 
@@ -312,11 +287,11 @@ fun HomeScreen(
     )
     selectedId?.let { id ->
         Box(Modifier.fillMaxSize().zIndex(10f)) {
-            BillActionsHost(billId = id, onClose = { selectedId = null })
+            BillActionsHost(billId = id, onClose = { selectedId = null; sourcePreview = null }, sourcePreview = sourcePreview)
         }
     }
     if (historyOpen) Box(Modifier.fillMaxSize().zIndex(9f)) {
-        RecognitionHistoryScreen(onBack = { historyOpen = false }, initialFilter = historyFilter)
+        RecognitionHistoryScreen(onBack = { historyOpen = false }, initialFilter = historyFilter, reserveDock = false)
     }
     if (newSource != null) key(newSource) {
         Box(Modifier.fillMaxSize().zIndex(10f)) {
@@ -324,32 +299,8 @@ fun HomeScreen(
         }
     }
     }
+    }
 }
 
 private fun pendingRecognition(bills: List<BillEntity>): Boolean =
     bills.any { FirstRunGuide.hasRecognizedSource(it.sourcePkg) }
-
-
-private sealed interface HomeRecentState {
-    data object Loading : HomeRecentState
-    data object Failed : HomeRecentState
-    data class Ready(val bills: List<BillEntity>) : HomeRecentState
-}
-
-/** Empty is a successful database result, never the shell's initial empty placeholder. */
-@Composable
-private fun rememberHomeRecentState(retry: Int): HomeRecentState {
-    val context = LocalContext.current.applicationContext
-    val dao = remember(context) { AppDb.get(context).bills() }
-    val lifecycle = LocalLifecycleOwner.current.lifecycle
-    var state by remember(dao, retry) { mutableStateOf<HomeRecentState>(HomeRecentState.Loading) }
-    LaunchedEffect(dao, lifecycle, retry) {
-        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            dao.observeWindow(8)
-                .map<List<BillEntity>, HomeRecentState> { HomeRecentState.Ready(it) }
-                .catch { emit(HomeRecentState.Failed) }
-                .collect { state = it }
-        }
-    }
-    return state
-}

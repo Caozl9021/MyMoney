@@ -17,27 +17,32 @@ import com.example.autobook.data.Settings
 import com.example.autobook.data.CaptureMode
 import com.example.autobook.capture.CaptureModeManager
 import com.example.autobook.ui.MainActivity
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * root 轮询的常驻宿主。
+ * root 通道的常驻宿主。
  *
- * 为什么要有它：过去 [RootWatcher] 是在 `SettingsScreen` 里 `remember { RootWatcher(...) }` 的，
- * 一离开设置页（甚至只是进程被回收）轮询就停了 —— 等于"root 模式"只在设置页里活着。
- * 现在改成前台服务：开启后一直按节拍抓，通知栏有一条常驻通知（不可划掉，但很低调）。
+ * 为什么要有它：root 读通知是 5 秒一次的轮询，靠协程在进程内活着。App 退到后台后
+ * 普通进程会被系统回收或冻结，轮询就断了。挂一个前台服务才能让它一直在。
  *
- * 仅在用户已选择 Root 模式且启用识别时启动；
- * 不读第三方 App 私有数据，只用 uiautomator dump 读当前界面文字。
+ * 这里**只保活，不采集**：真正的轮询在 [com.example.autobook.capture.RootNotificationIngress]，
+ * 启停由 [CaptureModeManager.reconcile] 统一决定。本服务不持有任何采集逻辑。
+ *
+ * 历史：这个服务过去还驱动 `RootWatcher`（uiautomator dump 抓页面 + 截图 OCR）。
+ * 那条路已删除——它每 1.2/3 秒开一次 root shell，开销远大于收益，
+ * 而它想补的「页面有付款信息但既没通知也没 hook」场景在微信/支付宝上并不存在。
+ * 现在 root 模式只剩一个作用：**让通知通道不依赖「通知使用权」授权**。
  */
 class RootForegroundService : Service() {
 
     companion object {
-        @Volatile
-        var active: Boolean = false
-            private set
+        private val mutableActive = MutableStateFlow(false)
+        val activeState = mutableActive.asStateFlow()
+        val active: Boolean get() = mutableActive.value
 
         const val CHANNEL_ID = "autobook_root"
         private const val NOTIFICATION_ID = 1001
-        private const val INTERVAL_MS = 1_200L
 
         /** 开关落在这里，进程重建后 [android.app.Application] 才知道要不要自动拉起服务 */
         private const val ACTION_START = "com.example.autobook.root.START"
@@ -45,7 +50,7 @@ class RootForegroundService : Service() {
 
         fun start(context: Context) {
             val settings = Settings(context)
-            if (!settings.enabled || !settings.pageFallbackEnabled || settings.captureMode != CaptureMode.ROOT) return
+            if (!settings.enabled || !settings.notificationCaptureEnabled || settings.captureMode != CaptureMode.ROOT) return
             val intent = Intent(context, RootForegroundService::class.java).setAction(ACTION_START)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
@@ -60,7 +65,6 @@ class RootForegroundService : Service() {
          * 而 `stopService` 任何场景都合法。
          */
         fun stop(context: Context) {
-            RootWatcher.stop()
             context.stopService(Intent(context, RootForegroundService::class.java))
         }
     }
@@ -70,8 +74,7 @@ class RootForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
-                CaptureModeManager.setEnabled(this, false)
-                RootWatcher.stop()
+                CaptureModeManager.setNotificationEnabled(this, false)
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 return START_NOT_STICKY
@@ -79,16 +82,12 @@ class RootForegroundService : Service() {
 
             else -> {
                 val settings = Settings(this)
-                if (!settings.enabled || !settings.pageFallbackEnabled || settings.captureMode != CaptureMode.ROOT) {
+                if (!settings.enabled || !settings.notificationCaptureEnabled || settings.captureMode != CaptureMode.ROOT) {
                     stopSelf()
                     return START_NOT_STICKY
                 }
-                active = true
                 startInForeground()
-                RootWatcher.start(this, settings, INTERVAL_MS) {
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
-                }
+                mutableActive.value = true
             }
         }
         // 被系统杀掉后自动重建：轮询是"常驻"语义，重建时不要弹新通知
@@ -96,8 +95,7 @@ class RootForegroundService : Service() {
     }
 
     override fun onDestroy() {
-        active = false
-        RootWatcher.stop()
+        mutableActive.value = false
         super.onDestroy()
     }
 
@@ -118,8 +116,8 @@ class RootForegroundService : Service() {
         val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_brand_small)
             .setLargeIcon(BrandIcons.large(this))
-            .setContentTitle("AutoBook 正在监听账单页面")
-            .setContentText("root 模式 · 每 1.2 秒检查一次前台应用")
+            .setContentTitle("AutoBook 正在读取账单通知")
+            .setContentText("root 模式 · 每 5 秒读取一次通知栏")
             .setOngoing(true)
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -144,7 +142,7 @@ class RootForegroundService : Service() {
         if (manager.getNotificationChannel(CHANNEL_ID) != null) return
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL_ID, "root 监听", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "root 模式下持续检查前台应用是否为账单页面"
+                description = "root 模式下持续读取通知栏中的账单消息"
                 setShowBadge(false)
             },
         )

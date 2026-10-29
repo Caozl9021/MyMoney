@@ -45,12 +45,18 @@ data class RecognitionEntity(
     val shareState: String = RecognitionShareState.NOT_REQUESTED,
     @ColumnInfo(defaultValue = "0") val protectedFields: Long = 0L,
     val reviewOf: String? = null,
+    val productName: String? = null,
+    val productSource: String? = null,
+    val noteOrigin: String? = null,
+    val noteTemplateSnapshot: String? = null,
+    val transferAccountId: String? = null,
 ) {
     fun toDraft(): BillDraft = BillDraft(priceCents = priceCents, type = BillType.valueOf(type),
         timeMillis = timeMillis, merchant = merchant, method = method, orderTail = orderTail,
         sourcePkg = sourcePkg, strategy = strategy, category = category, subCategory = subCategory,
         account = account, note = note, historyId = id, transactionKey = transactionKey,
-        hasExplicitTime = hasExplicitTime, captureSessionId = captureSessionId)
+        hasExplicitTime = hasExplicitTime, captureSessionId = captureSessionId,
+        productName = productName, productSource = productSource, noteOrigin = noteOrigin, noteTemplateSnapshot = noteTemplateSnapshot, transferAccountId = transferAccountId)
 
     companion object {
         fun fromDraft(draft: BillDraft, identity: String = RecognitionIdentity.key(draft), at: Long = System.currentTimeMillis()) =
@@ -58,7 +64,8 @@ data class RecognitionEntity(
                 draft.priceCents, draft.type.name, draft.timeMillis, draft.merchant, draft.method,
                 draft.orderTail, draft.sourcePkg, draft.strategy, draft.fingerprint, draft.category,
                 draft.subCategory, draft.account, draft.note, draft.transactionKey, draft.hasExplicitTime,
-                draft.captureSessionId, at, at)
+                draft.captureSessionId, at, at, productName = draft.productName, productSource = draft.productSource,
+                noteOrigin = draft.noteOrigin, noteTemplateSnapshot = draft.noteTemplateSnapshot, transferAccountId = draft.transferAccountId)
     }
 }
 

@@ -1,5 +1,8 @@
 package com.example.autobook.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -29,8 +32,11 @@ import com.example.autobook.capture.AccessibilityGuardian
 import com.example.autobook.capture.BillAccessibilityService
 import com.example.autobook.capture.CaptureModeManager
 import com.example.autobook.capture.PaymentNotificationListener
+import com.example.autobook.capture.RootNotificationIngress
+import com.example.autobook.capture.HookTargetMonitor
+import com.example.autobook.lsp.HookLoadState
+import com.example.autobook.root.RootForegroundService
 import com.example.autobook.data.Settings
-import com.example.autobook.root.RootWatcher
 import com.example.autobook.ui.design.*
 
 /** Observes concrete binding and preferences; system permissions are refreshed on return. No polling. */
@@ -39,9 +45,11 @@ internal fun rememberCaptureHealthInput(): CaptureHealthInput {
     val context = LocalContext.current.applicationContext
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val capture by CaptureModeManager.state.collectAsStateWithLifecycle()
-    val root by RootWatcher.status.collectAsStateWithLifecycle()
     val bound by BillAccessibilityService.bound.collectAsStateWithLifecycle()
     val notificationBound by PaymentNotificationListener.bound.collectAsStateWithLifecycle()
+    val rootRuntime by RootNotificationIngress.runtime.collectAsStateWithLifecycle()
+    val rootServiceActive by RootForegroundService.activeState.collectAsStateWithLifecycle()
+    val hookTargets by HookTargetMonitor.state.collectAsStateWithLifecycle()
     var revision by remember { mutableIntStateOf(0) }
     DisposableEffect(context, lifecycle) {
         val prefs = context.getSharedPreferences(Settings.PREFS_NAME, Context.MODE_PRIVATE)
@@ -59,12 +67,20 @@ internal fun rememberCaptureHealthInput(): CaptureHealthInput {
             context.contentResolver.unregisterContentObserver(secureObserver)
         }
     }
-    return remember(capture, root.running, bound, notificationBound, revision) {
-        CaptureHealthInput(capture.mode, capture.enabled, root.running,
+    return remember(capture, bound, notificationBound, rootRuntime, rootServiceActive, hookTargets, revision) {
+        val selectedHookPackages = hookTargets.filterValues { it.state == HookLoadState.READY }.keys.intersect(Settings(context).whitelist)
+        CaptureHealthInput(capture.mode, capture.enabled,
             AccessibilityGuardian.isEnabledInSettings(context), bound,
             SystemSettings.canDrawOverlays(context), Settings(context).autoConfirm,
-            capture.pageFallbackEnabled, capture.notificationsEnabled,
-            PaymentNotificationListener.isAuthorized(context), notificationBound)
+            capture.pageEnabled, capture.notificationsEnabled,
+            PaymentNotificationListener.isAuthorized(context), notificationBound,
+            smsEnabled = capture.smsEnabled,
+            smsGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED,
+            hookEnabled = capture.hookEnabled,
+            hookReady = selectedHookPackages.isNotEmpty(),
+            rootNotificationReady = rootRuntime.ready && rootServiceActive,
+            rootNotificationError = rootRuntime.error ?: if (rootServiceActive) null else "Root 后台服务尚未连接，请检查状态后重试。",
+            hookPackages = selectedHookPackages)
     }
 }
 
@@ -80,6 +96,14 @@ internal fun performCaptureAction(context: Context, action: CaptureAction,
         CaptureAction.PENDING -> onPending()
         CaptureAction.ACCESSIBILITY -> launchCaptureSettings(context, Intent(SystemSettings.ACTION_ACCESSIBILITY_SETTINGS))
         CaptureAction.OVERLAY -> launchCaptureSettings(context, Intent(SystemSettings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}")))
+        // 短信权限是运行时权限，必须走应用自己的请求才能弹出系统对话框；
+        // 直接跳系统设置页在 MIUI 上会被折叠进「其他权限」深处。
+        CaptureAction.SMS_PERMISSION -> onSettings(CaptureSettingsDestination.SMS)
+        CaptureAction.NOTIFY -> launchCaptureSettings(context, Intent(SystemSettings.ACTION_APP_NOTIFICATION_SETTINGS)
+            .putExtra(SystemSettings.EXTRA_APP_PACKAGE, context.packageName))
+        CaptureAction.ROOT -> onSettings(CaptureSettingsDestination.ROOT_STATUS)
+        // Manager navigation is separate from module enablement and loading probes.
+        CaptureAction.LSP -> com.example.autobook.lsp.LsposedManagerLauncher.open(context)
     }
 }
 

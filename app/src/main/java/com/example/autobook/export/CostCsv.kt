@@ -76,7 +76,7 @@ object CostCsv {
                     ?: profile.fallbackAccount,
                 // 账户2 仅转账有意义；我们只解析出一个账户，留空让用户在 iCost 里补
                 "",
-                (bill.note ?: bill.merchant ?: bill.strategy).replace("\n", " "),
+                bill.note.orEmpty().replace("\n", " "),
                 profile.currency,
                 profile.tags,
             )

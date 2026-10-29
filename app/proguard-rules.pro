@@ -8,5 +8,5 @@
     public void handleLoadPackage(...);
 }
 
-# Shared system-server handshake and provider entry point.
+# Shared target capture protocol and provider entry point.
 -keep class com.example.autobook.lsp.** { *; }

@@ -36,18 +36,18 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
 
-internal fun ledgerFilterWindow(mode: String, start: String, end: String, today: LocalDate, zone: ZoneId): LedgerDateWindow = when (mode) {
+internal fun ledgerFilterWindow(mode: String, start: String, end: String, today: LocalDate, zone: ZoneId, monthStartDay: Int = 1): LedgerDateWindow = when (mode) {
     "TODAY" -> ledgerDateWindow(today, today, zone)
-    "MONTH" -> ledgerDateWindow(today.withDayOfMonth(1), today.withDayOfMonth(today.lengthOfMonth()), zone)
-    "LAST_MONTH" -> today.minusMonths(1).let { ledgerDateWindow(it.withDayOfMonth(1), it.withDayOfMonth(it.lengthOfMonth()), zone) }
+    "MONTH" -> com.example.autobook.data.LedgerMonthPeriod.containing(today, monthStartDay, zone).let { LedgerDateWindow(it.fromMillis, it.toMillis) }
+    "LAST_MONTH" -> com.example.autobook.data.LedgerMonthPeriod.containing(today, monthStartDay, zone).shift(-1).let { LedgerDateWindow(it.fromMillis, it.toMillis) }
     "CUSTOM" -> ledgerDateWindow(LocalDate.parse(start), LocalDate.parse(end), zone)
     else -> LedgerDateWindow(Long.MIN_VALUE, Long.MAX_VALUE)
 }
 
-internal fun ledgerDateFilterLabel(mode: String, start: String, end: String): String = when (mode) {
+internal fun ledgerDateFilterLabel(mode: String, start: String, end: String, monthStartDay: Int = 1): String = when (mode) {
     "TODAY" -> "今天"
-    "MONTH" -> "本月"
-    "LAST_MONTH" -> "上月"
+    "MONTH" -> if (monthStartDay == 1) "本月" else "本期"
+    "LAST_MONTH" -> if (monthStartDay == 1) "上月" else "上期"
     "CUSTOM" -> "$start 至 $end"
     else -> "全部日期"
 }
@@ -69,8 +69,10 @@ internal fun LedgerFilters(
     onDate: (String, String, String) -> Unit,
     category: String?, categories: List<String>, onCategory: (String?) -> Unit,
     type: String?, onType: (String?) -> Unit,
-    active: Boolean, onClear: () -> Unit, summaryLabel: String = "",
+    active: Boolean, onClear: () -> Unit, summaryLabel: String = "", monthStartDay: Int = 1,
 ) {
+    val periodWindow = if (dateMode == "MONTH" || dateMode == "LAST_MONTH")
+        com.example.autobook.data.LedgerMonthPeriod.containing(today, monthStartDay).let { if (dateMode == "LAST_MONTH") it.shift(-1) else it } else null
     var picker by rememberSaveable { mutableStateOf<String?>(null) }
     val palette = LocalAbPalette.current
     val keyboard = LocalSoftwareKeyboardController.current
@@ -79,11 +81,12 @@ internal fun LedgerFilters(
         .padding(top = AbSpacing.m, bottom = AbSpacing.m)) {
         LedgerSearchField(keyword, onKeyword, focused, { focused = it },
             onSearch = { keyboard?.hide() })
+        if (monthStartDay != 1 && periodWindow != null) GroupFooter(periodWindow.label())
         Spacer(Modifier.height(AbSpacing.m))
         FlowRow(Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
             verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-            CapsuleChip(ledgerDateFilterLabel(dateMode, start, end), dateMode != "ALL" && dateMode.isNotEmpty(),
+            CapsuleChip(ledgerDateFilterLabel(dateMode, start, end, monthStartDay), dateMode != "ALL" && dateMode.isNotEmpty(),
                 { picker = "DATE" }, Modifier.heightIn(min = 48.dp))
             CapsuleChip(category?.ifEmpty { "未分类" } ?: "全部分类", category != null,
                 { picker = "CATEGORY" }, Modifier.heightIn(min = 48.dp))
@@ -100,7 +103,7 @@ internal fun LedgerFilters(
     }
     when (picker) {
         "DATE" -> LedgerChoiceDialog("日期范围", onDismiss = { picker = null }) {
-            listOf("ALL" to "全部日期", "TODAY" to "今天", "MONTH" to "本月", "LAST_MONTH" to "上月").forEach { (value, label) ->
+            listOf("ALL" to "全部日期", "TODAY" to "今天", "MONTH" to (if (monthStartDay == 1) "本月" else "本期"), "LAST_MONTH" to (if (monthStartDay == 1) "上月" else "上期")).forEach { (value, label) ->
                 TextButton(onClick = { onDate(value, start, end); picker = null }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(if (dateMode == value) "✓ $label" else label) }
             }
             TextButton(onClick = { picker = "CUSTOM" }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("自选起止日期") }

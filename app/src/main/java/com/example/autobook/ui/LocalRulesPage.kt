@@ -47,21 +47,19 @@ internal enum class RuleBulkAction { IMPORT, RESET, CLEAR_STATS }
 /**
  * 规则文件 / 餐段 / 识别统计三组的状态。
  *
- * 这三组从原「本地规则」整页搬进「识别与规则」，实现、文案与二次确认仍只有这一份；
- * 学习相关部分已归到页面的「学习记忆」组，不再出现在这里。
+ * 三组各有独立子页，操作与二次确认仍只有这一份。
+ * 学习相关部分由「学习记忆」子页承载。
  */
 internal class RulesSectionsState(
     val context: android.content.Context,
     val summary: String,
     val windows: List<MealWindow>,
     val message: String?,
-    val showFormat: Boolean,
     val rows: List<CoverageCounter>,
     val pendingAction: RuleBulkAction?,
     val changeWindow: (Int, MealWindow) -> Unit,
     val saveMeals: () -> Unit,
     val fillMeals: () -> Unit,
-    val toggleFormat: () -> Unit,
     val launchImport: () -> Unit,
     val exportRules: () -> Unit,
     val refreshStats: () -> Unit,
@@ -76,7 +74,6 @@ internal fun rememberRulesSectionsState(): RulesSectionsState {
     val summary by ExternalRuleStore.summary.collectAsStateWithLifecycle()
     var windows by remember { mutableStateOf(LocalRuleStore.snapshot().mealWindows) }
     var message by remember { mutableStateOf<String?>(null) }
-    var showFormat by rememberSaveable { mutableStateOf(false) }
     var pendingImport by remember { mutableStateOf<String?>(null) }
     var pendingAction by remember { mutableStateOf<RuleBulkAction?>(null) }
     var revision by remember { mutableIntStateOf(0) }
@@ -113,7 +110,6 @@ internal fun rememberRulesSectionsState(): RulesSectionsState {
         summary = summary,
         windows = windows,
         message = message,
-        showFormat = showFormat,
         rows = rows,
         pendingAction = pendingAction,
         changeWindow = { index, window -> windows = windows.toMutableList().also { it[index] = window } },
@@ -122,7 +118,6 @@ internal fun rememberRulesSectionsState(): RulesSectionsState {
                 .getOrElse { "未保存：${it.message}" }
         },
         fillMeals = { LedgerConfig.addMealSubCategories(); message = "已补齐缺少的餐别" },
-        toggleFormat = { showFormat = !showFormat },
         launchImport = { importFile.launch(arrayOf("application/json", "text/*", "application/octet-stream")) },
         exportRules = { exportFile.launch("AutoBook-rules.json") },
         refreshStats = { revision++ },
@@ -175,9 +170,6 @@ internal fun RulesActionDialog(state: RulesSectionsState) {
 }
 
 internal fun LazyListScope.rulesFileSection(state: RulesSectionsState) {
-    state.message?.let { text ->
-        item { Text(text, style = AbType.footnote, color = LocalAbPalette.current.accent) }
-    }
     item { GroupHeader("规则文件") }
     item {
         val p = LocalAbPalette.current
@@ -202,55 +194,30 @@ internal fun LazyListScope.rulesFileSection(state: RulesSectionsState) {
                 subtitle = "移除导入覆盖，保留学习及餐段设置",
                 onClick = { state.requestAction(RuleBulkAction.RESET) },
             )
-            InsetDivider()
-            ListRow(
-                title = "规则文件格式与示例",
-                subtitle = if (state.showFormat) "点击收起" else "查看 JSON 字段和完整示例",
-                chevron = true,
-                onClick = state.toggleFormat,
-            )
-        }
-    }
-    if (state.showFormat) {
-        item {
-            GroupFooter(
-                "version固定为1；rules为页面规则，categories为分类关键词，accounts为账户关键词。" +
-                    "type可用EXPENSE支出、INCOME收入、REFUND退款、TRANSFER转账；matchMethod=true表示匹配支付方式。",
-            )
-        }
-        item {
-            GroupFooter(
-                """{"version":1,"rules":[],"categories":[{"type":"EXPENSE","keywords":["示例餐厅"],"category":"餐饮","subCategory":"午餐"}],"accounts":[{"type":"EXPENSE","keywords":["零钱"],"account":"微信钱包","matchMethod":true}]}""",
-            )
-        }
-        item {
-            GroupFooter(
-                "这里只支持文字包含匹配，不支持正则。分类、子类、账户须先在清单中创建；不存在的名称不会使用。" +
-                    "页面规则须提供packages包名、kind页面类型、require全部条件、strategy名称；" +
-                    "anyOf是备选条件组，exclude是排除词；require中的|表示任一文字，规则总数最多200。",
-            )
+
         }
     }
 }
 
 internal fun LazyListScope.mealSection(state: RulesSectionsState) {
     item { GroupHeader("餐饮时段") }
-    item { GroupFooter("按账单发生时间推荐早餐、午餐等；调整后点击保存。") }
     items(state.windows.indices.toList()) { index ->
         val window = state.windows[index]
-        Column(Modifier.fillMaxWidth().padding(vertical = AbSpacing.xs)) {
-            Text(window.subCategory, style = AbType.body, color = LocalAbPalette.current.label)
-            Row(horizontalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-                AbTextField(
-                    value = window.from,
-                    onValueChange = { value -> state.changeWindow(index, window.copy(from = value)) },
-                    placeholder = "开始 HH:mm", modifier = Modifier.weight(1f),
-                )
-                AbTextField(
-                    value = window.to,
-                    onValueChange = { value -> state.changeWindow(index, window.copy(to = value)) },
-                    placeholder = "结束 HH:mm", modifier = Modifier.weight(1f),
-                )
+        InsetGroup {
+            Column(Modifier.fillMaxWidth().padding(com.example.autobook.ui.design.AbCardDensity.content), verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
+                Text(window.subCategory, style = AbType.headline, color = LocalAbPalette.current.label)
+                Row(horizontalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
+                    AbTextField(
+                        value = window.from,
+                        onValueChange = { value -> state.changeWindow(index, window.copy(from = value)) },
+                        placeholder = "开始 HH:mm", modifier = Modifier.weight(1f),
+                    )
+                    AbTextField(
+                        value = window.to,
+                        onValueChange = { value -> state.changeWindow(index, window.copy(to = value)) },
+                        placeholder = "结束 HH:mm", modifier = Modifier.weight(1f),
+                    )
+                }
             }
         }
     }
@@ -264,7 +231,6 @@ internal fun LazyListScope.mealSection(state: RulesSectionsState) {
             )
         }
     }
-    item { GroupFooter("餐段起点包含、终点不包含，支持跨午夜且不允许重叠。空档使用三餐或餐饮一级。") }
 }
 
 internal fun LazyListScope.statisticsSection(state: RulesSectionsState) {
@@ -278,15 +244,17 @@ internal fun LazyListScope.statisticsSection(state: RulesSectionsState) {
         }
     }
     if (state.rows.isEmpty()) {
-        item { Text("暂无识别记录", style = AbType.body, color = LocalAbPalette.current.secondaryLabel) }
+        item { InsetGroup { ListRow(title = "暂无识别记录", subtitle = "有新的识别结果后，会在这里按日期与应用汇总。") } }
     }
     items(state.rows) { row ->
-        Text(
-            "${row.day}  ${appLabel(row.packageName)}\n${coverageLabel(row.outcome)}：${row.count}次",
-            style = AbType.footnote, color = LocalAbPalette.current.secondaryLabel,
-        )
+        InsetGroup {
+            ListRow(
+                title = appLabel(row.packageName),
+                subtitle = "${row.day} · ${coverageLabel(row.outcome)}",
+                trailing = { Text("${row.count} 次", style = AbType.headline, color = LocalAbPalette.current.label) },
+            )
+        }
     }
-    item { GroupFooter("统计仅含日期、应用和识别结果次数，不保存页面原文。") }
 }
 
 internal fun coverageLabel(outcome: String): String = when (outcome) {

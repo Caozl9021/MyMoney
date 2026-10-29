@@ -67,8 +67,8 @@ object CaptureFields {
         if (old.method != new.method) flags = flags or METHOD
         if (old.category != new.category) flags = flags or CATEGORY
         if (old.subCategory != new.subCategory) flags = flags or SUBCATEGORY
-        if (old.account != new.account) flags = flags or ACCOUNT
-        if (old.note != new.note) flags = flags or NOTE
+        if (old.account != new.account || old.transferAccountId != new.transferAccountId) flags = flags or ACCOUNT
+        if (old.note != new.note || old.noteOrigin != new.noteOrigin) flags = flags or NOTE
         return flags
     }
 }
@@ -101,7 +101,10 @@ object CaptureMergePolicy {
             category = category,
             subCategory = subCategory,
             account = missing(row.account, incoming.account, CaptureFields.ACCOUNT),
-            note = missing(row.note, incoming.note, CaptureFields.NOTE),
+            transferAccountId = missing(row.transferAccountId, incoming.transferAccountId, CaptureFields.ACCOUNT),
+            note = if (row.noteOrigin == NoteTemplate.USER || row.noteOrigin == NoteTemplate.SUGGESTION) row.note else missing(row.note, incoming.note, CaptureFields.NOTE),
+            productName = row.productName ?: incoming.productName,
+            productSource = if (row.productName == null) incoming.productSource else row.productSource,
             transactionKey = row.transactionKey ?: incoming.transactionKey,
             timeMillis = if (!row.hasExplicitTime && incoming.hasExplicitTime && row.protectedFields and CaptureFields.TIME == 0L) incoming.timeMillis else row.timeMillis,
             hasExplicitTime = row.hasExplicitTime || (incoming.hasExplicitTime && row.protectedFields and CaptureFields.TIME == 0L),

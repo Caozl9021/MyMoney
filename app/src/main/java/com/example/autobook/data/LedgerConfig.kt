@@ -53,7 +53,7 @@ object LedgerConfig {
     )
 
     /** 备注模板可用的占位符 */
-    val NOTE_TOKENS = listOf("{商户}", "{支付方式}", "{分类}", "{账户}", "{时间}")
+    val NOTE_TOKENS get() = NoteTemplate.TOKENS
 
     private var prefs: android.content.SharedPreferences? = null
 
@@ -154,12 +154,24 @@ object LedgerConfig {
 
     // ---------- 重置 ----------
 
-    fun resetToDefault() {
-        AssetStore.changeCandidates(DEFAULT_ACCOUNTS, restoreArchived = true)
+    /** 分类页只恢复分类，保留账户清单、余额流水和其他偏好。 */
+    fun resetCategoriesToDefault() {
         p().edit()
-            .remove(KEY_EXPENSE).remove(KEY_INCOME).remove(KEY_ACCOUNTS)
+            .remove(KEY_EXPENSE).remove(KEY_INCOME)
             .remove(KEY_OLD_EXPENSE).remove(KEY_OLD_INCOME)
             .apply()
+    }
+
+    /** 恢复账户候选只归档多余账户、恢复默认候选；不删除余额与流水。 */
+    fun resetAccountsToDefault() {
+        AssetStore.changeCandidates(DEFAULT_ACCOUNTS, restoreArchived = true)
+        p().edit().remove(KEY_ACCOUNTS).apply()
+    }
+
+    /** 确认卡的既有完整清单恢复入口，保留原范围。 */
+    fun resetToDefault() {
+        resetAccountsToDefault()
+        resetCategoriesToDefault()
     }
 
     // ---------- 内部 ----------

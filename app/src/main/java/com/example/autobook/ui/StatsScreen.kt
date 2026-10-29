@@ -7,6 +7,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
@@ -55,16 +57,24 @@ fun StatsScreen(onOpenDetails: () -> Unit = {}) {
     val listState = rememberLazyListState()
     var periodName by rememberSaveable { mutableStateOf(StatisticsPeriod.WEEK.name) }
     val clock = rememberLedgerClock()
+    val monthStartDay = rememberMonthStartDay()
     var anchorDay by rememberSaveable { mutableLongStateOf(clock.date.toEpochDay()) }
     var type by rememberSaveable { mutableStateOf("EXPENSE") }
     var grouping by rememberSaveable { mutableIntStateOf(0) }
     var retry by remember { mutableIntStateOf(0) }
     var followsToday by rememberSaveable { mutableStateOf(true) }
     val zone = clock.zone
-    val effectiveAnchorDay = if (followsToday) clock.date.toEpochDay() else anchorDay
     val period = StatisticsPeriod.valueOf(periodName)
-    val range = remember(period, effectiveAnchorDay, zone) {
-        StatisticsRange.containing(LocalDate.ofEpochDay(effectiveAnchorDay), period, zone)
+    var monthDayAtAnchor by rememberSaveable { mutableIntStateOf(monthStartDay) }
+    val effectiveAnchorDay = if (followsToday || period == StatisticsPeriod.MONTH && monthDayAtAnchor != monthStartDay)
+        clock.date.toEpochDay() else anchorDay
+    LaunchedEffect(monthStartDay, period) {
+        if (period == StatisticsPeriod.MONTH && monthDayAtAnchor != monthStartDay) {
+            followsToday = true; anchorDay = clock.date.toEpochDay(); monthDayAtAnchor = monthStartDay
+        }
+    }
+    val range = remember(period, effectiveAnchorDay, zone, if (period == StatisticsPeriod.MONTH) monthStartDay else 1) {
+        StatisticsRange.containing(LocalDate.ofEpochDay(effectiveAnchorDay), period, zone, monthStartDay)
     }
     var result by remember { mutableStateOf<StatisticsLoad?>(null) }
     var selectedDate by remember(range, type) { mutableStateOf<LocalDate?>(null) }
@@ -113,16 +123,15 @@ fun StatsScreen(onOpenDetails: () -> Unit = {}) {
     val label = statisticsPeriodLabel(period, range)
     // 紧凑标题：统计页不在顶部占一块大标题，「统计」压在导航条里，
     // 省下的 69dp 直接给了趋势图（V1-01 的首屏量化目标）。
-    PageScaffold(title = "统计", listState = listState, compact = true,
+    PageScaffold(title = "统计", listState = listState, compact = true, floatingHeader = true,
         actions = {
-            TextButton(onClick = onOpenDetails, modifier = Modifier.heightIn(min = 48.dp)) {
-                Text("明细", color = p.accent)
-            }
+            com.example.autobook.ui.design.FloatingHeaderAction(AbIcons.List, "查看明细", onOpenDetails)
         },
     ) { padding ->
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxWidth().pointerInput(range) {
+            // Keep sticky period/type controls below the floating capsules at every scroll offset.
+            modifier = Modifier.fillMaxWidth().padding(top = padding.calculateTopPadding()).pointerInput(range) {
                 var distance = 0f
                 detectHorizontalDragGestures(
                     onDragStart = { distance = 0f },
@@ -138,36 +147,46 @@ fun StatsScreen(onOpenDetails: () -> Unit = {}) {
                 top = AbSpacing.xs, bottom = padding.calculateBottomPadding()),
             verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
-            // 周期与类型压在同一屏的两行里：一行周期（箭头+标签+回本月），
-            // 一行两个分段选择器并排。原来「回到本月」独占一行，白占 48dp。
+            // Navigation keeps the same structure in current and historical periods.
+            // At large font sizes the period moves to its own row without squeezing the label.
             stickyHeader(key = "period-and-type") {
                 Column(Modifier.background(p.pageBg).padding(bottom = AbSpacing.s),
                     verticalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
-                    // 一行放完周/月、前后周期与回到本月：原来「周/月」独占的第二行
-                    // 白占 48dp，是首屏图表被挤下去的主要原因之一。
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
-                        Box(Modifier.width(96.dp)) {
-                            Segmented(listOf("周", "月"), if (period == StatisticsPeriod.WEEK) 0 else 1, {
+                    BoxWithConstraints(Modifier.fillMaxWidth()) {
+                        val stacked = maxWidth < 350.dp * LocalDensity.current.fontScale.coerceAtLeast(1f)
+                        val switch: @Composable () -> Unit = {
+                            StatisticsPeriodSwitch(if (period == StatisticsPeriod.WEEK) 0 else 1) {
                                 periodName = if (it == 0) StatisticsPeriod.WEEK.name else StatisticsPeriod.MONTH.name
-                            })
+                            }
                         }
-                        PeriodArrow(true) { shift(-1) }
-                        Text(label, style = AbType.headline, color = p.label,
-                            modifier = Modifier.weight(1f).padding(horizontal = 2.dp),
-                            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                        if (!followsToday) Text(
-                            if (period == StatisticsPeriod.WEEK) "本周" else "本月",
-                            style = AbType.footnote.copy(fontWeight = FontWeight.Medium),
-                            color = p.accent,
-                            modifier = Modifier.clip(RoundedCornerShape(AbRadius.capsule))
-                                .clickable { followsToday = true; anchorDay = clock.date.toEpochDay() }
-                                .heightIn(min = 40.dp)
-                                .padding(horizontal = AbSpacing.s, vertical = 10.dp),
-                        )
-                        PeriodArrow(false) { shift(1) }
+                        val navigation: @Composable RowScope.() -> Unit = {
+                            PeriodArrow(true) { shift(-1) }
+                            Box(Modifier.weight(1f).heightIn(min = 48.dp)
+                                .clip(RoundedCornerShape(AbRadius.capsule))
+                                .clickable(enabled = !followsToday, onClickLabel = "回到当前周期") {
+                                    followsToday = true; anchorDay = clock.date.toEpochDay()
+                                }.semantics(mergeDescendants = true) {
+                                    contentDescription = if (followsToday) label else "$label，点击回到当前周期"
+                                }, contentAlignment = Alignment.Center) {
+                                Text(label, style = AbType.footnote.copy(fontWeight = FontWeight.SemiBold),
+                                    color = if (followsToday) p.label else p.accent,
+                                    maxLines = 1, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                            }
+                            PeriodArrow(false) { shift(1) }
+                        }
+                        if (stacked) Column {
+                            switch()
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, content = navigation)
+                        } else Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
+                            switch()
+                            navigation()
+                        }
                     }
+                    if (period == StatisticsPeriod.MONTH && monthStartDay != 1) Text(
+                        "${range.startDate} – ${range.endExclusiveDate.minusDays(1)}", style = AbType.caption1, color = p.secondaryLabel,
+                        modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+
                     Segmented(listOf("支出", "收入", "退款"), listOf("EXPENSE", "INCOME", "REFUND").indexOf(type), {
                         type = listOf("EXPENSE", "INCOME", "REFUND")[it]
                     })
@@ -175,8 +194,8 @@ fun StatsScreen(onOpenDetails: () -> Unit = {}) {
             }
             if (summary == null) {
                 item("status") {
-                    InsetGroup(Modifier.padding(bottom = AbSpacing.l)) {
-                        Column(Modifier.padding(AbSpacing.xl)) {
+                    InsetGroup(Modifier.padding(bottom = AbCardDensity.gap)) {
+                        Column(Modifier.padding(AbCardDensity.content)) {
                             Text(if (failed) "统计加载失败，请重试。" else "正在加载本周期…", color = p.secondaryLabel)
                             if (failed) TextButton(onClick = { retry++ }, modifier = Modifier.heightIn(min = 48.dp)) {
                                 Text("重新加载", color = p.accent)
@@ -187,8 +206,8 @@ fun StatsScreen(onOpenDetails: () -> Unit = {}) {
             } else {
                 // 摘要卡：主金额最大，其余口径两列并排，不再四行逐项纵排。
                 item("totals") {
-                    InsetGroup(Modifier.padding(bottom = AbSpacing.m)) {
-                        Column(Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xl, vertical = AbSpacing.m),
+                    InsetGroup(Modifier.padding(bottom = AbCardDensity.gap)) {
+                        Column(Modifier.fillMaxWidth().padding(AbCardDensity.content),
                             verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
                             val primary = when (type) {
                                 "INCOME" -> summary.totals.income
@@ -211,11 +230,11 @@ fun StatsScreen(onOpenDetails: () -> Unit = {}) {
                 }
                 if (summary.count == 0) {
                     item("empty") { Text("本周期没有账单，可用箭头查看其他周期。", color = p.secondaryLabel,
-                        modifier = Modifier.padding(bottom = AbSpacing.l)) }
+                        modifier = Modifier.padding(bottom = AbCardDensity.gap)) }
                 }
                 item("trend") {
-                    InsetGroup(Modifier.padding(bottom = AbSpacing.m)) {
-                        Column(Modifier.padding(start = AbSpacing.xl, end = AbSpacing.xl, top = AbSpacing.m, bottom = AbSpacing.m),
+                    InsetGroup(Modifier.padding(bottom = AbCardDensity.gap)) {
+                        Column(Modifier.padding(AbCardDensity.content),
                             verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
                                 Text("每日${statisticsShortTypeLabel(type)}", style = AbType.headline, color = p.label,
@@ -238,7 +257,7 @@ fun StatsScreen(onOpenDetails: () -> Unit = {}) {
                     }
                 }
                 item("grouping") {
-                    Row(Modifier.fillMaxWidth().padding(bottom = AbSpacing.l),
+                    Row(Modifier.fillMaxWidth().padding(bottom = AbCardDensity.gap),
                         horizontalArrangement = Arrangement.spacedBy(AbSpacing.s), verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.width(196.dp)) {
                             Segmented(listOf("分类占比", "账户汇总"), grouping, { grouping = it })
@@ -247,8 +266,8 @@ fun StatsScreen(onOpenDetails: () -> Unit = {}) {
                 }
                 val groups = if (grouping == 0) summary.categories(type) else summary.accounts(type)
                 item("ring") {
-                    InsetGroup(Modifier.padding(bottom = AbSpacing.l)) {
-                        Column(Modifier.fillMaxWidth().padding(AbSpacing.xl), verticalArrangement = Arrangement.spacedBy(AbSpacing.m)) {
+                    InsetGroup(Modifier.padding(bottom = AbCardDensity.gap)) {
+                        Column(Modifier.fillMaxWidth().padding(AbCardDensity.content), verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
                             Text("${statisticsTypeLabel(type)} · ${if (grouping == 0) "分类" else "账户"}", style = AbType.headline, color = p.label)
                             if (groups.isEmpty()) Text("本周期没有${statisticsTypeLabel(type)}记录。", color = p.secondaryLabel)
                             else {
@@ -301,7 +320,7 @@ private fun StatisticsSecondaryGrid(summary: StatisticsSummary, type: String) {
         add(Triple("结余", signedStatisticsAmount(summary.totals.balance), p.label))
     }
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val gap = AbSpacing.l
+        val gap = AbCardDensity.gap
         // 三格（收入/退款/结余）在标准字号下能并成一行就并成一行，
         // 少两行文字，首屏就多出两行给图表。大字号/窄屏自动退回两列、一列。
         val minimumCell = 88.dp * fontScale.coerceAtLeast(1f)
@@ -320,7 +339,7 @@ private fun StatisticsSecondaryGrid(summary: StatisticsSummary, type: String) {
                             horizontalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
                             Text(label, style = AbType.caption1, color = p.secondaryLabel)
                             Text(value, style = AbType.subhead.copy(fontWeight = FontWeight.Medium), color = tint,
-                                maxLines = 1)
+                                modifier = Modifier.weight(1f))
                         }
                     }
                     // 最后一行不足一列时补位，避免单格被拉满整行。
@@ -348,7 +367,7 @@ private fun CompactStatisticsGroupRow(
             .background(if (isSelected) p.fill else p.cardBg)
             .clickable(onClick = onClick)
             .semantics(mergeDescendants = true) { selected = isSelected }
-            .padding(horizontal = AbSpacing.l, vertical = AbSpacing.m),
+            .padding(horizontal = AbCardDensity.content, vertical = AbCardDensity.rowVertical),
             verticalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
             Row(horizontalArrangement = Arrangement.spacedBy(AbSpacing.s), verticalAlignment = Alignment.Top) {
                 Box(Modifier.padding(top = 5.dp).size(10.dp)
@@ -363,7 +382,7 @@ private fun CompactStatisticsGroupRow(
                     .fillMaxHeight().background(AbAccentSwatches[(index - 1) % AbAccentSwatches.size]))
             }
         }
-        if (!last) HorizontalDivider(Modifier.padding(horizontal = AbSpacing.l), color = p.separator, thickness = 0.5.dp)
+        if (!last) HorizontalDivider(Modifier.padding(horizontal = AbCardDensity.content), color = p.separator, thickness = 0.5.dp)
     }
 }
 
@@ -375,7 +394,8 @@ private fun CompactStatisticsGroupRow(
  */
 internal fun statisticsPeriodLabel(period: StatisticsPeriod, range: StatisticsRange): String =
     if (period == StatisticsPeriod.MONTH) {
-        "${range.startDate.year}年${range.startDate.monthValue}月"
+        if (range.monthStartDay == 1) "${range.startDate.year}年${range.startDate.monthValue}月"
+        else com.example.autobook.data.LedgerMonthPeriod.containing(range.startDate, range.monthStartDay, range.zone).shortLabel()
     } else {
         val monday = range.startDate
         "${monday.monthValue}月第${statisticsWeekOfMonth(monday)}周"
@@ -404,3 +424,31 @@ internal fun statisticsTypeLabel(type: String) = when (type) { "INCOME" -> "收�
 /** 图表/环图用的短标签：「每日支出」而不是「每日原支出」。 */
 internal fun statisticsShortTypeLabel(type: String) = when (type) { "INCOME" -> "收入"; "REFUND" -> "退款"; else -> "支出" }
 internal fun statisticsPercent(ratio: Double) = String.format(java.util.Locale.US, "%.1f%%", ratio * 100)
+
+/** The flat visual sits inside separate, stable 56×48dp touch targets. */
+@Composable
+private fun StatisticsPeriodSwitch(selectedIndex: Int, onSelect: (Int) -> Unit) {
+    val p = LocalAbPalette.current
+    val reduceMotion = LocalReduceMotion.current
+    val position by androidx.compose.animation.core.animateFloatAsState(selectedIndex.toFloat(),
+        tween(if (reduceMotion) 0 else AbMotion.selection), label = "statistics-period")
+    val visualHeight = 32.dp * LocalDensity.current.fontScale.coerceAtLeast(1f)
+    Box(Modifier.width(112.dp).heightIn(min = maxOf(48.dp, visualHeight)), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxWidth().height(visualHeight).clip(RoundedCornerShape(AbRadius.capsule))
+            .background(p.fill).padding(2.dp)) {
+            Box(Modifier.offset(x = 54.dp * position).width(54.dp).fillMaxHeight()
+                .clip(RoundedCornerShape(AbRadius.capsule)).background(p.cardBg))
+        }
+        Row(Modifier.fillMaxWidth().selectableGroup()) {
+            listOf("周", "月").forEachIndexed { index, label ->
+                Box(Modifier.weight(1f).heightIn(min = maxOf(48.dp, visualHeight))
+                    .selectable(selected = index == selectedIndex, role = androidx.compose.ui.semantics.Role.Tab,
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null, onClick = { onSelect(index) }), contentAlignment = Alignment.Center) {
+                    Text(label, style = AbType.footnote.copy(fontWeight = FontWeight.SemiBold),
+                        color = if (index == selectedIndex) p.label else p.secondaryLabel)
+                }
+            }
+        }
+    }
+}

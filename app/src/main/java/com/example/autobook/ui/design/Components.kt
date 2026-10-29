@@ -34,6 +34,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.ui.layout.layoutId
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -176,7 +177,7 @@ fun GroupHeader(text: String, modifier: Modifier = Modifier) {
         text = text,
         style = AbType.sectionHeader,
         color = p.secondaryLabel,
-        modifier = modifier.padding(start = AbSpacing.xs, bottom = 7.dp, top = AbSpacing.xs),
+        modifier = modifier.layoutId(SectionRole.HEADER).padding(start = AbSpacing.xs),
     )
 }
 
@@ -188,7 +189,7 @@ fun GroupFooter(text: String, modifier: Modifier = Modifier) {
         text = text,
         style = AbType.caption1,
         color = p.secondaryLabel,
-        modifier = modifier.padding(start = AbSpacing.xs, end = AbSpacing.xs, top = 6.dp),
+        modifier = modifier.layoutId(SectionRole.FOOTER).padding(start = AbSpacing.xs, end = AbSpacing.xs),
     )
 }
 
@@ -204,6 +205,7 @@ fun InsetGroup(
     val p = LocalAbPalette.current
     Column(
         modifier = modifier
+            .layoutId(SectionRole.CARD)
             .fillMaxWidth()
             .clip(RoundedCornerShape(AbRadius.group))
             .background(p.cardBg),
@@ -251,7 +253,7 @@ fun ListRow(
     val p = LocalAbPalette.current
     val haptic = rememberAbHaptic()
     Column(Modifier.fillMaxWidth()) {
-        if (dividerAbove) InsetDivider(inset = if (leading != null) 62.dp else AbSize.separatorInset)
+        if (dividerAbove) InsetDivider(inset = if (leading != null) AbCardDensity.leadingInset else AbSize.separatorInset)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -267,7 +269,7 @@ fun ListRow(
                         }
                     } else Modifier,
                 )
-                .padding(horizontal = AbSpacing.l, vertical = 11.dp),
+                .padding(horizontal = AbSpacing.l, vertical = AbCardDensity.rowVertical),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(AbSpacing.m),
         ) {
@@ -433,7 +435,7 @@ fun PrimaryButton(
     busy: Boolean = false,
     busyLabel: String = "处理中…",
 ) {
-    ActionButton(text, onClick, modifier, enabled, busy, busyLabel, primary = true)
+    ActionButton(text, onClick, modifier.layoutId(SectionRole.ACTION), enabled, busy, busyLabel, primary = true)
 }
 
 /** 次要按钮：透明底 + 细描边，共用按压、忙碌与读屏语义。 */
@@ -523,22 +525,23 @@ private fun ActionButton(
 // 图标徽章
 // ---------------------------------------------------------------------------
 
-/** 分类图标：40dp 圆角方块，底色是分类色的 14% tint。 */
+/** 图标徽章：实色圆角底，前景按对比度选择。 */
 @Composable
 fun IconBadge(
     icon: ImageVector,
     tint: Color,
     modifier: Modifier = Modifier,
-    size: Dp = 40.dp,
+    size: Dp = AbCardDensity.settingsIcon,
 ) {
+    val background = tint.copy(alpha = 1f)
     Box(
         modifier = modifier
             .size(size)
             .clip(RoundedCornerShape(if (size >= 40.dp) 12.dp else 9.dp))
-            .background(tint.copy(alpha = 0.14f)),
+            .background(background),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = null, Modifier.size(size * 0.52f), tint = tint)
+        Icon(icon, contentDescription = null, Modifier.size(size * 0.56f), tint = badgeForeground(background))
     }
 }
 
@@ -554,18 +557,18 @@ fun EmptyState(
 ) {
     val p = LocalAbPalette.current
     Column(
-        modifier = modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 40.dp),
+        modifier = modifier.fillMaxWidth().padding(horizontal = AbSpacing.xxl, vertical = AbSpacing.xxl),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(AbSpacing.m),
     ) {
         Box(
             Modifier
-                .size(72.dp)
+                .size(56.dp)
                 .clip(CircleShape)
                 .background(p.fill),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, null, Modifier.size(32.dp), tint = p.secondaryLabel)
+            Icon(icon, null, Modifier.size(28.dp), tint = p.secondaryLabel)
         }
         Text(title, style = AbType.headline, color = p.label)
         Text(
