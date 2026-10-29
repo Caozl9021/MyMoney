@@ -25,12 +25,14 @@ Android本地自动记账：交易通知、页面辅助、短信或微信/支付
 
 ## 构建与安装
 
+当前工作分支：`master`（主线）与 `self`（2026-10-29 新建，用于隔离改动）。`build-all.sh` 按分支命名产物：`dist/AutoBook-<版本>-<分支>-{debug,release}.apk`（master→`-master-`，self→`-self-`），两分支同版本互不覆盖。
+
 ```bash
 source ~/opt/autobook-env.sh
 ./gradlew :app:testDebugUnitTest
 ./gradlew :app:assembleDebug :app:assembleRelease :app:assembleDebugAndroidTest
-# 安装已核验的同签名正式包
-adb install -r dist/AutoBook-0.29.1-release.apk
+# 安装已核验的同签名正式包（按当前分支选择 -master- / -self- 文件名）
+adb install -r dist/AutoBook-0.32.0-master-release.apk
 ```
 
 仅在依赖缓存完整时添加`--offline`。正式签名在仓库外的用户配置中读取，debug与release签名不同；覆盖升级以连续release签名为准，不能用卸载规避签名冲突。

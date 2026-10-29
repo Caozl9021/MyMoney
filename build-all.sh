@@ -10,6 +10,9 @@ cd "$(dirname "$0")"
 
 VERSION_NAME=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts | head -1)
 VERSION_CODE=$(grep -oP 'versionCode\s*=\s*\K[0-9]+' app/build.gradle.kts | head -1)
+# 分支标识：不同分支打到 dist 用不同文件名，避免 master / self 同名包互相覆盖。
+BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo nogit)
+BRANCH_TAG=${BRANCH_NAME//\//-}
 
 if [ -z "$VERSION_NAME" ] || [ -z "$VERSION_CODE" ]; then
     echo "❌ 无法从 app/build.gradle.kts 读取版本号"
@@ -68,8 +71,8 @@ echo "🔨 构建主 App (Release，包含内置 LSP 增强)..."
 
 APP_DEBUG="app/build/outputs/apk/debug/app-debug.apk"
 APP_RELEASE="app/build/outputs/apk/release/app-release.apk"
-DIST_DEBUG="dist/AutoBook-${VERSION_NAME}-debug.apk"
-DIST_RELEASE="dist/AutoBook-${VERSION_NAME}-release.apk"
+DIST_DEBUG="dist/AutoBook-${VERSION_NAME}-${BRANCH_TAG}-debug.apk"
+DIST_RELEASE="dist/AutoBook-${VERSION_NAME}-${BRANCH_TAG}-release.apk"
 
 # 复制 + 核对版本（aapt2 读到的不一致就报错，不静默通过）
 echo ""
