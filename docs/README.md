@@ -1,6 +1,6 @@
 # 本地文档索引
 
-同步日期：2026-10-29。当前交付 **0.32.0/99（麦米），待用户验收**。Room9/JSON8（兼容JSON1–7）。首页期摘要去掉重复今日行，三款图标联动品牌主题与柔和切换动画。0.31.0三款图标功能既有用户验收保持，0.28.5/0.28.4等历史独立范围不扩大，BUG-BACK-GHOST-001仍OPEN。
+同步日期：2026-10-29。当前交付 **0.32.0/99（麦米），用户验收通过**（用户于2026-10-29明确回复“0.32验收通过”）。Room9/JSON8（兼容JSON1–7）。首页期摘要去掉重复今日行，三款图标联动品牌主题与柔和切换动画。0.31.0三款图标功能既有用户验收保持，0.28.5/0.28.4等历史独立范围不扩大，BUG-BACK-GHOST-001仍OPEN。
 
 进度、剩余范围、执行证据与用户验收分别维护；本轮普通模式配置已实施并出包，历史验收不扩展；不清理资料。
 
@@ -32,9 +32,9 @@
 <details>
 <summary>本次同步前的文档原文（历史快照，当前状态以上方为准）</summary>
 
-> 2026-10-28 0.28.4/92交付及验收：LSPosed独立/寄生管理器入口兼容，新增用户点击的“重启微信与支付宝”、Root白名单/有界后台执行/按目标结果与自动加载检测。739项唯一JVM、三构建、strict28与连续签名/真机版本/APK摘要通过；管理器0.28.3中间包App入口两次真机打开LSPosed2.2.1(7912)。最终0.28.4已覆盖安装，代理未执行双目标重启；用户明确“验证通过”，**本轮功能用户验收通过**，不外推其他矩阵或历史未验收范围。Room9/JSON8不变，残影OPEN。证据`/home/caozl/Projects/AutoBook/runs/20261028-232511-restart-wechat-alipay/outputs/verification.md`；验收`deliverables/0.28.4/acceptance.md`；包`dist/AutoBook-0.28.4-release.apk`。
+> 2026-10-28 0.28.4/92交付及验收：LSPosed独立/寄生管理器入口兼容，新增用户点击的“重启微信与支付宝”、Root白名单/有界后台执行/按目标结果与自动加载检测。739项唯一JVM、三构建、strict28与连续签名/真机版本/APK摘要通过；管理器0.28.3中间包App入口两次真机打开LSPosed2.2.1(7912)。最终0.28.4已覆盖安装，代理未执行双目标重启；用户明确“验证通过”，**本轮功能用户验收通过**，不外推其他矩阵或历史未验收范围。Room9/JSON8不变，残影OPEN。证据`/home/caozl/Projects/Mymoney/runs/20261028-232511-restart-wechat-alipay/outputs/verification.md`；验收`deliverables/0.28.4/acceptance.md`；包`dist/AutoBook-0.28.4-release.apk`。
 
-> 2026-10-28 0.28.2/90交付：按真机反馈精修共享放弃修改弹窗，中性宽卡片/居中文字/横向等宽按钮，放弃用语义红。三构建、strict28、连续签名与真机版本/APK摘要通过；小米23127PN0CC正式包浅色截图、临时草稿继续编辑/系统返回/点外部/明确放弃已实测，未保存账单，已回首页。未清数据或读私有库，深色/大字/窄屏和其他宿主未测。Room9/JSON8不变，既有验收保持、残影OPEN，**待用户验收**。证据`/home/caozl/Projects/AutoBook/runs/20261028-202738-discard-dialog-style/outputs/verification.md`；包`dist/AutoBook-0.28.2-release.apk`。
+> 2026-10-28 0.28.2/90交付：按真机反馈精修共享放弃修改弹窗，中性宽卡片/居中文字/横向等宽按钮，放弃用语义红。三构建、strict28、连续签名与真机版本/APK摘要通过；小米23127PN0CC正式包浅色截图、临时草稿继续编辑/系统返回/点外部/明确放弃已实测，未保存账单，已回首页。未清数据或读私有库，深色/大字/窄屏和其他宿主未测。Room9/JSON8不变，既有验收保持、残影OPEN，**待用户验收**。证据`/home/caozl/Projects/Mymoney/runs/20261028-202738-discard-dialog-style/outputs/verification.md`；包`dist/AutoBook-0.28.2-release.apk`。
 
 > 2026-10-28 0.28.1/89交付：按用户选择仅保留S030，其他63项处理（60处本轮移除、3处前轮已不存在），清理空说明占位及死入口。三构建、strict28、与真机现有0.27.0连续签名通过；已按要求覆盖安装小米23127PN0CC，回读版本/APK摘要与dist一致，授权标记一致。未清数据、未由代理启动/操作App，未读私有账本，本轮无JVM重跑或UI/交易验证。Room9/JSON8不变，0.27验收保持、残影OPEN，**待用户验收**。证据`runs/20261028-195614-remove-selected-copy/outputs/verification.md`；包`dist/AutoBook-0.28.1-release.apk`。
 
