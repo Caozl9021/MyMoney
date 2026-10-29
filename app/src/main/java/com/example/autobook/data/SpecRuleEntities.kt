@@ -8,16 +8,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 
-/**
- * `rule_model`：规则 JS 的唯一来源（SPEC §7）。
- *
- * 为什么规则要落库而不是只读 assets：
- * - 规则会被热更（用户导入新版 rules_all.json），不能每次发版；
- * - 命中记录要能引用 `systemRuleName` 回溯到具体那条规则；
- * - 163 条 × 平均 2KB 的正则如果每次启动都从 JSON 解析一遍，冷启动会明显变慢。
- *
- * `js` 存原始 `var rule_N=function(...)...;` 文本，引擎侧再剥前缀。
- */
+/** 本地规则表。系统包更新只替换系统行，不删除用户行或原始诊断。 */
 @Entity(
     tableName = "rule_model",
     indices = [Index(value = ["app", "type", "enabled", "id"])],
@@ -61,6 +52,12 @@ data class AppDataEntity(
 
 @Dao
 interface SpecRuleDao {
+    @Query("SELECT * FROM rule_model ORDER BY id ASC")
+    suspend fun allRules(): List<RuleModelEntity>
+
+    @Query("DELETE FROM rule_model WHERE creator IN ('system', 'maimi')")
+    suspend fun clearBundledRules()
+
     @Query("SELECT * FROM rule_model WHERE enabled = 1 ORDER BY id ASC")
     suspend fun enabledRules(): List<RuleModelEntity>
 
@@ -81,6 +78,9 @@ interface SpecRuleDao {
 
     @Query("SELECT * FROM app_data WHERE app = :app AND match = 0 ORDER BY time DESC LIMIT :limit")
     suspend fun recentMisses(app: String, limit: Int): List<AppDataEntity>
+
+    @Query("SELECT * FROM app_data WHERE app = :app AND type = 'DATA' AND time >= :since AND time <= :until AND id > :afterId ORDER BY id ASC LIMIT :limit")
+    suspend fun correlationData(app: String, since: Long, until: Long, afterId: Long, limit: Int): List<AppDataEntity>
 
     @Query("SELECT * FROM app_data WHERE id = :id")
     suspend fun dataById(id: Long): AppDataEntity?

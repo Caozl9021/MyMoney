@@ -5,20 +5,7 @@ import org.mozilla.javascript.NativeJSON
 import org.mozilla.javascript.Scriptable
 import org.mozilla.javascript.ScriptableObject
 
-/**
- * `js_category.js` 的求值器：把商户/商品/类型/时段喂给规格里的分类函数。
- *
- * <h3>为什么单独一个引擎，不塞进 [SpecRuleEngine]</h3>
- * 两者生命周期不同。规则引擎在 163 条规则变更时才重建；分类引擎只依赖 `js_common.js`
- * 和 `js_category.js` 两个随包文件，永远不会变。混在一个作用域里会让分类的
- * `var category` 和规则的 `var rule_N` 共享全局，规则重载时分类也跟着抖一次。
- *
- * <h3>调用约定（实测，与直觉不同）</h3>
- * `category.get(shopName, billType, a, r, hhmm, t)` 的匹配串是
- * `"a_r_t"`——**第 1 参 shopName 在函数体里被内层闭包的形参遮蔽，根本没参与匹配**。
- * 所以必须把待匹配文本重复放进第 3 参：`get(shop, type, shop, item, "12:00", "")`。
- * 只传第 1 参会得到永远"其他"。
- */
+/** 原创分类兜底的独立求值器，不覆盖用户分类和餐段配置。 */
 class SpecCategoryEngine {
 
     private val lock = Any()
@@ -28,7 +15,7 @@ class SpecCategoryEngine {
     @Volatile var lastBuildMillis: Long = 0L
         private set
 
-    fun isReady(): Boolean = getter != null
+    fun isReady(): Boolean = synchronized(lock) { getter != null }
 
     /**
      * 装载 `js_common.js` + `js_category.js`。
@@ -49,7 +36,7 @@ class SpecCategoryEngine {
                 val obj = ScriptableObject.getProperty(s, "category")
                 if (obj !is Scriptable) throw IllegalStateException("js_category.js 未导出 category")
                 val fn = ScriptableObject.getProperty(obj, "get")
-                if (fn !is Scriptable) throw IllegalStateException("category.get 不存在")
+                if (fn !is org.mozilla.javascript.Function) throw IllegalStateException("category.get 不是函数")
                 scope = s
                 getter = fn
             } finally {
@@ -78,6 +65,7 @@ class SpecCategoryEngine {
         val billType = when (type) {
             "Income" -> "Income"
             "Transfer" -> "Transfer"
+            "Refund" -> "Refund"
             else -> "Expend"
         }
         val cx = Context.enter()
@@ -109,5 +97,5 @@ class SpecCategoryEngine {
     }
 }
 
-/** 分类结果。`book` 恒为「默认账本」（规格里写死），当前项目只有一个账本，暂不使用。 */
+/** 分类结果；book为保留兼容字段，用户账本不由脚本创建。 */
 data class SpecCategoryResult(val category: String, val book: String)

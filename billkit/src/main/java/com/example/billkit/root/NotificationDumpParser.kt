@@ -1,5 +1,7 @@
 package com.example.billkit.root
 
+import com.example.billkit.notification.NotificationObservation
+
 /**
  * 解析 `dumpsys notification --noredact` 的文本，取出「当前通知列表」里的标题与正文。
  *
@@ -12,8 +14,7 @@ package com.example.billkit.root
  * android.text= / android.bigText= / posttime=」这一种最常见形态；
  * 认不出来就返回空表，不抛异常、不猜。调用方据此什么都不做即可。
  *
- * 与 SPEC §5.1 的关系：产出与通知通道完全相同的 `{title, text, t}` 语义，
- * 因此复用同一批 24 条 NOTICE 规则，不需要第二套判定。
+ * 只解析文本不代表可准入：还须识别完整记录头、flags 与闭合 extras。
  */
 object NotificationDumpParser {
 
@@ -32,9 +33,38 @@ object NotificationDumpParser {
          * 取不到（老 ROM 格式不同）时为空串，去重退回内容哈希。
          */
         val slot: String = "",
-    )
+        val channelId: String? = null,
+        val category: String? = null,
+        val template: String? = null,
+        val flags: Long? = null,
+        val categoryKnown: Boolean = false,
+        val templateKnown: Boolean = false,
+        val truncated: Boolean = false,
+        val extrasComplete: Boolean = false,
+    ) {
+        /** 缺字段不能当作 false 或 null 去证明它不是聊天/汇总/持续通知。 */
+        val envelopeMetadataKnown: Boolean get() = flags != null && categoryKnown && templateKnown && extrasComplete && !channelId.isNullOrBlank()
+
+        fun observation(receivedAt: Long): NotificationObservation? {
+            if (!envelopeMetadataKnown) return null
+            val verifiedFlags = flags ?: return null
+            return NotificationObservation(
+                eventId = "root:$slot:$postTime", packageName = packageName, deviceScope = "root-notification",
+                notificationKey = slot, notificationId = 0, notificationTag = null, userScope = "root",
+                postTime = postTime, receivedAt = receivedAt, title = title, text = text, bigText = null,
+                channelId = channelId, category = category, template = template,
+                isGroupSummary = verifiedFlags and 0x200L != 0L,
+                isOngoing = verifiedFlags and 0x2L != 0L,
+                isMessagingStyle = template?.contains("MessagingStyle") == true,
+                truncated = truncated,
+            )
+        }
+    }
 
     private val PACKAGE = Regex("""\bpkg=([A-Za-z0-9_.]+)""")
+    private val CHANNEL = Regex("""\bNotification\(channel=([^\s)]+)""")
+    private val CATEGORY = Regex("""(?:^|\s)category=([^\s)]+)""")
+    private val FLAGS = Regex("""(?:^\s*flags=|\bNotification\([^\n]*?\bflags=)([^\s)]+)""")
 
     /**
      * 通知槽位：`key=0|com.tencent.mm|-656511598|null|10299`。
@@ -97,6 +127,15 @@ object NotificationDumpParser {
         var text = ""
         var bigText = ""
         var slot = ""
+        var channelId: String? = null
+        var category: String? = null
+        var template: String? = null
+        var flags: Long? = null
+        var categoryKnown = false
+        var templateKnown = false
+        var truncated = false
+        var extrasIndent: Int? = null
+        var extrasComplete = false
         // 有的 ROM / 老版本 dump 没有分区标题，整段就是记录列表。
         // 认不出分区标题时按「全文都是通知列表」处理，而不是直接返回空表。
         var inList = raw.lineSequence().none { it.trim() == LIST_HEADER }
@@ -105,7 +144,8 @@ object NotificationDumpParser {
             val pkg = packageName
             if (pkg != null && (title.isNotBlank() || bigText.isNotBlank() || text.isNotBlank())) {
                 val body = bigText.ifBlank { text }
-                out += Dumped(pkg, title.trim(), body.trim(), postTime, slot)
+                out += Dumped(pkg, title.trim(), body.trim(), postTime, slot,
+                    channelId, category, template, flags, categoryKnown, templateKnown, truncated, extrasComplete)
             }
             packageName = null
             postTime = 0L
@@ -113,6 +153,15 @@ object NotificationDumpParser {
             text = ""
             bigText = ""
             slot = ""
+            channelId = null
+            category = null
+            template = null
+            flags = null
+            categoryKnown = false
+            templateKnown = false
+            truncated = false
+            extrasIndent = null
+            extrasComplete = false
         }
 
         for (line in raw.lineSequence()) {
@@ -135,13 +184,49 @@ object NotificationDumpParser {
                 packageName = PACKAGE.find(line)?.groupValues?.get(1)
                 postTime = timeOf(line)
                 slot = SLOT.find(line)?.groupValues?.get(1).orEmpty()
+                channelId = CHANNEL.find(line)?.groupValues?.get(1)?.takeUnless { it == NULL_LITERAL }
+                flags = FLAGS.find(line)?.groupValues?.get(1)?.let(::flagsOf)
+                // AOSP Notification.toString 只在非 null 时输出 category；完整已识别的记录头
+                // 中缺省即 null。不是从任意短片段/正文推断。
+                // https://android.googlesource.com/platform/frameworks/base/+/master/core/java/android/app/Notification.java
+                categoryKnown = channelId != null && line.trimEnd().endsWith("))")
+                CATEGORY.find(line)?.groupValues?.get(1)?.let {
+                    categoryKnown = true
+                    category = it.takeUnless { value -> value == NULL_LITERAL }
+                }
                 continue
             }
             if (packageName == null) continue
+            if (line.trim() == "extras={" && extrasIndent == null && !extrasComplete) {
+                extrasIndent = line.indexOfFirst { !it.isWhitespace() }
+            } else if (extrasIndent != null && line.trim() == "}" &&
+                line.indexOfFirst { !it.isWhitespace() } == extrasIndent) {
+                // NotificationRecord.dump 遍历完整 Bundle；闭合后模板键缺省表示无模板。
+                // https://android.googlesource.com/platform/frameworks/base/+/master/services/core/java/com/android/server/notification/NotificationRecord.java
+                extrasComplete = true
+                templateKnown = true
+                extrasIndent = null
+            }
+            if (line.trimStart().startsWith("flags=")) {
+                FLAGS.find(line)?.groupValues?.get(1)?.let { flags = flagsOf(it) }
+            }
+            if (line.trimStart().startsWith("category=")) {
+                CATEGORY.find(line)?.groupValues?.get(1)?.let {
+                    categoryKnown = true
+                    category = it.takeUnless { value -> value == NULL_LITERAL }
+                }
+            }
+            val templateIndex = if (line.trimStart().startsWith("android.template=")) line.indexOf("android.template=") else -1
+            if (templateIndex >= 0) {
+                templateKnown = true
+                template = valueOf(line.substring(templateIndex + "android.template=".length)).ifBlank { null }
+            }
             for ((prefix, name) in FIELDS) {
                 val index = line.indexOf(prefix)
                 if (index < 0) continue
                 val value = valueOf(line.substring(index + prefix.length))
+                val rendered = line.substring(index + prefix.length).trim()
+                if ((rendered.contains('(') && !rendered.endsWith(')')) || value.endsWith("…") || value.endsWith("...")) truncated = true
                 when (name) {
                     "title" -> if (title.isBlank()) title = value
                     "text" -> if (text.isBlank()) text = value
@@ -169,6 +254,21 @@ object NotificationDumpParser {
         }
         WHEN_SINGLE.find(line)?.groupValues?.get(1)?.toLongOrNull()?.let { if (it > 0L) return it }
         return 0L
+    }
+
+    /** Android flags 可为数字或显式枚举；未知枚举不当作零。 */
+    private fun flagsOf(value: String): Long? {
+        if (value.startsWith("0x")) return value.substring(2).toLongOrNull(16)
+        value.toLongOrNull()?.let { return it }
+        val known = mapOf("ONGOING_EVENT" to 0x2L, "ONLY_ALERT_ONCE" to 0x8L,
+            "AUTO_CANCEL" to 0x10L, "NO_CLEAR" to 0x20L, "FOREGROUND_SERVICE" to 0x40L,
+            "HIGH_PRIORITY" to 0x80L, "LOCAL_ONLY" to 0x100L, "GROUP_SUMMARY" to 0x200L,
+            "AUTOGROUP_SUMMARY" to 0x400L, "CAN_COLORIZE" to 0x800L,
+            "BUBBLE" to 0x1000L, "NO_DISMISS" to 0x2000L, "FSI_REQUESTED_BUT_DENIED" to 0x4000L,
+            "SHOW_LIGHTS" to 0x1L, "INSISTENT" to 0x4L)
+        var result = 0L
+        for (token in value.split('|')) result = result or (known[token.removePrefix("FLAG_")] ?: return null)
+        return result
     }
 
     /**

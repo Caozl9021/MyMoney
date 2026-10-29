@@ -14,19 +14,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/**
- * 规格分类引擎（SPEC §8 阶段 5）的宿主侧装配。
- *
- * <h3>它在链路里的位置</h3>
- * [CategorySuggester] 是主力：它懂用户自己的清单、学习记忆、随包规则和外部 JSON 规则，
- * 命中就命中。本对象只在**它给不出分类时**补一刀——即规格的 64 条分类正则
- * （`js_category.js`，来自 iCost 的分类体系）能认出、但项目内置关键词没覆盖的商户。
- * 反过来说：规格永远不会覆盖用户清单和学习结果，那才是用户真正在用的东西。
- *
- * <h3>为什么叫 fill 而不是 suggest</h3>
- * 它接受一个已有的 [CategorySuggester.Suggestion] 并只在 category 为空时补齐，
- * 从类型上就不可能盖掉别人的结论。调用点因此不需要写 if/else 顺序判断。
- */
+/** 原创规则分类兼容入口，只在用户推荐为空时补充，不创建分类或覆盖配置。 */
 object SpecCategoryStore {
 
     private const val TAG = "SpecCategoryStore"
@@ -67,7 +55,7 @@ object SpecCategoryStore {
     suspend fun classify(context: Context, draft: BillDraft): Pair<String, String?>? {
         runCatching { ensureReady(context) }.onFailure { return null }
         if (!isReady()) return null
-        // 转账在规格的分类表里没有分支（js_category 只区分 Expend / 其它），交给项目默认逻辑。
+        // 转账无分类，交给项目双端账户逻辑。
         if (draft.type == BillType.TRANSFER) return null
         val groups = LedgerConfig.groupsFor(draft.type)
         if (groups.isEmpty()) return null
@@ -97,9 +85,7 @@ object SpecCategoryStore {
     private fun jsType(type: BillType): String = when (type) {
         BillType.INCOME -> "Income"
         BillType.TRANSFER -> "Transfer"
-        // 退款在规格里是 Income 分支的「退款」，但项目把 REFUND 当独立类型单独记账；
-        // 分类按支出侧匹配更贴近用户预期（退款多发生在购物/餐饮）。
-        BillType.REFUND -> "Expend"
+        BillType.REFUND -> "Refund"
         BillType.EXPENSE -> "Expend"
     }
 }

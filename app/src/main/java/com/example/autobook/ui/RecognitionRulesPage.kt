@@ -81,6 +81,7 @@ internal fun RecognitionRulesPage(
 ) {
     val p = LocalAbPalette.current
     val ruleState by LocalRuleStore.state.collectAsStateWithLifecycle()
+    val bundledRules by com.example.autobook.data.SpecRuleStore.status.collectAsStateWithLifecycle()
 
     var appQuery by rememberSaveable { mutableStateOf("") }
     var appFilter by rememberSaveable { mutableStateOf(AppFilter.ALL) }
@@ -384,7 +385,7 @@ internal fun RecognitionRulesPage(
                             ListRow(
                                 title = "尚无已验证模板",
                                 subtitle = untemplated.joinToString("、") { appLabel(it.packageName) } +
-                                    " · 尚无单独验证的通知模板，通知仍可能由本地规则识别",
+                                    " · 是否支持本地规则请查看应用与通道",
                                 leading = { IconBadge(AbIcons.Close, p.tertiaryLabel, size = 26.dp) },
                             )
                         }
@@ -401,7 +402,18 @@ internal fun RecognitionRulesPage(
             }
 
             // ------------------------------------------------------------ 规则文件 / 餐段 / 统计
-            if (section == RecognitionRuleSection.FILES) rulesFileSection(rulesSections)
+            if (section == RecognitionRuleSection.FILES) {
+                item {
+                    InsetGroup {
+                        ListRow(title = "自研识别规则", subtitle = when {
+                            bundledRules.error != null -> "加载失败：${bundledRules.error}"
+                            !bundledRules.ready -> "正在准备本地规则"
+                            else -> "${bundledRules.version} · 已启用 ${bundledRules.rules} / ${bundledRules.available} 条"
+                        })
+                    }
+                }
+                rulesFileSection(rulesSections)
+            }
             if (section == RecognitionRuleSection.MEALS) mealSection(rulesSections)
             if (section == RecognitionRuleSection.STATISTICS) statisticsSection(rulesSections)
         }

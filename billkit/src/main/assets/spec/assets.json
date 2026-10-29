@@ -1,1 +1,32 @@
-{"_removed":"upstream AutoRule 163-rule asset removed for licensing compliance; see NOTICE"}
+[
+  {
+    "id": 1,
+    "name": "现金",
+    "type": "NORMAL",
+    "currency": "CNY"
+  },
+  {
+    "id": 2,
+    "name": "微信钱包",
+    "type": "NORMAL",
+    "currency": "CNY"
+  },
+  {
+    "id": 3,
+    "name": "支付宝",
+    "type": "NORMAL",
+    "currency": "CNY"
+  },
+  {
+    "id": 4,
+    "name": "储蓄卡",
+    "type": "NORMAL",
+    "currency": "CNY"
+  },
+  {
+    "id": 5,
+    "name": "信用卡",
+    "type": "NORMAL",
+    "currency": "CNY"
+  }
+]

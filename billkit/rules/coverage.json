@@ -1,0 +1,166 @@
+{
+  "version": "maimi-rules-2",
+  "enableDecision": "2026-10-29 user: enable all and restore transfer/redpackage coverage",
+  "scenarios": [
+    {
+      "id": "maimi_wechat_data_expense_v1",
+      "name": "麦米·微信凭证付款",
+      "enabled": true,
+      "validation": "captured-structure+synthetic",
+      "evidence": [
+        "local-device-20261027-app-data-39"
+      ],
+      "positiveSamples": 3,
+      "negativeSamples": 5
+    },
+    {
+      "id": "maimi_wechat_data_income_v1",
+      "name": "麦米·微信凭证收款",
+      "enabled": true,
+      "validation": "synthetic-only",
+      "evidence": [],
+      "positiveSamples": 3,
+      "negativeSamples": 5
+    },
+    {
+      "id": "maimi_wechat_data_refund_v1",
+      "name": "麦米·微信凭证退款",
+      "enabled": true,
+      "validation": "synthetic-only",
+      "evidence": [],
+      "positiveSamples": 3,
+      "negativeSamples": 5
+    },
+    {
+      "id": "maimi_alipay_data_expense_v1",
+      "name": "麦米·支付宝凭证付款",
+      "enabled": true,
+      "validation": "synthetic-only",
+      "evidence": [],
+      "positiveSamples": 3,
+      "negativeSamples": 5
+    },
+    {
+      "id": "maimi_alipay_data_income_v1",
+      "name": "麦米·支付宝凭证收款",
+      "enabled": true,
+      "validation": "synthetic-only",
+      "evidence": [],
+      "positiveSamples": 3,
+      "negativeSamples": 5
+    },
+    {
+      "id": "maimi_alipay_data_refund_v1",
+      "name": "麦米·支付宝凭证退款",
+      "enabled": true,
+      "validation": "synthetic-only",
+      "evidence": [],
+      "positiveSamples": 3,
+      "negativeSamples": 5
+    },
+    {
+      "id": "maimi_wechat_notice_expense_v1",
+      "name": "麦米·微信通知付款",
+      "enabled": true,
+      "validation": "captured-structure+synthetic",
+      "evidence": [
+        "local-device-20261027-app-data-40"
+      ],
+      "positiveSamples": 3,
+      "negativeSamples": 5
+    },
+    {
+      "id": "maimi_wechat_notice_income_v1",
+      "name": "麦米·微信通知收款",
+      "enabled": true,
+      "validation": "synthetic-only",
+      "evidence": [],
+      "positiveSamples": 3,
+      "negativeSamples": 5
+    },
+    {
+      "id": "maimi_alipay_notice_expense_v1",
+      "name": "麦米·支付宝通知付款",
+      "enabled": true,
+      "validation": "synthetic-only",
+      "evidence": [],
+      "positiveSamples": 3,
+      "negativeSamples": 5
+    },
+    {
+      "id": "maimi_alipay_notice_income_v1",
+      "name": "麦米·支付宝通知收款",
+      "enabled": true,
+      "validation": "synthetic-only",
+      "evidence": [],
+      "positiveSamples": 3,
+      "negativeSamples": 5
+    },
+    {
+      "id": "maimi_cmb_data_expense_v1",
+      "name": "麦米·招行短信消费",
+      "enabled": true,
+      "validation": "synthetic-only",
+      "evidence": [],
+      "positiveSamples": 3,
+      "negativeSamples": 5
+    },
+    {
+      "id": "maimi_cmb_data_income_v1",
+      "name": "麦米·招行短信工资",
+      "enabled": true,
+      "validation": "synthetic-only",
+      "evidence": [],
+      "positiveSamples": 3,
+      "negativeSamples": 5
+    },
+    {
+      "id": "maimi_wechat_transfer_expense_v1",
+      "name": "麦米·微信转账支出",
+      "enabled": true,
+      "validation": "captured-structure+synthetic",
+      "evidence": [
+        "local-device-20261029-app-data-27-34"
+      ],
+      "positiveSamples": 3,
+      "negativeSamples": 5
+    },
+    {
+      "id": "maimi_wechat_transfer_income_v1",
+      "name": "麦米·微信转账收入",
+      "enabled": true,
+      "validation": "synthetic-only",
+      "evidence": [],
+      "positiveSamples": 3,
+      "negativeSamples": 5
+    },
+    {
+      "id": "maimi_wechat_redpackage_expense_v1",
+      "name": "麦米·微信红包支出",
+      "enabled": true,
+      "validation": "synthetic-only",
+      "evidence": [],
+      "positiveSamples": 3,
+      "negativeSamples": 5
+    },
+    {
+      "id": "maimi_wechat_redpackage_income_v1",
+      "name": "麦米·微信红包收入",
+      "enabled": true,
+      "validation": "synthetic-only",
+      "evidence": [],
+      "positiveSamples": 3,
+      "negativeSamples": 5
+    }
+  ],
+  "notSupported": [
+    "groupCollection",
+    "withdrawal",
+    "recharge",
+    "repayment",
+    "other-bank-sms",
+    "other-app-notices",
+    "unknown-transfer-stage",
+    "redpackage-without-own-completion-and-amount"
+  ]
+}

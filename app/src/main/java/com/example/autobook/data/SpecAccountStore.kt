@@ -44,7 +44,7 @@ object SpecAccountStore {
         return draft.copy(account = resolved)
     }
 
-    /** 规格自带的 5 个资产名，作为用户没有同名账户时的兜底。 */
+    /** 原创规则包的账户建议名称，作为用户没有同名账户时的兜底。 */
     private suspend fun runBlockingAccounts(context: Context): List<String> = withContext(Dispatchers.IO) {
         runCatching {
             SpecRuleStore.readAssets(context.applicationContext).map { it.name }

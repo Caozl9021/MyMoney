@@ -17,9 +17,9 @@ import kotlinx.coroutines.launch
  *
  * 模块在微信/支付宝进程里只做一件事：把 App 自己已经拿到的结构化交易凭证原样交出来
  * （微信 WCDB 的 `ContentValues`、支付宝长连接的 `SyncMessage`）。这里负责剩下的全部判定：
- * 落 `app_data` 原始留档 → 163 条规则求值 → 分类 → 账户映射 → 去重合并 → 投递确认。
+ * 落 `app_data` 原始留档 → 原创规则求值 → 分类 → 账户映射 → 去重合并 → 投递确认。
  *
- * 为什么判定不放在目标进程里：规则是 300KB 的 JS、还有分类引擎和 Room 事务，
+ * 为什么判定不放在目标进程里：规则求值、分类引擎和 Room 事务都由宿主负责，
  * 放进微信进程既拖慢它又拿不到宿主数据库；而且 `app_data` 必须是规则判定的唯一事实来源
  * （SPEC §7），只能由宿主写。
  *
@@ -81,19 +81,29 @@ object HookIngress {
         val settings = Settings(event.context)
         // 入队到处理之间用户可能关了通道：和通知/短信通道一样，投递前再判一次。
         if (!settings.enabled || !settings.hookCaptureEnabled || settings.captureMode != CaptureMode.ROOT || event.app !in settings.whitelist) return
-        val hit = runCatching { SpecRuleStore.parse(event.context, event.app, event.type, event.payload) }.getOrNull()
+        val parsed = runCatching { SpecRuleStore.parseDetailed(event.context, event.app, event.type, event.payload) }.getOrNull()
+        val hit = parsed?.hit
         // 凭证内容本身就是这条观测的身份：微信同一段描述在 TTL 内只会写一次，
         // 支付宝同一个 pl 重复下发也只该记一笔。用内容哈希而不是「当前时间」，
         // 这样补发/重放会被认成同一条观测。
         val observationKey = "hook:" + CaptureMergePolicy.digest(event.app + "|" + event.payload)
         val eventId = observationKey
         if (hit == null) {
+            val reason = when (parsed?.outcome) {
+                com.example.billkit.spec.SpecRuleEngine.Outcome.NO_MATCH -> "no-rule"
+                com.example.billkit.spec.SpecRuleEngine.Outcome.REJECTED -> "rule-rejected"
+                else -> "rule-error"
+            }
             AppDb.get(event.context).capture().putEvidence(
-                CaptureEvidence(eventId, null, "HOOK", event.app, event.t, "no-rule",
+                CaptureEvidence(eventId, null, "HOOK", event.app, event.t, reason,
                     "payloadHash=" + CaptureMergePolicy.digest(event.payload).take(16)),
             )
-            publish(NotificationDiagnostic(eventId, event.app, event.t, "no-rule",
-                "采集到的凭证未命中任何本地规则；不生成账单"))
+            publish(NotificationDiagnostic(eventId, event.app, event.t, reason,
+                when (reason) {
+                    "rule-rejected" -> "交易字段未通过安全校验；不生成账单"
+                    "rule-error" -> "规则执行或原始记录保存失败；不生成账单"
+                    else -> "采集到的凭证未命中本地规则；不生成账单"
+                }))
             return
         }
         val suggestion = SpecCategoryStore.fill(event.context, hit.draft,

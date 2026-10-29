@@ -42,7 +42,7 @@ class App : Application() {
             runCatching { com.example.autobook.data.BackupStore.completePendingConfiguration(this@App) }
                 .onFailure { android.util.Log.e("AutoBook", "恢复配置尚未完成", it) }
         }
-        // 163 条规则导入 rule_model 并常驻求值一次；失败只影响规则通道，不阻塞其它采集路径。
+        // 原创规则包经完整校验后载入；失败只影响规则通道，不阻塞其它采集路径。
         scope.launch { com.example.autobook.data.SpecRuleStore.init(this@App) }
         // 规格的 64 条分类正则（js_category.js），只在项目内置分类认不出时补一刀。
         scope.launch { com.example.autobook.data.SpecCategoryStore.init(this@App) }

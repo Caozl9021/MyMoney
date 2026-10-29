@@ -19,6 +19,7 @@ internal enum class ChannelReason {
     NOTIFICATION_UNBOUND,
     ROOT_UNREADY,
     HOOK_UNCONFIRMED,
+    NO_SUPPORTED_RULES,
     PAGE_DISABLED,
     PAGE_UNAUTHORIZED,
     PAGE_UNBOUND,
@@ -57,7 +58,7 @@ internal fun appChannelState(
     input: CaptureHealthInput,
     packageName: String,
     whitelist: Set<String>,
-    /** 保留参数以便调用方逐步迁移；163 条 JS 规则已不依赖白名单模板。 */
+    /** 单独模板与原创规则共同决定通知覆盖。 */
     @Suppress("UNUSED_PARAMETER") templatePackages: Set<String> = NotificationParser.TEMPLATE_PACKAGES,
 ): AppChannelState {
     val whitelisted = packageName in whitelist
@@ -65,7 +66,7 @@ internal fun appChannelState(
         packageName = packageName,
         whitelisted = whitelisted,
         hasTemplate = packageName in NotificationParser.TEMPLATE_PACKAGES,
-        notification = notificationVerdict(input, whitelisted),
+        notification = notificationVerdict(input, packageName, whitelisted),
         page = pageVerdict(input, whitelisted),
         hook = hookVerdict(input, packageName, whitelisted),
     )
@@ -82,18 +83,21 @@ internal fun appChannelStates(
     // 不能再按包名排序——那会把 com.dianping.v1、cn.gov.pbc.dcep 顶到最前面。
     .sortedBy { !it.needsAttention }
 
-private fun notificationVerdict(input: CaptureHealthInput, whitelisted: Boolean): ChannelVerdict = when {
+private fun notificationVerdict(input: CaptureHealthInput, packageName: String, whitelisted: Boolean): ChannelVerdict = when {
     !whitelisted -> ChannelVerdict(false, ChannelReason.NOT_WHITELISTED, "未选择该应用，不会读取它的通知")
     !input.enabled -> ChannelVerdict(false, ChannelReason.GLOBAL_PAUSED, "自动识别已暂停，恢复后继续")
     !input.notificationsEnabled -> ChannelVerdict(false, ChannelReason.NOTIFICATION_DISABLED, "通知通道未启用")
     // root 模式用 dumpsys 读通知栏，不需要通知使用权，也不依赖 Listener 绑定。
     input.mode == CaptureMode.ROOT && !input.rootNotificationReady -> ChannelVerdict(false, ChannelReason.ROOT_UNREADY,
         input.rootNotificationError ?: "Root 通知读取尚未就绪，请查看 Root 状态")
-    input.mode == CaptureMode.ROOT -> ChannelVerdict(true, ChannelReason.ACTIVE, "通知读取可用，命中本地规则时识别")
-    !input.notificationAuthorized -> ChannelVerdict(false, ChannelReason.NOTIFICATION_UNAUTHORIZED,
+    input.mode != CaptureMode.ROOT && !input.notificationAuthorized -> ChannelVerdict(false, ChannelReason.NOTIFICATION_UNAUTHORIZED,
         "通知使用权未授予。它与 App 自身发送通知的权限不同")
-    !input.notificationBound -> ChannelVerdict(false, ChannelReason.NOTIFICATION_UNBOUND,
+    input.mode != CaptureMode.ROOT && !input.notificationBound -> ChannelVerdict(false, ChannelReason.NOTIFICATION_UNBOUND,
         "系统已授权，但监听服务尚未连接，可尝试重新连接")
+    input.ruleCapabilities != null && "$packageName|NOTICE" !in input.ruleCapabilities &&
+        packageName !in NotificationParser.TEMPLATE_PACKAGES -> ChannelVerdict(false, ChannelReason.NO_SUPPORTED_RULES,
+        if (input.ruleEngineReady) "当前规则包未适配该应用的通知" else "本地规则尚未就绪，请查看规则文件状态")
+    input.mode == CaptureMode.ROOT -> ChannelVerdict(true, ChannelReason.ACTIVE, "通知读取可用，命中本地规则时识别")
     else -> ChannelVerdict(true, ChannelReason.ACTIVE, "通知监听已连接，命中本地规则时识别")
 }
 
@@ -126,6 +130,8 @@ private fun hookVerdict(input: CaptureHealthInput, packageName: String, whitelis
         !whitelisted -> ChannelVerdict(false, ChannelReason.NOT_WHITELISTED, "未选择该应用，不接收它的交易凭证")
         !input.enabled -> ChannelVerdict(false, ChannelReason.GLOBAL_PAUSED, "自动记账已暂停，恢复后继续")
         packageName !in input.hookPackages -> ChannelVerdict(false, ChannelReason.HOOK_UNCONFIRMED, "尚未确认该应用模块加载，请进入 LSPosed 设置检测")
+        input.ruleCapabilities != null && "$packageName|DATA" !in input.ruleCapabilities -> ChannelVerdict(false,
+            ChannelReason.NO_SUPPORTED_RULES, if (input.ruleEngineReady) "当前规则包未适配该应用的交易凭证" else "本地规则尚未就绪，请查看规则文件状态")
         else -> ChannelVerdict(true, ChannelReason.ACTIVE, "已确认该应用模块加载，交易命中规则后生成草稿")
     }
 }

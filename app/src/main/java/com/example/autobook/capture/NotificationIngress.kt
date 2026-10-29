@@ -3,6 +3,7 @@ package com.example.autobook.capture
 import android.content.Context
 import com.example.autobook.data.*
 import com.example.billkit.notification.*
+import com.example.billkit.spec.SpecRuleEngine
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,7 +18,7 @@ data class NotificationSampleOption(val id: String, val packageName: String, val
 
 object NotificationIngress {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val parser = NotificationParser() // G0: no production template until real-source review.
+    private val parser = NotificationParser()
     private val events = Channel<Pair<Context, NotificationObservation>>(64)
     private val mutableLatest = MutableStateFlow<NotificationDiagnostic?>(null)
     val latest = mutableLatest.asStateFlow()
@@ -118,10 +119,12 @@ object NotificationIngress {
         val eventId = CaptureMergePolicy.digest(observation.observationKey + ":" + observation.contentHash)
         var reviewSummary: String? = null
         var specRule: String? = null
+        var ruleOutcome: SpecRuleEngine.Outcome? = null
         val draft = (result as? NotificationParseResult.Candidate)?.draft ?: run {
-            // 已验证模板不认的通知，交给 163 条规则里的 NOTICE 通道兜底（SPEC §8 阶段 1）。
-            // 顺序固定：模板优先——它的显式成功语来自真实样本复核，规则只是覆盖面。
-            val hit = specHit(context, observation)
+            // 模板优先；信封、失败状态或金额歧义的明确拒绝不能被规则复活。
+            val parsed = if (NotificationEnvelopeGuard.mayTryRule(observation, result)) specHit(context, observation) else null
+            ruleOutcome = parsed?.outcome
+            val hit = parsed?.hit
             if (hit == null) null else {
                 specRule = hit.ruleName
                 hit.draft
@@ -148,15 +151,28 @@ object NotificationIngress {
             }
             if (reviewSummary != null) "$delivery · 待核对：$reviewSummary" else delivery
         } else {
+            val diagnosticReason = when (ruleOutcome) {
+                SpecRuleEngine.Outcome.NO_MATCH -> "no-rule"
+                SpecRuleEngine.Outcome.REJECTED -> "rule-rejected"
+                SpecRuleEngine.Outcome.ERROR -> "rule-error"
+                else -> reason
+            }
             db.capture().putEvidence(CaptureEvidence(eventId, null, "NOTIFICATION", observation.packageName,
-                observation.receivedAt, reason, "contentHash=" + observation.contentHash.take(16) + ";truncated=" + observation.truncated))
+                observation.receivedAt, diagnosticReason, "contentHash=" + observation.contentHash.take(16) + ";truncated=" + observation.truncated))
             db.capture().pruneDiagnostics()
-            reason
+            if (ruleOutcome != null) {
+                buffer.add(observation, diagnosticReason)
+                refreshSamples(context)
+            }
+            diagnosticReason
         }
         publish(NotificationDiagnostic(eventId, observation.packageName, observation.receivedAt,
             outcome, when {
                 observation.isGroupSummary -> "分组汇总已跳过；不代表交易子通知未到，可查看近期事件和有效子通知样本"
                 specRule != null -> "规则命中：$specRule"
+                ruleOutcome == SpecRuleEngine.Outcome.REJECTED -> "本地规则结果未通过安全校验；未生成账单或弹框"
+                ruleOutcome == SpecRuleEngine.Outcome.ERROR -> "本地规则运行或存储失败；未生成账单或弹框"
+                ruleOutcome == SpecRuleEngine.Outcome.NO_MATCH -> "未命中当前本地规则；未生成账单或弹框"
                 result is NotificationParseResult.NeedsEvidence -> "此通知未匹配已支持模板；未生成账单或弹框"
                 reviewSummary != null -> reviewSummary
                 else -> "通知输入已处理，正文不写入诊断记录"
@@ -166,20 +182,25 @@ object NotificationIngress {
     /**
      * 规则通道兜底。
      *
-     * 只把 `{title,text,t}` 三个字段喂给规则——这是 SPEC §2.4 的数据契约，规则只读这三个键。
-     * `t` 用 postTime（通知自身的发布时间）而不是 receivedAt：用户翻旧通知时两者会差很久，
-     * 用 receivedAt 会把昨天的账记成今天的。缺失时退回 receivedAt。
+     * 信封校验之后才喂规则；通知发布时间与到达时间均不冒充业务交易时间。
      */
-    private suspend fun specHit(context: Context, observation: NotificationObservation): SpecRuleStore.Hit? {
+    private suspend fun specHit(context: Context, observation: NotificationObservation): SpecRuleStore.ParseResult? {
         if (!SpecRuleStore.coversNotice(observation.packageName)) return null
+        if (NotificationEnvelopeGuard.rejection(observation) != null) return null
         val body = observation.bigText?.takeIf { it.isNotBlank() } ?: observation.text.orEmpty()
         if (body.isBlank() && observation.title.isNullOrBlank()) return null
         val payload = MiniJson.encode(mapOf<String, Any?>(
             "title" to observation.title.orEmpty(),
             "text" to body,
             "t" to (if (observation.postTime > 0) observation.postTime else observation.receivedAt),
+            "observedAt" to observation.receivedAt,
+            "envelopeVerified" to true,
+            "channelId" to observation.channelId,
+            "category" to observation.category,
+            "template" to observation.template,
         ))
-        return runCatching { SpecRuleStore.parse(context, observation.packageName, "NOTICE", payload) }.getOrNull()
+        return runCatching { SpecRuleStore.parseDetailed(context, observation.packageName, "NOTICE", payload) }
+            .getOrElse { SpecRuleStore.ParseResult(null, SpecRuleEngine.Outcome.ERROR) }
     }
 
     /** Keep only format words and currency amounts, not free-form names, chats or order numbers. */

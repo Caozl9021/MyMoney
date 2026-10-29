@@ -40,13 +40,11 @@ sealed interface NotificationParseResult {
 /** Pure parser: envelope guards apply to all templates; structured expense semantics are sample-bound. */
 class NotificationParser(private val templates: List<VerifiedExpenseNotificationTemplate> = PRODUCTION_TEMPLATES) {
     fun parse(input: NotificationObservation): NotificationParseResult {
-        if (input.packageName !in SUPPORTED_PACKAGES) return NotificationParseResult.Ignored("unsupported-package")
-        if (input.isReconnectBaseline) return NotificationParseResult.Ignored("reconnect-baseline")
-        if (input.isGroupSummary) return NotificationParseResult.Ignored("group-summary")
-        if (input.isMessagingStyle || input.category == "msg") return NotificationParseResult.Ignored("chat-notification")
-        if (input.isOngoing) return NotificationParseResult.Ignored("ongoing-notification")
-        if (input.truncated) return NotificationParseResult.NeedsEvidence("truncated-content")
-        if (input.postTime <= 0L || input.receivedAt <= 0L) return NotificationParseResult.NeedsEvidence("missing-observation-time")
+        NotificationEnvelopeGuard.rejection(input)?.let { reason ->
+            return if (reason in setOf("truncated-content", "missing-observation-time", "empty-or-hidden-content")) {
+                NotificationParseResult.NeedsEvidence(reason)
+            } else NotificationParseResult.Ignored(reason)
+        }
         val body = input.bigText?.takeIf { it.isNotBlank() } ?: input.text.orEmpty()
         val content = listOfNotNull(input.title, body).joinToString("\n")
         if (content.isBlank()) return NotificationParseResult.NeedsEvidence("empty-or-hidden-content")
@@ -64,6 +62,15 @@ class NotificationParser(private val templates: List<VerifiedExpenseNotification
                 listOfNotNull(it.groupValues[1].ifEmpty { it.groupValues[2] }.toBigDecimalOrNull())
             }.orEmpty()
         } else {
+            if (hardNegative.containsMatchIn(content)) return NotificationParseResult.Ignored("not-successful-expense")
+            if (otherDirection.containsMatchIn(content)) {
+                val visible = currencyAmount.findAll(content).map { it.value }.toList()
+                if (currencyAmount.findAll(body).count() > 1 || visible.distinct().size > 1) {
+                    return NotificationParseResult.NeedsEvidence("ambiguous-multiple-amounts")
+                }
+                if (visible.isEmpty()) return NotificationParseResult.NeedsEvidence("missing-visible-amount")
+                return NotificationParseResult.NeedsEvidence("non-expense-transaction")
+            }
             if (negative.containsMatchIn(content)) return NotificationParseResult.Ignored("not-successful-expense")
             if (!success.containsMatchIn(content)) return NotificationParseResult.NeedsEvidence("missing-explicit-success")
             val bodyAmounts = currencyAmount.findAll(body).toList()
@@ -120,6 +127,8 @@ class NotificationParser(private val templates: List<VerifiedExpenseNotification
             .map { it.packageName }.toSet()
         private val success = Regex("支付成功|付款成功|扣款成功|消费成功")
         private val negative = Regex("失败|取消|待支付|待付款|未支付|未付款|支付中|付款中|处理中|进行中|退款|收款|转账|收入|优惠|红包|营销|验证码")
+        private val hardNegative = Regex("失败|取消|撤销|待支付|待付款|待扣款|未支付|未付款|未扣款|未完成|待完成|待确认|尚未|支付中|付款中|扣款中|处理中|进行中|冻结|验证码|营销|优惠")
+        private val otherDirection = Regex("退款|收款|转账|收入")
         private val plainAmount = Regex("(?:0|[1-9]\\d*)(?:\\.\\d{1,2})?")
         private val currencyAmount = Regex("[¥￥]\\s*(\\d+(?:\\.\\d+)?)|(?<![\\d.])(\\d+(?:\\.\\d+)?)\\s*元")
     }

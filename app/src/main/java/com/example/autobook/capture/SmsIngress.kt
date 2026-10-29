@@ -82,16 +82,26 @@ object SmsIngress {
         val settings = Settings(event.context)
         // 入队到处理之间用户可能关了通道：和通知通道一样，投递前再判一次。
         if (!settings.enabled || !settings.smsCaptureEnabled) return
-        val hit = runCatching { SpecRuleStore.parse(event.context, APP, TYPE, event.body) }.getOrNull()
+        val parsed = runCatching { SpecRuleStore.parseDetailed(event.context, APP, TYPE, event.body) }.getOrNull()
+        val hit = parsed?.hit
         val observationKey = "sms:" + CaptureMergePolicy.digest(event.sender + "|" + event.body)
         val eventId = CaptureMergePolicy.digest(observationKey + ":" + event.t)
         if (hit == null) {
+            val reason = when (parsed?.outcome) {
+                com.example.billkit.spec.SpecRuleEngine.Outcome.NO_MATCH -> "no-rule"
+                com.example.billkit.spec.SpecRuleEngine.Outcome.REJECTED -> "rule-rejected"
+                else -> "rule-error"
+            }
             AppDb.get(event.context).capture().putEvidence(
-                CaptureEvidence(eventId, null, "SMS", APP, event.t, "no-rule",
+                CaptureEvidence(eventId, null, "SMS", APP, event.t, reason,
                     "senderHash=" + CaptureMergePolicy.digest(event.sender).take(16)),
             )
-            publish(NotificationDiagnostic(eventId, APP, event.t, "no-rule",
-                "短信未命中任何银行规则；不生成账单"))
+            publish(NotificationDiagnostic(eventId, APP, event.t, reason,
+                when (reason) {
+                    "rule-rejected" -> "短信交易字段未通过安全校验；不生成账单"
+                    "rule-error" -> "规则执行或原始记录保存失败；不生成账单"
+                    else -> "短信未命中银行规则；不生成账单"
+                }))
             return
         }
         val suggestion = SpecCategoryStore.fill(event.context, hit.draft,

@@ -50,6 +50,7 @@ internal fun rememberCaptureHealthInput(): CaptureHealthInput {
     val rootRuntime by RootNotificationIngress.runtime.collectAsStateWithLifecycle()
     val rootServiceActive by RootForegroundService.activeState.collectAsStateWithLifecycle()
     val hookTargets by HookTargetMonitor.state.collectAsStateWithLifecycle()
+    val ruleStatus by com.example.autobook.data.SpecRuleStore.status.collectAsStateWithLifecycle()
     var revision by remember { mutableIntStateOf(0) }
     DisposableEffect(context, lifecycle) {
         val prefs = context.getSharedPreferences(Settings.PREFS_NAME, Context.MODE_PRIVATE)
@@ -67,7 +68,7 @@ internal fun rememberCaptureHealthInput(): CaptureHealthInput {
             context.contentResolver.unregisterContentObserver(secureObserver)
         }
     }
-    return remember(capture, bound, notificationBound, rootRuntime, rootServiceActive, hookTargets, revision) {
+    return remember(capture, bound, notificationBound, rootRuntime, rootServiceActive, hookTargets, ruleStatus, revision) {
         readCaptureHealthInput(context)
     }
 }
@@ -79,6 +80,7 @@ internal fun readCaptureHealthInput(context: Context): CaptureHealthInput {
     val notificationBound = PaymentNotificationListener.bound.value
     val rootRuntime = RootNotificationIngress.runtime.value
     val rootServiceActive = RootForegroundService.activeState.value
+    val rules = com.example.autobook.data.SpecRuleStore.status.value
     val selectedHookPackages = HookTargetMonitor.state.value.filterValues { it.state == HookLoadState.READY }.keys.intersect(Settings(context).whitelist)
     return CaptureHealthInput(capture.mode, capture.enabled,
         AccessibilityGuardian.isEnabledInSettings(context), bound,
@@ -91,7 +93,10 @@ internal fun readCaptureHealthInput(context: Context): CaptureHealthInput {
         hookReady = selectedHookPackages.isNotEmpty(),
         rootNotificationReady = rootRuntime.ready && rootServiceActive,
         rootNotificationError = rootRuntime.error ?: if (rootServiceActive) null else "Root 后台服务尚未连接，请检查状态后重试。",
-        hookPackages = selectedHookPackages)
+        hookPackages = selectedHookPackages,
+        ruleCapabilities = rules.capabilities,
+        ruleEngineReady = rules.ready,
+        selectedPackages = Settings(context).whitelist)
 }
 
 internal fun performCaptureAction(context: Context, action: CaptureAction,

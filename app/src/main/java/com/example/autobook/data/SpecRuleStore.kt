@@ -3,11 +3,12 @@ package com.example.autobook.data
 import android.content.Context
 import android.util.Log
 import com.example.billkit.BillDraft
-import com.example.billkit.BillType
 import com.example.billkit.spec.SpecAssets
 import com.example.billkit.spec.SpecRuleEngine
 import com.example.billkit.spec.SpecRuleModel
-import com.example.billkit.spec.SpecRuleObject
+import com.example.billkit.spec.SpecRuleBundle
+import com.example.billkit.spec.SpecDraftAdapter
+import androidx.room.withTransaction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,28 +16,11 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
-/**
- * 规则通道的宿主侧装配：把 assets 里的 163 条规则导进 `rule_model`，再把它们交给 [SpecRuleEngine]。
- *
- * <h3>为什么规则要落库再取出来喂引擎</h3>
- * 引擎完全可以直读 assets，但那样 `rule_model` 就是死表：用户导入新规则、单条禁用、
- * 回溯"当时命中的是哪条规则"都做不到。SPEC §7 要求 `app_data`/`rule_model` 是唯一事实来源，
- * 所以启动时按内容哈希导入一次，之后一律从库里读——引擎看到的和库里存的永远是同一份。
- *
- * <h3>为什么引擎只建一次</h3>
- * 163 条规则 + 300KB 正则，JVM 实测求值 ~230ms，设备上更慢。付款通知是"用户正在等"的路径，
- * 不能每次通知都重建。规则内容变了（哈希变化）才重建。
- *
- * <h3>与既有模板解析器的关系</h3>
- * 不是替换关系。模板解析器（[com.example.billkit.notification.NotificationParser]）只认
- * 已用真实样本验证过、带显式成功语的白名单模板；规则引擎覆盖其余 24 条 NOTICE 规则。
- * 调用方先走模板，模板不认再用本通道兜底——已验证的证据优先，规则不覆盖它。
- */
+/** 原创规则包的宿主：完整包预验证、系统规则事务替换、原始输入保留及草稿安全转换。 */
 object SpecRuleStore {
 
     private const val TAG = "SpecRuleStore"
     private const val RULES_VERSION_KEY = "specRulesVersion"
-    private const val VERSION = 1
 
     /** 一次规则命中的结果，已转成项目内部的草稿形态。 */
     data class Hit(
@@ -51,15 +35,21 @@ object SpecRuleStore {
         val rules: Int = 0,
         val buildMillis: Long = 0L,
         val error: String? = null,
+        val version: String = "",
+        val available: Int = 0,
+        val experimental: Int = 0,
+        val capabilities: Set<String> = emptySet(),
     )
 
-    private val engine = SpecRuleEngine()
+    @Volatile private var engine = SpecRuleEngine()
     private val lock = Mutex()
 
     private val mutableStatus = MutableStateFlow(Status())
     val status = mutableStatus.asStateFlow()
 
     @Volatile private var initialized = false
+    @Volatile var latestOutcome: SpecRuleEngine.Outcome = SpecRuleEngine.Outcome.NO_MATCH
+        private set
 
     /** 已在库里的规则覆盖了哪些「包名|类型」，决定某条数据要不要交给引擎。 */
     @Volatile private var covered: Set<String> = emptySet()
@@ -85,47 +75,76 @@ object SpecRuleStore {
             withContext(Dispatchers.IO) {
                 val app = context.applicationContext
                 val common = readAsset(app, SpecAssets.COMMON_JS)
-                val rawRules = readAsset(app, SpecAssets.RULES_ALL)
-                val parsed = SpecAssets.parseRules(rawRules)
-                require(parsed.isNotEmpty()) { "rules_all.json 未解析出任何规则" }
-                val version = CaptureMergePolicy.digest(rawRules)
-                val db = AppDb.get(app)
-                importIfNeeded(app, db, parsed, version)
-                val stored = db.rules().enabledRules().map {
-                    SpecRuleModel(
-                        app = it.app, type = it.type, systemRuleName = it.systemRuleName, name = it.name,
-                        creator = it.creator, autoRecord = it.autoRecord, enabled = it.enabled, js = it.js,
-                    )
+                val bundle = SpecRuleBundle.load { readAsset(app, it) }
+                // 包内禁用的实验脚本也必须能构建；不能把坏脚本藏在enabled=false后面。
+                SpecRuleEngine().apply {
+                    rebuild(common, bundle.rules.map { it.copy(enabled = true) })
+                    close()
                 }
-                engine.rebuild(common, stored)
-                covered = stored.map { it.app + "|" + it.type }.toSet()
-                initialized = engine.isReady()
-                mutableStatus.value = Status(initialized, engine.registeredRules(), engine.lastBuildMillis)
+                com.example.billkit.spec.SpecCategoryEngine().apply {
+                    rebuild(common, readAsset(app, SpecAssets.CATEGORY_JS))
+                    close()
+                }
+                val db = AppDb.get(app)
+                val candidate = installBundle(app, db, bundle, common)
+                engine = candidate
+                covered = bundle.rules.filter { it.enabled }.map { it.app + "|" + it.type }.toSet()
+                    .intersect(db.rules().enabledRules().filter { it.creator == "maimi" }
+                        .map { it.app + "|" + it.type }.toSet())
+                initialized = candidate.isReady()
+                mutableStatus.value = Status(
+                    ready = initialized, rules = candidate.registeredRules(), buildMillis = candidate.lastBuildMillis,
+                    version = bundle.version, available = bundle.rules.size,
+                    experimental = bundle.rules.count { !it.enabled }, capabilities = covered,
+                )
             }
         }
     }
 
-    private suspend fun importIfNeeded(
+    /** 只有本类写系统JS；用户JSON覆盖属于另一份配置，不作任意JS执行入口。 */
+    internal suspend fun installBundle(
         context: Context,
         db: AppDb,
-        rules: List<SpecRuleModel>,
-        version: String,
-    ) {
+        bundle: SpecRuleBundle,
+        common: String,
+        beforeInsert: (() -> Unit)? = null,
+    ): SpecRuleEngine {
         val prefs = context.getSharedPreferences("autobook", Context.MODE_PRIVATE)
-        val current = prefs.getString(RULES_VERSION_KEY, null)
-        val count = db.rules().ruleCount()
-        if (current == version && count == rules.size) return
-        val rows = rules.map {
-            RuleModelEntity(
-                app = it.app, type = it.type, js = it.js, name = it.name,
-                systemRuleName = it.systemRuleName, creator = it.creator,
-                autoRecord = it.autoRecord, enabled = it.enabled, updateAt = System.currentTimeMillis(),
-            )
+        val candidate = SpecRuleEngine()
+        db.withTransaction {
+            val previous = db.rules().allRules()
+            val own = previous.filter { it.creator == "maimi" }.associateBy { it.systemRuleName }
+            val rows = bundle.rules.map { rule ->
+                val old = own[rule.systemRuleName]
+                RuleModelEntity(
+                    id = old?.id ?: 0,
+                    app = rule.app, type = rule.type, js = rule.js, name = rule.name,
+                    systemRuleName = rule.systemRuleName, creator = "maimi", autoRecord = false,
+                    struct = if (rule.enabled) "maimi:admitted" else "maimi:experimental",
+                    enabled = rule.enabled && !(old?.enabled == false && old.struct != "maimi:experimental"),
+                    updateAt = old?.updateAt ?: System.currentTimeMillis(),
+                )
+            }
+            candidate.rebuild(common, rows.filter { it.enabled }.map { it.asModel() })
+            // 内容比较而非只比较条数；prefs丢失、超前或落后都能恢复。
+            val current = previous.filter { it.creator in setOf("system", "maimi") }
+            val expected = rows.map { it.copy(id = 0, updateAt = 0) }.sortedBy { it.systemRuleName }
+            val actual = current.map { it.copy(id = 0, updateAt = 0) }.sortedBy { it.systemRuleName }
+            if (actual != expected) {
+                db.rules().clearBundledRules()
+                beforeInsert?.invoke() // 专用隔离Android验证用于模拟事务中断。
+                db.rules().insertRules(rows)
+            }
         }
-        db.rules().clearRules()
-        db.rules().insertRules(rows)
-        prefs.edit().putString(RULES_VERSION_KEY, version).apply()
+        // 与Room不能跨存储事务；规则内容在每次初始化仍逐字段校验，marker失败下次安全重试。
+        prefs.edit().putString(RULES_VERSION_KEY, bundle.digest).commit()
+        return candidate
     }
+
+    private fun RuleModelEntity.asModel() = SpecRuleModel(
+        app = app, type = type, systemRuleName = systemRuleName, name = name,
+        creator = creator, autoRecord = autoRecord, enabled = enabled, js = js,
+    )
 
     /**
      * 调规则。原始数据先落 `app_data`，再求值——顺序不能反（SPEC §7），
@@ -133,65 +152,45 @@ object SpecRuleStore {
      *
      * @return 命中返回 [Hit]；未命中或规则通道不可用返回 null
      */
-    suspend fun parse(context: Context, app: String, type: String, raw: String): Hit? {
-        runCatching { ensureReady(context) }.onFailure { return null }
-        val db = AppDb.get(context.applicationContext)
-        val rowId = runCatching {
-            db.rules().insertData(AppDataEntity(data = raw, type = type, app = app, time = System.currentTimeMillis()))
-        }.getOrNull()
-        val result = runCatching { engine.parse(app, type, raw) }.getOrNull()
-        if (result == null) {
-            // 规则没命中：留档即可，不写 issue（issue 只表示规则执行出错）
-            return null
+    data class ParseResult(val hit: Hit?, val outcome: SpecRuleEngine.Outcome)
+
+    suspend fun parse(context: Context, app: String, type: String, raw: String): Hit? =
+        parseDetailed(context, app, type, raw).hit
+
+    suspend fun parseDetailed(context: Context, app: String, type: String, raw: String): ParseResult {
+        fun finish(hit: Hit?, outcome: SpecRuleEngine.Outcome): ParseResult {
+            latestOutcome = outcome
+            return ParseResult(hit, outcome)
         }
-        if (rowId != null) runCatching { db.rules().markMatched(rowId, result.ruleName) }
-        val draft = toDraft(result.bill, app, result.ruleId) ?: return null
-        return Hit(draft, result.ruleName, result.ruleId, result.autoRecord)
+        runCatching { ensureReady(context) }.onFailure { return finish(null, SpecRuleEngine.Outcome.ERROR) }
+        val db = AppDb.get(context.applicationContext)
+        return parseStored(db, engine, app, type, raw, mutableStatus.value.version, System.currentTimeMillis())
     }
 
-    /** 规则产出 → 项目草稿。金额为 0、类型不认识、时间不合理的直接丢弃，不补猜。 */
-    private fun toDraft(bill: SpecRuleObject, app: String, ruleId: String): BillDraft? {
-        val cents = bill.priceCents
-        if (cents == 0L) return null
-        val type = when (bill.type) {
-            "Expend" -> BillType.EXPENSE
-            "Income" -> BillType.INCOME
-            "Transfer" -> BillType.TRANSFER
-            else -> BillType.EXPENSE
+    /** 可由隔离Room runner验证“落盘失败禁止求值”，不替换全局数据库。 */
+    internal suspend fun parseStored(
+        db: AppDb, activeEngine: SpecRuleEngine, app: String, type: String, raw: String,
+        version: String, now: Long,
+    ): ParseResult {
+        fun finish(hit: Hit?, outcome: SpecRuleEngine.Outcome): ParseResult {
+            latestOutcome = outcome
+            return ParseResult(hit, outcome)
         }
-        val now = System.currentTimeMillis()
-        // 未来 60 秒以外、或早于 3 年的时间视为脏数据；规则没给时间就用到达时间。
-        val explicit = bill.time in (now - 3L * 365 * 24 * 3600 * 1000)..(now + 60_000L)
-        val time = if (explicit) bill.time else now
-        val merchant = bill.shopName.trim().ifEmpty { null }
-        val method = bill.accountNameFrom.trim().ifEmpty { null }
-        val absCents = kotlin.math.abs(cents)
-        // 只有明确时间才能进合成去重身份：拿"现在"当交易时间，两条隔了十分钟才到达的
-        // 不同交易会被算进同一个桶。时间不可信就不参与合并，宁可多一条待核对。
-        val dedupKey = if (explicit) {
-            com.example.billkit.spec.SpecDedup.key(app, type, absCents, time)
-        } else null
-        return BillDraft(
-            priceCents = absCents,
-            type = type,
-            timeMillis = time,
-            merchant = merchant,
-            method = method,
-            orderTail = null,
-            sourcePkg = app,
-            strategy = "spec:$ruleId",
-            category = null,
-            subCategory = null,
-            account = method,
-            note = bill.shopItem.trim().ifEmpty { bill.channel.trim().ifEmpty { null } },
-            historyId = null,
-            transactionKey = null,
-            hasExplicitTime = explicit,
-            captureSessionId = null,
-            productName = bill.shopItem.trim().ifEmpty { null },
-            productSource = null,
-            dedupKey = dedupKey,
-        )
+        val rowId = runCatching {
+            db.rules().insertData(AppDataEntity(data = raw, type = type, app = app,
+                time = now, version = version))
+        }.getOrNull()?.takeIf { it > 0 } ?: return finish(null, SpecRuleEngine.Outcome.ERROR)
+        // 原始输入持久化失败时绝不继续识别或投递。
+        val parsed = activeEngine.parseDetailed(app, type, raw)
+        val result = parsed.result
+        if (result == null) {
+            if (parsed.outcome == SpecRuleEngine.Outcome.ERROR) runCatching { db.rules().markIssue(rowId) }
+            return finish(null, parsed.outcome)
+        }
+        val draft = SpecDraftAdapter.toDraft(result.bill, app, result.ruleId, now)
+            ?: return finish(null, SpecRuleEngine.Outcome.REJECTED)
+        runCatching { db.rules().markMatched(rowId, result.ruleName) }
+        return finish(Hit(draft, result.ruleName, result.ruleId, false), SpecRuleEngine.Outcome.MATCHED)
     }
 
     /** 诊断用：最近到达但没命中的原始数据（不含正文脱敏，仅本地查看）。 */

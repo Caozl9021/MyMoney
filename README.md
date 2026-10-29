@@ -4,9 +4,17 @@ Android本地自动记账：交易通知、页面辅助、短信或微信/支付
 
 ## 当前状态
 
-同步日期：2026-10-29。当前交付 **0.32.0/99（麦米），用户验收通过**（用户于2026-10-29明确回复“0.32验收通过”）。Room9/JSON8（兼容JSON1–7）。首页期摘要去掉重复今日行，三款图标联动品牌主题与柔和切换动画。0.31.0三款图标功能既有用户验收保持，0.28.5/0.28.4等历史独立范围不扩大，BUG-BACK-GHOST-001仍OPEN。
+同步日期：2026-10-29。当前交付 **0.33.1/101（麦米），待用户真机复测与验收**。Room9/JSON8不变。修复0.33.0微信转账采到但no-rule不弹窗的缺口，补转账/红包收支规则，16条全部启用。826项JVM、20项Android（含实际悬浮窗）、三构建/strict29及连续签名通过，已覆盖安装真机并核对业务数据保留。真实红包/确认收入仍待验证；0.32.0既有验收保持，BUG-BACK-GHOST-001仍OPEN。
 
-当前正式包：[麦米 0.32.0 release](dist/AutoBook-0.32.0-release.apk)。首页期摘要移除重复今日支出行；设置→外观选择青绿/蓝白/红金图标时，App主题同步换色，并有轻压回弹、选框滑移和柔和换色。降低动效时即时切换。切换可能返回桌面，重新打开直接显示已选主题。通知和组件保持默认logo1，收入/支出/退款等语义色保持。[完整记录](runs/20261029-150728-brand-theme-soft-motion/outputs/verification.md) · [验收记录](deliverables/0.32.0/acceptance.md)。
+## 0.33.1/101 微信转账未弹窗与红包缺口修复（待验收）
+
+0.33.0遗漏结构化transfer分支，现场两笔各四回调均no-rule，尚未投递；现补四条规则并统一稳定订单身份，16条全启用，收到邀请不提前收入。826项JVM、7项规则包+12项真实协调器+1项实际悬浮窗测试、三构建/strict29和连续签名通过；模拟器四回调实弹1卡/0入库，最终包已同签名装手机，账单/历史/资产/原始诊断保留。红包及确认收入真实覆盖仍缺证据，不以启用代替实测。详见[验证记录](runs/20261029-210258-wechat-no-popup/outputs/verification.md)。BUG-WECHAT-TRANSFER-NO-POPUP-001修复待真机复测，未关闭；旧返回残影OPEN保持。
+
+## 0.33.0/100 原创规则替换（待用户验收）
+
+用户批准实施并明确首批规则不要禁用；12条全部启用、原始资产与上游fixture替换，保留Rhino与现有采集/确认主链，严格类型/金额/时间、通知闸门、原子更新及用户数据保护已落地。812项JVM、7项真实Android隔离Room、三构建、strict29及连续签名/包内版本/旧资产指纹排除通过。手机2283账单/34历史/4账户/40流水及原始诊断与用户配置保留；仅规则版本标记更新，最终实装摘要与dist一致。本轮未实际支付或重启微信支付宝，真实矩阵仍待验证；转账/红包/其他银行等不作已覆盖。详见[本轮证据](runs/20261029-202111-original-rule-implementation/outputs/verification.md)与[待验收记录](deliverables/0.33.0/acceptance.md)。
+
+当前正式包：[麦米0.33.1 release](dist/AutoBook-0.33.1-release.apk)。16条自研规则全部启用，补微信转账与有明确成功金额凭证的红包解析；仍需确认保存。真实与合成验证分别记录。
 
 ## 已有能力与使用入口
 
@@ -27,10 +35,10 @@ Android本地自动记账：交易通知、页面辅助、短信或微信/支付
 
 ```bash
 source ~/opt/autobook-env.sh
-./gradlew :app:testDebugUnitTest
+./gradlew :billkit:testDebugUnitTest :app:testDebugUnitTest
 ./gradlew :app:assembleDebug :app:assembleRelease :app:assembleDebugAndroidTest
 # 安装已核验的同签名正式包
-adb install -r dist/AutoBook-0.29.1-release.apk
+adb -s <设备序列号> install -r dist/AutoBook-0.33.1-release.apk
 ```
 
 仅在依赖缓存完整时添加`--offline`。正式签名在仓库外的用户配置中读取，debug与release签名不同；覆盖升级以连续release签名为准，不能用卸载规避签名冲突。
@@ -172,7 +180,7 @@ Android 本地自动记账 App：采集支付或购物 App 当前页面的文本
 ```bash
 source "$HOME/opt/autobook-env.sh"
 cd "$HOME/Projects/AutoBook"
-./gradlew :app:testDebugUnitTest
+./gradlew :billkit:testDebugUnitTest :app:testDebugUnitTest
 ./gradlew :app:assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
@@ -265,7 +273,7 @@ Android 本地自动记账：交易通知与页面辅助识别生成草稿，用
 
 ```bash
 source ~/opt/autobook-env.sh
-./gradlew :app:testDebugUnitTest
+./gradlew :billkit:testDebugUnitTest :app:testDebugUnitTest
 ./gradlew :app:assembleDebug :app:assembleRelease :app:assembleDebugAndroidTest
 # 安装已核验的同签名正式包
 adb install -r dist/AutoBook-0.23.0-release.apk
@@ -410,7 +418,7 @@ Android 本地自动记账 App：采集支付或购物 App 当前页面的文本
 ```bash
 source "$HOME/opt/autobook-env.sh"
 cd "$HOME/Projects/AutoBook"
-./gradlew :app:testDebugUnitTest
+./gradlew :billkit:testDebugUnitTest :app:testDebugUnitTest
 ./gradlew :app:assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```

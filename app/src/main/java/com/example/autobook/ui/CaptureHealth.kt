@@ -32,6 +32,10 @@ internal data class CaptureHealthInput(
     val rootNotificationReady: Boolean = false,
     val rootNotificationError: String? = null,
     val hookPackages: Set<String> = emptySet(),
+    /** null 仅用于不提供规则状态的纯展示调用方；实际界面始终传入真实覆盖集。 */
+    val ruleCapabilities: Set<String>? = null,
+    val ruleEngineReady: Boolean = true,
+    val selectedPackages: Set<String>? = null,
 )
 internal enum class CaptureAction(val label: String) {
     NOTIFICATION_ACCESS("授予通知使用权"), NOTIFICATION_RECONNECT("重新连接通知监听"),
@@ -42,7 +46,7 @@ internal enum class CaptureAction(val label: String) {
     SMS_PERMISSION("授予短信权限"), NOTIFY("允许通知"), ROOT("授予 Root"),
     LSP("去启用 LSPosed 模块"),
 }
-internal enum class CaptureHealthKind { MODE_REQUIRED, PAUSED, ACCESSIBILITY_DISABLED, ACCESSIBILITY_UNBOUND, NOTIFICATION_DISABLED, NOTIFICATION_UNBOUND, ROOT_UNREADY, SMS_UNAUTHORIZED, HOOK_UNCONFIRMED, DEGRADED, SOURCES_DISABLED, NOTIFICATION_OBSERVING, OVERLAY_MISSING, PENDING_MODE, RUNNING }
+internal enum class CaptureHealthKind { MODE_REQUIRED, PAUSED, ACCESSIBILITY_DISABLED, ACCESSIBILITY_UNBOUND, NOTIFICATION_DISABLED, NOTIFICATION_UNBOUND, ROOT_UNREADY, SMS_UNAUTHORIZED, HOOK_UNCONFIRMED, RULES_UNAVAILABLE, DEGRADED, SOURCES_DISABLED, NOTIFICATION_OBSERVING, OVERLAY_MISSING, PENDING_MODE, RUNNING }
 internal data class CaptureHealth(
     val kind: CaptureHealthKind, val title: String, val detail: String,
     val actions: List<CaptureAction> = emptyList(),
@@ -63,11 +67,18 @@ internal val CaptureHealthInput.pageReady: Boolean
     get() = pageChannelEnabled && accessibilityAuthorized && accessibilityBound
 internal val CaptureHealthInput.notificationReady: Boolean
     get() = notificationsEnabled && if (mode == CaptureMode.ROOT) rootNotificationReady
-        else notificationAuthorized && notificationBound
+        && notificationRulesAvailable else notificationAuthorized && notificationBound && notificationRulesAvailable
+internal val CaptureHealthInput.notificationRulesAvailable: Boolean
+    get() = ruleCapabilities?.let { capabilities ->
+        val supported = capabilities.filter { it.endsWith("|NOTICE") }.map { it.substringBefore('|') }.toSet() +
+            com.example.billkit.notification.NotificationParser.TEMPLATE_PACKAGES
+        supported.any { selectedPackages == null || it in selectedPackages }
+    } ?: true
 internal val CaptureHealthInput.smsReady: Boolean
-    get() = smsEnabled && smsGranted
+    get() = smsEnabled && smsGranted && (ruleCapabilities == null || "com.android.phone|DATA" in ruleCapabilities)
 internal val CaptureHealthInput.lspReady: Boolean
-    get() = mode == CaptureMode.ROOT && hookEnabled && hookReady
+    get() = mode == CaptureMode.ROOT && hookEnabled && hookReady &&
+        (ruleCapabilities == null || hookPackages.any { "$it|DATA" in ruleCapabilities })
 /** Readiness is independent of presentation permissions and never inferred from the master switch. */
 internal val CaptureHealthInput.recognitionReady: Boolean
     get() = enabled && (pageReady || notificationReady || smsReady || lspReady)
@@ -101,6 +112,14 @@ internal fun captureHealth(input: CaptureHealthInput): CaptureHealth = with(inpu
             "尚未就绪 · 还差短信权限", "银行短信识别已开启，还需授予短信权限。", listOf(CaptureAction.SMS_PERMISSION)))
         if (mode == CaptureMode.ROOT && hookEnabled && !hookReady) add(CaptureHealth(CaptureHealthKind.HOOK_UNCONFIRMED,
             "尚未确认应用模块加载", "请在 LSPosed 设置中检测微信、支付宝的模块加载状态。", listOf(CaptureAction.LSP)))
+        if (ruleCapabilities != null && ((notificationsEnabled && !notificationRulesAvailable) ||
+                (smsEnabled && "com.android.phone|DATA" !in ruleCapabilities) ||
+                (mode == CaptureMode.ROOT && hookEnabled && hookReady && !lspReady))) {
+            add(CaptureHealth(CaptureHealthKind.RULES_UNAVAILABLE,
+                if (!ruleEngineReady) "本地规则尚未就绪" else "部分来源暂无匹配规则",
+                if (!ruleEngineReady) "规则正在准备或加载失败，请查看规则文件状态。" else "已保留来源设置；可在应用与通道查看当前支持范围。",
+                listOf(CaptureAction.SUPPORTED_APPS)))
+        }
     }
     if (!recognitionReady) return issues.firstOrNull() ?: CaptureHealth(CaptureHealthKind.SOURCES_DISABLED,
         "尚未就绪 · 识别来源已关闭", "请在识别设置或更多设置中开启至少一种识别方式。", listOf(CaptureAction.SELECT_MODE))

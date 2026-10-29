@@ -5,6 +5,11 @@ import android.util.Log
 import com.example.autobook.data.*
 import com.example.billkit.root.NotificationDumpDedup
 import com.example.billkit.root.RootNotificationSource
+import com.example.billkit.root.RootNotificationAdmission
+import com.example.billkit.notification.NotificationEnvelopeGuard
+import com.example.billkit.notification.NotificationParseResult
+import com.example.billkit.notification.NotificationParser
+import com.example.billkit.spec.SpecRuleEngine
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -45,6 +50,7 @@ object RootNotificationIngress {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val dedup = NotificationDumpDedup()
+    private val parser = NotificationParser()
     private var job: Job? = null
     private var tickCount = 0
     private var generation = 0L
@@ -87,7 +93,7 @@ object RootNotificationIngress {
                 // 语义与 NotificationListenerService 的 baseline 实例集合一致。
                 //
                 // 基线不能「只跑一轮就作废」：规则引擎是异步初始化的（[SpecRuleStore.init] 要读
-                // 300KB 资产、比对哈希、必要时导入 163 条规则再 eval 整个 bundle），首轮轮询时
+                // 读取资产、验证完整包、必要时更新规则再求值整个 bundle），首轮轮询时
                 // `covers()` 多半还是空集，于是所有通知都被 `continue` 掉、一条也没登记进去，
                 // 下一轮引擎就绪后同样的旧通知被当成新通知投递——实测 app_data #21 就是这么来的。
                 // 所以这里一直保持在基线态，直到引擎真正就绪，再把「这一轮看到的」当作已见收工。
@@ -175,11 +181,13 @@ object RootNotificationIngress {
             // 基线轮必须排在 covers() 之前：引擎没就绪时 covers() 恒 false，
             // 若先按它过滤，基线轮就一条都登记不到，旧通知会在引擎就绪后被重新投递。
             if (baseline) { dedup.accept(notification); continue }
-            if (!SpecRuleStore.covers(pkg, NOTICE)) continue
-            if (!dedup.accept(notification)) continue
+            if (!SpecRuleStore.covers(pkg, NOTICE) && pkg !in NotificationParser.TEMPLATE_PACKAGES) continue
             val current = Settings(context)
             if (!current.enabled || !current.notificationCaptureEnabled || current.captureMode != CaptureMode.ROOT) return false
             if (pkg !in current.whitelist) continue
+            // 不完整的首帧只留诊断，不提前占用15分钟槽位；补齐后的同槽位仍可处理。
+            val admission = RootNotificationAdmission.admitLive(notification, dedup, System.currentTimeMillis())
+            if (admission == RootNotificationAdmission.Result.Duplicate) continue
             process(context, notification)
         }
         return true
@@ -187,25 +195,58 @@ object RootNotificationIngress {
 
     private suspend fun process(context: Context, notification: com.example.billkit.root.NotificationDumpParser.Dumped) {
         val pkg = notification.packageName
+        val receivedAt = System.currentTimeMillis()
+        val observation = notification.observation(receivedAt)
+        val result = observation?.let(parser::parse)
+        val eventId = "root-notification:" + CaptureMergePolicy.digest(
+            "$pkg|${notification.slot}|${notification.postTime}|${notification.title}|${notification.text}")
+        val rejection = if (observation == null) "missing-envelope-metadata"
+            else NotificationEnvelopeGuard.rejection(observation)
+        if (rejection != null) {
+            AppDb.get(context).capture().putEvidence(CaptureEvidence(eventId, null, SOURCE, pkg,
+                receivedAt, rejection, "root-envelope-rejected"))
+            return
+        }
         val payload = MiniJson.encode(mapOf<String, Any?>(
             "title" to notification.title,
             "text" to notification.text,
-            "t" to (if (notification.postTime > 0) notification.postTime else System.currentTimeMillis()),
+            "t" to notification.postTime,
+            "observedAt" to receivedAt,
+            "envelopeVerified" to true,
+            "channelId" to notification.channelId,
+            "category" to notification.category,
+            "template" to notification.template,
         ))
-        val hit = runCatching { SpecRuleStore.parse(context, pkg, NOTICE, payload) }.getOrNull()
-        val observationKey = "root-notification:" + CaptureMergePolicy.digest(payload)
-        val eventId = observationKey
-        if (hit == null) {
+        val candidate = (result as? NotificationParseResult.Candidate)?.draft
+        val parsed = if (candidate == null && observation != null && result != null &&
+            NotificationEnvelopeGuard.mayTryRule(observation, result)) {
+            runCatching { SpecRuleStore.parseDetailed(context, pkg, NOTICE, payload) }
+                .getOrElse { SpecRuleStore.ParseResult(null, SpecRuleEngine.Outcome.ERROR) }
+        } else null
+        val hit = parsed?.hit
+        val draft = candidate ?: hit?.draft
+        val observationKey = eventId
+        if (draft == null) {
+            val reason = when (parsed?.outcome) {
+                SpecRuleEngine.Outcome.NO_MATCH -> "no-rule"
+                SpecRuleEngine.Outcome.REJECTED -> "rule-rejected"
+                SpecRuleEngine.Outcome.ERROR -> "rule-error"
+                else -> when (result) {
+                    is NotificationParseResult.Ignored -> result.reason
+                    is NotificationParseResult.NeedsEvidence -> result.reason
+                    else -> "no-rule"
+                }
+            }
             AppDb.get(context).capture().putEvidence(
-                CaptureEvidence(eventId, null, SOURCE, pkg, System.currentTimeMillis(), "no-rule",
+                CaptureEvidence(eventId, null, SOURCE, pkg, receivedAt, reason,
                     "payloadHash=" + CaptureMergePolicy.digest(payload).take(16)),
             )
             return
         }
-        val suggestion = SpecCategoryStore.fill(context, hit.draft,
-            CategorySuggester.suggest(hit.draft, candidates = ExternalRuleStore.candidates()))
-        val named = hit.draft.copy(category = suggestion.category, subCategory = suggestion.subCategory,
-            account = suggestion.account ?: hit.draft.account)
+        val suggestion = SpecCategoryStore.fill(context, draft,
+            CategorySuggester.suggest(draft, candidates = ExternalRuleStore.candidates()))
+        val named = draft.copy(category = suggestion.category, subCategory = suggestion.subCategory,
+            account = suggestion.account ?: draft.account)
         val accounted = SpecAccountStore.fill(context, named, preferred = suggestion.account)
         val enriched = accounted.copy(note = NoteTemplate.render(accounted).ifBlank { null })
         val accepted = CaptureCoordinator.accept(
