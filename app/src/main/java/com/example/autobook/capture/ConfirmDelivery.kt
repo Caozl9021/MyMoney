@@ -40,7 +40,6 @@ import java.util.Locale
 object ConfirmDelivery {
 
     const val CHANNEL_ID = "autobook_confirm"
-    private const val CHANNEL_NAME = "账单待确认"
 
     /** 等待确认页回执的时长：够一次冷启动 onCreate，又不至于长时间卡住采集 */
     private const val LAUNCH_TIMEOUT_MS = 1_500L
@@ -131,15 +130,15 @@ object ConfirmDelivery {
     fun ensureChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (manager.getNotificationChannel(CHANNEL_ID) != null) return
-        val channel = NotificationChannel(
+        val channel = manager.getNotificationChannel(CHANNEL_ID) ?: NotificationChannel(
             CHANNEL_ID,
-            CHANNEL_NAME,
+            context.getString(R.string.notification_confirm_channel),
             NotificationManager.IMPORTANCE_HIGH,
         ).apply {
-            description = "识别到账单却弹不出确认卡时提醒你，点开即可记一笔"
             setShowBadge(true)
         }
+        channel.name = context.getString(R.string.notification_confirm_channel)
+        channel.description = "识别到账单却弹不出确认卡时提醒你，点开即可记一笔"
         manager.createNotificationChannel(channel)
     }
 
@@ -164,7 +163,8 @@ object ConfirmDelivery {
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_brand_small)
             .setLargeIcon(BrandIcons.large(context))
-            .setContentTitle("识别到一笔$typeLabel：¥" + String.format(Locale.US, "%.2f", draft.priceCents / 100.0))
+            .setContentTitle(context.getString(R.string.notification_bill_title, typeLabel,
+                String.format(Locale.US, "%.2f", draft.priceCents / 100.0)))
             .setContentText(draft.merchant ?: draft.sourcePkg)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)

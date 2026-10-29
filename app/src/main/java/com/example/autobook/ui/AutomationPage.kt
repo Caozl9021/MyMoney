@@ -62,7 +62,7 @@ internal fun AutomationPage(
             }
             item {
                 InsetGroup {
-                    ListRow(title = "识别设置",
+                    ListRow(title = if (mode == CaptureMode.ROOT) "识别设置" else if (health.attention) "完成设置" else "检查授权",
                         subtitle = if (mode == CaptureMode.ROOT) "Root 通知识别" else "通知识别、页面辅助",
                         leading = { SettingsIconBadge("识别设置", AbIcons.Filter) },
                         chevron = true, onClick = { onNavigate(Route.SOURCES) })

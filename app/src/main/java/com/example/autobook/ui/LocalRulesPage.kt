@@ -119,7 +119,7 @@ internal fun rememberRulesSectionsState(): RulesSectionsState {
         },
         fillMeals = { LedgerConfig.addMealSubCategories(); message = "已补齐缺少的餐别" },
         launchImport = { importFile.launch(arrayOf("application/json", "text/*", "application/octet-stream")) },
-        exportRules = { exportFile.launch("AutoBook-rules.json") },
+        exportRules = { exportFile.launch("麦米-rules.json") },
         refreshStats = { revision++ },
         requestAction = { pendingAction = it },
         confirmAction = {

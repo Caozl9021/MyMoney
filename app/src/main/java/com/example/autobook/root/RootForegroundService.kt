@@ -48,6 +48,18 @@ class RootForegroundService : Service() {
         private const val ACTION_START = "com.example.autobook.root.START"
         private const val ACTION_STOP = "com.example.autobook.root.STOP"
 
+        /** Refresh display metadata on the original channel, keeping user notification settings. */
+        fun ensureChannel(context: Context) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+            val manager = context.getSystemService(NotificationManager::class.java) ?: return
+            val channel = manager.getNotificationChannel(CHANNEL_ID) ?: NotificationChannel(
+                CHANNEL_ID, context.getString(R.string.notification_root_channel), NotificationManager.IMPORTANCE_LOW,
+            ).apply { setShowBadge(false) }
+            channel.name = context.getString(R.string.notification_root_channel)
+            channel.description = "Root 模式下持续读取通知栏中的账单消息"
+            manager.createNotificationChannel(channel)
+        }
+
         fun start(context: Context) {
             val settings = Settings(context)
             if (!settings.enabled || !settings.notificationCaptureEnabled || settings.captureMode != CaptureMode.ROOT) return
@@ -116,7 +128,7 @@ class RootForegroundService : Service() {
         val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_brand_small)
             .setLargeIcon(BrandIcons.large(this))
-            .setContentTitle("AutoBook 正在读取账单通知")
+            .setContentTitle(getString(R.string.notification_root_title))
             .setContentText("root 模式 · 每 5 秒读取一次通知栏")
             .setOngoing(true)
             .setSilent(true)
@@ -137,14 +149,6 @@ class RootForegroundService : Service() {
     }
 
     private fun createChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (manager.getNotificationChannel(CHANNEL_ID) != null) return
-        manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "root 监听", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "root 模式下持续读取通知栏中的账单消息"
-                setShowBadge(false)
-            },
-        )
+        ensureChannel(this)
     }
 }

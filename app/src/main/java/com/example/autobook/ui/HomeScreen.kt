@@ -89,19 +89,11 @@ fun HomeScreen(
     val mode = healthInput.mode
     val recognition by DebugBus.state.collectAsStateWithLifecycle()
     val prefs = remember { context.getSharedPreferences("first_run_guide", android.content.Context.MODE_PRIVATE) }
-    var guideComplete by remember { mutableStateOf(prefs.getBoolean("complete", false)) }
     var recognized by remember { mutableStateOf(prefs.getBoolean("recognized", false)) }
     LaunchedEffect(recognition, pendingRecognition(bills)) {
         if (recognition?.outcome?.startsWith("draft:") == true || pendingRecognition(bills)) {
             recognized = true
             prefs.edit().putBoolean("recognized", true).apply()
-        }
-    }
-    val steps = FirstRunGuide.steps(healthInput, recognized)
-    LaunchedEffect(steps) {
-        if (steps.all { it.complete }) {
-            guideComplete = true
-            prefs.edit().putBoolean("complete", true).apply()
         }
     }
     var healthDetails by remember { mutableStateOf(false) }
@@ -261,11 +253,10 @@ fun HomeScreen(
                         chevron = true, onClick = { historyFilter = "ALL"; historyOpen = true })
                 }
             }
-            if (!guideComplete && healthInput.recognitionReady) homeCardItem(key = "guide") {
+            if (!recognized && FirstRunGuide.configurationComplete(healthInput)) homeCardItem(key = "guide") {
                 InsetGroup {
                     ListRow(title = "识别第一笔账单",
-                        subtitle = "在所选应用收到交易通知或打开支付结果后，识别结果会进入待确认。",
-                        chevron = true, onClick = { onOpenSettings(CaptureSettingsDestination.MODE) })
+                        subtitle = "在所选应用收到交易通知或打开支付结果后，识别结果会进入待确认。")
                 }
             }
 

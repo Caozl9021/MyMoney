@@ -2,12 +2,18 @@ package com.example.autobook.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.SideEffect
+import androidx.compose.foundation.text.selection.LocalTextSelectionColors
+import androidx.compose.foundation.text.selection.TextSelectionColors
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.autobook.systems.LauncherIcons
 import com.example.autobook.ui.design.*
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
@@ -17,43 +23,6 @@ import com.example.autobook.ui.design.DarkPalette
 import com.example.autobook.ui.design.LightPalette
 import com.example.autobook.ui.design.LocalAbPalette
 import com.example.autobook.ui.design.LocalReduceTransparency
-import com.example.autobook.ui.design.SystemAccent
-
-/**
- * 把我们的语义色映射到 Material3 的 ColorScheme，
- * 这样仍在使用 M3 组件的零散位置（TextField、Switch 的默认参数等）也不会露出紫蓝默认色。
- */
-private fun AbPalette.toLightScheme() = lightColorScheme(
-    primary = accent,
-    onPrimary = onAccent,
-    secondary = accent,
-    onSecondary = onAccent,
-    background = pageBg,
-    onBackground = label,
-    surface = cardBg,
-    onSurface = label,
-    surfaceVariant = fill,
-    onSurfaceVariant = secondaryLabel,
-    outline = separator,
-    error = red,
-    onError = onAccent,
-)
-
-private fun AbPalette.toDarkScheme() = darkColorScheme(
-    primary = accent,
-    onPrimary = onAccent,
-    secondary = accent,
-    onSecondary = onAccent,
-    background = pageBg,
-    onBackground = label,
-    surface = cardBg,
-    onSurface = label,
-    surfaceVariant = fill,
-    onSurfaceVariant = secondaryLabel,
-    outline = separator,
-    error = red,
-    onError = onAccent,
-)
 
 /**
  * @param reduceTransparency 强制关闭玻璃（null = 跟随系统无障碍偏好）
@@ -83,12 +52,13 @@ fun AutoBookTheme(
         ) == 0f
     }
     val density = LocalDensity.current
-    // 跟随系统强调色（Android 12+ 从壁纸取色）；取不到就用品牌薄荷绿。
-    // 只换 accent / onAccent / 玻璃描边，中性色和 Tab 选中块不动。
+    val confirmedChoice by LauncherIcons.selection.collectAsStateWithLifecycle()
+    var lastConfirmed by remember(context) { mutableStateOf(LauncherIcons.initialThemeSelection(context)) }
+    val choice = confirmedChoice ?: lastConfirmed
+    SideEffect { confirmedChoice?.let { lastConfirmed = it } }
+    val roles = animatedBrandRoles(choice, dark, reduceMotion)
     val basePalette = if (dark) DarkPalette else LightPalette
-    val palette = remember(dark, context) {
-        SystemAccent.apply(context, basePalette, dark)
-    }
+    val palette = remember(basePalette, roles) { BrandColors.apply(basePalette, roles) }
 
     val view = androidx.compose.ui.platform.LocalView.current
     DisposableEffect(context, view, dark) {
@@ -106,12 +76,14 @@ fun AutoBookTheme(
     val scaledDensity = remember(density.density, density.fontScale, textScale) {
         Density(density.density, density.fontScale * textScale)
     }
-    val colorScheme = remember(palette, dark) {
-        if (dark) palette.toDarkScheme() else palette.toLightScheme()
+    val colorScheme = remember(palette, roles, dark) {
+        palette.materialScheme(roles, dark)
     }
 
     CompositionLocalProvider(
         LocalAbPalette provides palette,
+        LocalTextSelectionColors provides TextSelectionColors(
+            handleColor = roles.primary, backgroundColor = roles.primary.copy(alpha = .25f)),
         LocalReduceMotion provides reduceMotion,
         LocalPredictiveBackEnabled provides prefs.getBoolean(Appearance.PREDICTIVE_BACK, Appearance.DEFAULT_PREDICTIVE_BACK),
         LocalDensity provides scaledDensity,

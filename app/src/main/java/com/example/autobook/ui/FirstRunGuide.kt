@@ -1,8 +1,11 @@
 package com.example.autobook.ui
 
-/** Completion requires a usable source and actual recognition, not an enabled preference. */
+/** Configuration and first recognition are independent milestones. */
 internal object FirstRunGuide {
     data class Step(val label: String, val complete: Boolean)
+
+    fun configurationComplete(input: CaptureHealthInput): Boolean =
+        input.recognitionReady && (!input.autoConfirm || input.overlayAllowed)
 
     fun steps(input: CaptureHealthInput, recognized: Boolean): List<Step> = listOf(
         Step("完成识别设置", input.enabled && input.recognitionReady),

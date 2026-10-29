@@ -111,9 +111,9 @@ private fun pageVerdict(input: CaptureHealthInput, whitelisted: Boolean): Channe
         !input.enabled -> ChannelVerdict(false, ChannelReason.GLOBAL_PAUSED, "自动识别已暂停，恢复后继续")
         !input.pageEnabled -> ChannelVerdict(false, ChannelReason.PAGE_DISABLED, "页面辅助未启用")
         !input.accessibilityAuthorized ->
-            ChannelVerdict(false, ChannelReason.PAGE_UNAUTHORIZED, "无障碍服务未授权，请在系统设置中开启 AutoBook")
+            ChannelVerdict(false, ChannelReason.PAGE_UNAUTHORIZED, "无障碍服务未授权，请在系统设置中开启 麦米")
         !input.accessibilityBound ->
-            ChannelVerdict(false, ChannelReason.PAGE_UNBOUND, "无障碍已授权但服务未连接，请在系统设置中重新开启 AutoBook")
+            ChannelVerdict(false, ChannelReason.PAGE_UNBOUND, "无障碍已授权但服务未连接，请在系统设置中重新开启 麦米")
         else -> ChannelVerdict(true, ChannelReason.ACTIVE, "无障碍页面识别可用")
     }
 }

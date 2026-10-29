@@ -78,7 +78,7 @@ object CostShare {
     private fun buildView(context: Context, uri: Uri): Intent = Intent(Intent.ACTION_VIEW).apply {
         setDataAndType(uri, "text/csv")
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        clipData = ClipData.newUri(context.contentResolver, "autobook.csv", uri)
+        clipData = ClipData.newUri(context.contentResolver, "麦米.csv", uri)
     }
 
     private fun buildSend(context: Context, uri: Uri, csv: String): Intent =
@@ -86,7 +86,7 @@ object CostShare {
             type = "text/csv"
             putExtra(Intent.EXTRA_STREAM, uri)
             putExtra(Intent.EXTRA_TEXT, csv)
-            clipData = ClipData.newUri(context.contentResolver, "autobook.csv", uri)
+            clipData = ClipData.newUri(context.contentResolver, "麦米.csv", uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
 
@@ -122,7 +122,7 @@ object CostShare {
 
     private fun writeShareFile(context: Context, csv: String): Uri? = try {
         val dir = File(context.cacheDir, "share").apply { mkdirs() }
-        val file = File(dir, "autobook_${System.currentTimeMillis()}.csv")
+        val file = File(dir, "麦米_${System.currentTimeMillis()}.csv")
         file.writeText(csv, Charsets.UTF_8)
         FileProvider.getUriForFile(context, "${context.packageName}.share", file)
     } catch (e: Exception) {

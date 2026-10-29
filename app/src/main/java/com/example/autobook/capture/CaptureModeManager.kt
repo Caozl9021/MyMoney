@@ -75,6 +75,22 @@ object CaptureModeManager {
         }
     }
 
+    fun prepareOrdinarySetup(context: Context) {
+        init(context)
+        onMain {
+            Settings(context).prepareOrdinarySetup()
+            reconcile(context)
+        }
+    }
+
+    fun useRecommendedOrdinarySources(context: Context) {
+        init(context)
+        onMain {
+            Settings(context).useRecommendedOrdinarySources()
+            reconcile(context)
+        }
+    }
+
     fun setEnabled(context: Context, enabled: Boolean) {
         init(context)
         onMain {

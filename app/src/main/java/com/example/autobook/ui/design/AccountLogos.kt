@@ -21,7 +21,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.autobook.R
-import com.example.autobook.ui.design.SystemAccent.contrastingForeground
+import com.example.autobook.ui.design.ColorContrast.contrastingForeground
 
 /**
  * 账户 logo：用户发来的六个真实标识（支付宝 / 微信 / 工行 / 农行 / 中行 / 建行），

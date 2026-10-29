@@ -67,10 +67,10 @@ class RecognitionTileService : TileService() {
         val tile = qsTile ?: return
         val presentation = SystemEntryPolicy.tile(CaptureModeManager.state.value)
         tile.icon = Icon.createWithResource(this, R.drawable.ic_brand_small)
-        tile.label = "账单识别"
+        tile.label = getString(R.string.recognition_tile_label)
         tile.state = if (presentation.active) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
         if (Build.VERSION.SDK_INT >= 29) tile.subtitle = presentation.subtitle
-        tile.contentDescription = "账单识别，${presentation.subtitle}"
+        tile.contentDescription = "${getString(R.string.recognition_tile_label)}，${presentation.subtitle}"
         tile.updateTile()
     }
 

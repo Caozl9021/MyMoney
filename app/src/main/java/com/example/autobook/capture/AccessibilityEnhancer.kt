@@ -149,33 +149,33 @@ object AccessibilityEnhancer {
     fun optimizationGuide(manufacturer: Manufacturer): List<String> = when (manufacturer) {
         Manufacturer.XIAOMI, Manufacturer.REDMI -> listOf(
             "电池与性能 → 关闭省电模式",
-            "应用设置 → 应用管理 → AutoBook → 自启动：开启",
-            "应用管理 → AutoBook → 省电策略：无限制",
-            "最近任务里下拉锁定 AutoBook",
+            "应用设置 → 应用管理 → 麦米 → 自启动：开启",
+            "应用管理 → 麦米 → 省电策略：无限制",
+            "最近任务里下拉锁定 麦米",
         )
         Manufacturer.HUAWEI, Manufacturer.HONOR -> listOf(
-            "应用 → 应用启动管理 → AutoBook：关闭「自动管理」，全部允许",
+            "应用 → 应用启动管理 → 麦米：关闭「自动管理」，全部允许",
             "电池 → 更多电池设置 → 允许后台活动",
-            "最近任务里下拉锁定 AutoBook",
+            "最近任务里下拉锁定 麦米",
         )
         Manufacturer.OPPO -> listOf(
-            "电池 → 应用电量管理 → AutoBook：允许后台运行",
-            "应用管理 → AutoBook：允许自启动、允许关联启动",
-            "最近任务里下拉锁定 AutoBook",
+            "电池 → 应用电量管理 → 麦米：允许后台运行",
+            "应用管理 → 麦米：允许自启动、允许关联启动",
+            "最近任务里下拉锁定 麦米",
         )
         Manufacturer.VIVO -> listOf(
-            "i 管家 → 应用管理 → 自启动：开启 AutoBook",
-            "电池 → 后台高耗电：允许 AutoBook",
-            "最近任务里下拉锁定 AutoBook",
+            "i 管家 → 应用管理 → 自启动：开启 麦米",
+            "电池 → 后台高耗电：允许 麦米",
+            "最近任务里下拉锁定 麦米",
         )
         Manufacturer.SAMSUNG -> listOf(
             "电池与设备维护 → 电池 → 后台使用限制",
-            "把 AutoBook 加入「从不休眠的应用」",
+            "把 麦米 加入「从不休眠的应用」",
         )
         else -> listOf(
             "关闭电池优化",
             "允许后台运行",
-            "最近任务里下拉锁定 AutoBook",
+            "最近任务里下拉锁定 麦米",
         )
     }
 }

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 100 100">
+  <!-- Shared simplified money-bag mark. Original painted PNGs remain unchanged. -->
+  <path fill="white" fill-rule="evenodd" d="M 28,29 C 22,23 13,16 18,11 C 22,7 30,9 35,10 C 39,4 45,3 50,5 C 55,7 58,12 63,10 C 70,8 80,8 82,13 C 84,17 75,25 72,29 C 73,33 79,36 83,41 C 91,52 95,66 94,80 C 93,91 82,96 50,96 C 19,96 8,92 7,81 C 5,65 15,47 25,37 C 29,33 30,32 28,29 Z
+  M 50,48 A 20,20 0 1,0 50,88 A 20,20 0 1,0 50,48 Z
+  M 50,57 L 61,68 L 50,79 L 39,68 Z
+  M 27,29 Q 50,34 74,29 L 73,34 Q 50,39 26,34 Z"/>
+  <path fill="white" d="M 75,30 C 82,30 82,36 78,38 C 74,40 70,35 72,32 Z M 80,34 Q 90,35 98,42 Q 100,46 96,47 Q 87,44 79,38 Z"/>
+</svg>

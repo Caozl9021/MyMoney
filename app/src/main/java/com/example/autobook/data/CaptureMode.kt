@@ -54,6 +54,11 @@ enum class NotificationPath { LISTENER, DUMPSYS }
 
 /** Pure migration and restore decisions; uncertainty must keep the choice unset. */
 object CaptureModePolicy {
+    /** Only a genuinely new configuration receives defaults; existing choices are immutable here. */
+    fun prepareOrdinary(current: CaptureModeState): CaptureModeState =
+        if (current.configured) current else current.copy(mode = CaptureMode.ACCESSIBILITY,
+            enabled = false, notificationsEnabled = true, pageEnabled = true)
+
     fun migrate(stored: String?, legacyRoot: Boolean, accessibilityConfigured: Boolean): CaptureMode? =
         CaptureMode.entries.firstOrNull { it.name == stored }
             ?: when {

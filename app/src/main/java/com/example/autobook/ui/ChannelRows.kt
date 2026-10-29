@@ -44,11 +44,14 @@ internal fun ChannelRows(
                         else -> "已就绪 · 识别新收到的银行短信"
                     },
                     leading = { SettingsIconBadge("银行短信", AbIcons.Note) }, dividerAbove = index > 0,
-                    trailing = { AbSwitch(state.smsEnabled) { CaptureModeManager.setSmsEnabled(context, it) } },
-                    onClick = {
-                        if (state.smsEnabled && !state.smsGranted) onAction(CaptureAction.SMS_PERMISSION)
-                        else CaptureModeManager.setSmsEnabled(context, !state.smsEnabled)
-                    },
+                    trailing = { AbSwitch(state.smsEnabled) {
+                        CaptureModeManager.setSmsEnabled(context, it)
+                        if (it && !state.smsGranted) onAction(CaptureAction.SMS_PERMISSION)
+                    } },
+                    onClick = if (state.smsEnabled && state.smsGranted) null else ({
+                        if (!state.smsEnabled) CaptureModeManager.setSmsEnabled(context, true)
+                        if (!state.smsGranted) onAction(CaptureAction.SMS_PERMISSION)
+                    }),
                 )
                 CaptureChannel.PAGE -> ListRow(
                     title = "页面辅助",

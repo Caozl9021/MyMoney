@@ -57,17 +57,16 @@ class AccessibilityGuardian : Service() {
         fun ensureChannel(context: Context) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
             val manager = context.getSystemService(NotificationManager::class.java) ?: return
-            if (manager.getNotificationChannel(CHANNEL_ID) != null) return
-            manager.createNotificationChannel(
-                NotificationChannel(
+            val channel = manager.getNotificationChannel(CHANNEL_ID) ?: NotificationChannel(
                     CHANNEL_ID,
-                    "无障碍守护",
+                    context.getString(R.string.notification_guardian_channel),
                     NotificationManager.IMPORTANCE_MIN,
                 ).apply {
-                    description = "无障碍模式下常驻，发现服务被系统关闭时提醒你重新开启"
                     setShowBadge(false)
                 }
-            )
+            channel.name = context.getString(R.string.notification_guardian_channel)
+            channel.description = "无障碍模式下常驻，发现服务被系统关闭时提醒你重新开启"
+            manager.createNotificationChannel(channel)
         }
 
         /** 是否应该跑守护：识别和页面辅助开启，且当前是无障碍模式。 */
@@ -178,7 +177,7 @@ class AccessibilityGuardian : Service() {
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_brand_small)
             .setLargeIcon(BrandIcons.large(this))
-            .setContentTitle("AutoBook 守护中")
+            .setContentTitle(getString(R.string.notification_guardian_title))
             .setContentText("无障碍服务被系统关闭时会提醒你")
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setSilent(true)
@@ -231,7 +230,7 @@ class AccessibilityGuardian : Service() {
         val notification = NotificationCompat.Builder(this, ConfirmDelivery.CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_brand_small)
             .setLargeIcon(BrandIcons.large(this))
-            .setContentTitle("无障碍服务异常")
+            .setContentTitle(getString(R.string.notification_guardian_alert_title))
             .setContentText(GuardianPolicy.message(health) + "，点这里重新开启")
             .setStyle(
                 NotificationCompat.BigTextStyle()

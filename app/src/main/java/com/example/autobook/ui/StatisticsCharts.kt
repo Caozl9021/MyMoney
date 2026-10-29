@@ -123,8 +123,8 @@ internal fun StatisticsMonthHeatmap(
     val levelAlpha = listOf(0f, 0.22f, 0.44f, 0.68f, 0.94f)
     // 日期数字的前景色按**混色后**的格子底色算对比度：alpha 叠在卡片底上，
     // 直接拿语义色原色算会低估亮度、把中档格子错判成可以放白字。
-    val onStrong = Color(SystemAccent.contrastingForeground(lerp(p.cardBg, tint, 0.94f).toArgb()))
-    val onMedium = Color(SystemAccent.contrastingForeground(lerp(p.cardBg, tint, 0.68f).toArgb()))
+    val onStrong = Color(ColorContrast.contrastingForeground(lerp(p.cardBg, tint, 0.94f).toArgb()))
+    val onMedium = Color(ColorContrast.contrastingForeground(lerp(p.cardBg, tint, 0.68f).toArgb()))
     Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
             listOf("一", "二", "三", "四", "五", "六", "日").forEach { weekday ->

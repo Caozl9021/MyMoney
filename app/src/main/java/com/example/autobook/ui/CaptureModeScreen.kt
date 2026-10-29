@@ -46,7 +46,7 @@ import com.example.autobook.ui.design.PrimaryButton
  * root 用户看不到无障碍那一套，普通用户也看不到任何 root 字样。
  */
 @Composable
-fun CaptureModeScreen() {
+fun CaptureModeScreen(onOrdinarySetup: () -> Unit) {
     val context = LocalContext.current
     val p = LocalAbPalette.current
     var choice by rememberSaveable { mutableStateOf<CaptureMode?>(null) }
@@ -54,15 +54,10 @@ fun CaptureModeScreen() {
     var rootError by rememberSaveable { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize().background(p.pageBg).systemBarsPadding()) {
-        Text(
-            "选择适合这台手机的方式，随后完成必要授权。可以随时切换。",
-            style = AbType.footnote, color = p.secondaryLabel,
-            modifier = Modifier.padding(horizontal = AbSpacing.xxl, vertical = AbSpacing.s),
-        )
         TextButton(onClick = {
-            CaptureModeManager.startWithNotifications(context)
+            CaptureModeManager.prepareOrdinarySetup(context)
         }, modifier = Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xxl)) {
-            Text("跳过，先用普通模式")
+            Text("稍后设置")
         }
         CaptureModeChoice(
             mode = choice,
@@ -75,7 +70,7 @@ fun CaptureModeScreen() {
                             val granted = withContext(Dispatchers.IO) { RootShell.isGranted() }
                             if (choice == CaptureMode.ROOT) {
                                 if (granted) CaptureModeManager.select(context, CaptureMode.ROOT)
-                                else rootError = "未获得 Root 授权，请授权后重试或使用普通模式。"
+                                else rootError = "Root 授权未通过，请重试或选择普通模式。"
                             }
                         } finally { checkingRoot = false }
                     }
@@ -85,6 +80,7 @@ fun CaptureModeScreen() {
             doneLabel = if (checkingRoot) "正在检测 Root…" else "继续",
             busy = checkingRoot,
             error = rootError,
+            onUseOrdinary = onOrdinarySetup,
         )
     }
 }
@@ -99,6 +95,7 @@ fun CaptureModeChoice(
     doneLabel: String = "继续",
     busy: Boolean = false,
     error: String? = null,
+    onUseOrdinary: (() -> Unit)? = null,
 ) {
     val p = LocalAbPalette.current
     Column(
@@ -106,33 +103,23 @@ fun CaptureModeChoice(
         verticalArrangement = Arrangement.spacedBy(AbSpacing.xl),
     ) {
         Text("选择使用方式", style = AbType.largeTitle, color = p.label)
-        Text(
-            "普通手机选「普通模式」，已经 Root 的手机选「Root」。两者选一个，选了哪个就只显示哪个的设置。",
-            style = AbType.body,
-            color = p.secondaryLabel,
-        )
         Column(
             Modifier.selectableGroup(),
             verticalArrangement = Arrangement.spacedBy(AbSpacing.m),
         ) {
             CaptureModeCard(
                 "普通模式",
-                "绝大多数手机选这个。通过交易通知识别，也可以按需开启页面辅助。",
+                "通知识别，可选页面辅助",
                 mode == CaptureMode.ACCESSIBILITY,
-                { onSelect(CaptureMode.ACCESSIBILITY) },
+                { if (onUseOrdinary != null) onUseOrdinary() else onSelect(CaptureMode.ACCESSIBILITY) },
             )
             CaptureModeCard(
                 "Root 模式",
-                "只给已经 Root 的手机。用 Root 直接读取通知栏，可以少开一次通知使用权授权。",
+                "仅适用于已 Root 的手机",
                 mode == CaptureMode.ROOT,
                 { onSelect(CaptureMode.ROOT) },
             )
         }
-        Text(
-            "两种方式都建议再给一次悬浮窗权限，这样识别完能直接把确认卡盖在支付页面上。",
-            style = AbType.footnote,
-            color = p.secondaryLabel,
-        )
         error?.let { Text(it, style = AbType.footnote, color = p.red) }
         PrimaryButton(doneLabel, onDone, Modifier.fillMaxWidth(), enabled = mode != null && !busy)
     }

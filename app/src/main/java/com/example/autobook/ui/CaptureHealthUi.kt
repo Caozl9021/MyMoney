@@ -68,26 +68,45 @@ internal fun rememberCaptureHealthInput(): CaptureHealthInput {
         }
     }
     return remember(capture, bound, notificationBound, rootRuntime, rootServiceActive, hookTargets, revision) {
-        val selectedHookPackages = hookTargets.filterValues { it.state == HookLoadState.READY }.keys.intersect(Settings(context).whitelist)
-        CaptureHealthInput(capture.mode, capture.enabled,
-            AccessibilityGuardian.isEnabledInSettings(context), bound,
-            SystemSettings.canDrawOverlays(context), Settings(context).autoConfirm,
-            capture.pageEnabled, capture.notificationsEnabled,
-            PaymentNotificationListener.isAuthorized(context), notificationBound,
-            smsEnabled = capture.smsEnabled,
-            smsGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED,
-            hookEnabled = capture.hookEnabled,
-            hookReady = selectedHookPackages.isNotEmpty(),
-            rootNotificationReady = rootRuntime.ready && rootServiceActive,
-            rootNotificationError = rootRuntime.error ?: if (rootServiceActive) null else "Root 后台服务尚未连接，请检查状态后重试。",
-            hookPackages = selectedHookPackages)
+        readCaptureHealthInput(context)
     }
+}
+
+/** Also used to recheck a user-triggered start against the current signals. */
+internal fun readCaptureHealthInput(context: Context): CaptureHealthInput {
+    val capture = CaptureModeManager.state.value
+    val bound = BillAccessibilityService.bound.value
+    val notificationBound = PaymentNotificationListener.bound.value
+    val rootRuntime = RootNotificationIngress.runtime.value
+    val rootServiceActive = RootForegroundService.activeState.value
+    val selectedHookPackages = HookTargetMonitor.state.value.filterValues { it.state == HookLoadState.READY }.keys.intersect(Settings(context).whitelist)
+    return CaptureHealthInput(capture.mode, capture.enabled,
+        AccessibilityGuardian.isEnabledInSettings(context), bound,
+        SystemSettings.canDrawOverlays(context), Settings(context).autoConfirm,
+        capture.pageEnabled, capture.notificationsEnabled,
+        PaymentNotificationListener.isAuthorized(context), notificationBound,
+        smsEnabled = capture.smsEnabled,
+        smsGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED,
+        hookEnabled = capture.hookEnabled,
+        hookReady = selectedHookPackages.isNotEmpty(),
+        rootNotificationReady = rootRuntime.ready && rootServiceActive,
+        rootNotificationError = rootRuntime.error ?: if (rootServiceActive) null else "Root 后台服务尚未连接，请检查状态后重试。",
+        hookPackages = selectedHookPackages)
 }
 
 internal fun performCaptureAction(context: Context, action: CaptureAction,
     onSettings: (CaptureSettingsDestination) -> Unit, onPending: () -> Unit) {
+    if (ordinarySetupDestination(CaptureModeManager.state.value.mode, action)) {
+        onSettings(CaptureSettingsDestination.SETUP)
+        return
+    }
+    performDirectCaptureAction(context, action, onSettings, onPending)
+}
+
+internal fun performDirectCaptureAction(context: Context, action: CaptureAction,
+    onSettings: (CaptureSettingsDestination) -> Unit, onPending: () -> Unit) {
     when (action) {
-        CaptureAction.NOTIFICATION_ACCESS -> launchCaptureSettings(context, Intent(SystemSettings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+        CaptureAction.NOTIFICATION_ACCESS -> launchPermissionSettings(context, notificationAccessIntents(context))
         CaptureAction.NOTIFICATION_RECONNECT -> PaymentNotificationListener.requestReconnect(context)
         CaptureAction.SELECT_MODE -> onSettings(CaptureSettingsDestination.MODE)
         CaptureAction.ROOT_STATUS -> onSettings(CaptureSettingsDestination.ROOT_STATUS)

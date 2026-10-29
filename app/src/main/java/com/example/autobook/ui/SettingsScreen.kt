@@ -106,7 +106,7 @@ import java.time.LocalDate
 private enum class SettingsPage(val title: String) {
     ROOT("设置"), LEDGER_PERIOD("记账周期"), CATEGORIES("分类"), EXPENSE_CATEGORIES("支出分类"), INCOME_CATEGORIES("收入分类"), CATEGORY_PRESETS("分类预设"), ASSETS("资产"), NOTE("备注"),
     NOTE_TEMPLATE("备注模板"), NOTE_SUGGESTIONS("备注建议"),
-    AUTOMATION("自动记账"), CHANNELS("识别设置"), AUTOMATION_MORE("更多设置"), LSP("LSPosed 模块"), SMS("银行短信"), CONFIRMATION("确认卡"),
+    AUTOMATION("自动记账"), ORDINARY_SETUP("开启自动记账"), BACKGROUND("后台运行设置"), CHANNELS("识别设置"), AUTOMATION_MORE("更多设置"), LSP("LSPosed 模块"), SMS("银行短信"), CONFIRMATION("确认卡"),
     RECOGNITION("应用与通道"), LEARNING("学习记忆"), TEMPLATES("通知模板"),
     RULE_FILES("规则文件"), MEALS("餐段设置"), STATISTICS("识别统计"),
     PERMISSIONS("权限与后台运行"), MODE("使用方式"), ROOT_MODE("Root 状态"),
@@ -117,6 +117,7 @@ private enum class SettingsPage(val title: String) {
 
 private fun captureSettingsPage(destination: CaptureSettingsDestination): SettingsPage = when (destination) {
     CaptureSettingsDestination.MODE -> SettingsPage.AUTOMATION
+    CaptureSettingsDestination.SETUP -> SettingsPage.ORDINARY_SETUP
     CaptureSettingsDestination.ROOT_STATUS -> SettingsPage.ROOT_MODE
     CaptureSettingsDestination.SUPPORTED_APPS -> SettingsPage.RECOGNITION
     CaptureSettingsDestination.SMS -> SettingsPage.SMS
@@ -211,6 +212,7 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
     val mode = captureState.mode
     val scope = rememberCoroutineScope()
     var autoConfirm by remember { mutableStateOf(settings.autoConfirm) }
+    LaunchedEffect(healthInput.autoConfirm) { autoConfirm = healthInput.autoConfirm }
     var whitelist by remember { mutableStateOf(settings.whitelist) }
     val serviceBound = healthInput.accessibilityAuthorized && healthInput.accessibilityBound
     var overlayGranted by remember { mutableStateOf(OverlayAnchor.canShow(context)) }
@@ -314,7 +316,7 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
                 )) }
                 item { SettingsNavigationGroup("数据与应用", listOf(
                     SettingsLink("导入导出", "账单迁移、导出与备份", AbIcons.Export) { navigate(SettingsPage.IMPORT_EXPORT) },
-                    SettingsLink("外观", "主题、文字大小与动效", AbIcons.Settings) { navigate(SettingsPage.APPEARANCE) },
+                    SettingsLink("外观", "图标、明暗、文字与动效", AbIcons.Settings) { navigate(SettingsPage.APPEARANCE) },
                     SettingsLink("开发调试", "识别帮助、通知与页面诊断", AbIcons.Terminal) { navigate(SettingsPage.DEVELOPMENT) },
                 )) }
             }
@@ -323,11 +325,18 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
         SettingsPage.AUTOMATION -> AutomationPage(
             mode = mode, enabled = enabled, health = health, autoConfirm = autoConfirm,
             onBack = back, onAction = ::handleHealthAction, onSelectMode = ::selectMode,
-            onToggleEnabled = { CaptureModeManager.setEnabled(context, it) },
+            onToggleEnabled = {
+                if (it && mode == CaptureMode.ACCESSIBILITY && !ordinarySetupState(healthInput).canStart)
+                    navigate(SettingsPage.ORDINARY_SETUP)
+                else CaptureModeManager.setEnabled(context, it)
+            },
             onToggleConfirm = { autoConfirm = it; settings.autoConfirm = it },
             onNavigate = { navigate(settingsPageFor(it)) }, gate = modeGate, checkingRoot = checkingRoot,
         )
-        SettingsPage.CHANNELS -> RecognitionSettingsPage(mode, snapshot, autoConfirm, back,
+        SettingsPage.ORDINARY_SETUP -> OrdinarySetupPage(back, { navigate(SettingsPage.SMS) }, { navigate(SettingsPage.BACKGROUND) })
+        SettingsPage.CHANNELS -> if (mode != CaptureMode.ROOT) {
+            OrdinarySetupPage(back, { navigate(SettingsPage.SMS) }, { navigate(SettingsPage.BACKGROUND) })
+        } else RecognitionSettingsPage(mode, snapshot, autoConfirm, back,
             ::handleHealthAction, { navigate(SettingsPage.PERMISSIONS) }, { navigate(SettingsPage.ROOT_MODE) })
         SettingsPage.LSP -> LspSettingsPage(mode, captureState.hookEnabled, enabled, back) { action ->
             performCaptureAction(context, action, { navigate(captureSettingsPage(it)) }, { navigate(SettingsPage.PENDING) })
@@ -386,7 +395,7 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
         ))
         SettingsPage.EXPORT_HELP -> SettingsContentPage("导入说明", back) {
             InsetGroup {
-                ListRow(title = "1 · 准备分类与账户", subtitle = "AutoBook 与 iCost 中的分类、账户名称应对应；转账的另一账户需在 iCost 中补选。")
+                ListRow(title = "1 · 准备分类与账户", subtitle = "麦米 与 iCost 中的分类、账户名称应对应；转账的另一账户需在 iCost 中补选。")
                 ListRow(title = "2 · 选择范围并导出", subtitle = "按设置的记账周期选择当前、上一期或最近3期，也可导出全部或最近50条。默认每月1日起算。生成官方10列CSV。", dividerAbove = true)
                 ListRow(title = "3 · 在 iCost 确认导入", subtitle = "发起分享后，在目标 App 完成导入与核对；分享成功不代表已经导入。", dividerAbove = true)
             }
@@ -446,7 +455,9 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
             back()
         }
 
-        SettingsPage.PERMISSIONS -> PermissionsPage(
+        SettingsPage.PERMISSIONS, SettingsPage.BACKGROUND -> if (shown == SettingsPage.PERMISSIONS && mode != CaptureMode.ROOT) {
+            OrdinarySetupPage(back, { navigate(SettingsPage.SMS) }, { navigate(SettingsPage.BACKGROUND) })
+        } else PermissionsPage(
             mode = mode,
             rootGranted = rootGranted,
             onCheckRoot = { checkRoot() },
@@ -458,6 +469,7 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
             smsGranted = smsGranted,
             onSmsGranted = { smsGranted = it },
             onBack = back,
+            backgroundOnly = shown == SettingsPage.BACKGROUND,
         )
 
         SettingsPage.ROOT_MODE -> RootModePage(
@@ -547,6 +559,7 @@ private fun PermissionsPage(
     smsGranted: Boolean,
     onSmsGranted: (Boolean) -> Unit,
     onBack: () -> Unit,
+    backgroundOnly: Boolean = false,
 ) {
     val context = LocalContext.current
     val sourceHealth = rememberCaptureHealthInput()
@@ -556,7 +569,6 @@ private fun PermissionsPage(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
         onNotifyGranted(ConfirmDelivery.hasNotificationPermission(context))
-        if (!granted) openNotificationChannelSettings(context)
     }
     val smsLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -576,8 +588,9 @@ private fun PermissionsPage(
         onDispose { keepAliveOwner.lifecycle.removeObserver(observer) }
     }
 
-    SubPageScaffold(title = "权限与后台运行", onBack = onBack) { padding ->
+    SubPageScaffold(title = if (backgroundOnly) "后台运行设置" else "权限与后台运行", onBack = onBack) { padding ->
         com.example.autobook.ui.design.SectionColumn(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(padding).padding(horizontal = AbSpacing.page)) {
+            if (!backgroundOnly) {
             GroupHeader("识别权限")
             InsetGroup {
                 // 通知使用权只在无障碍模式需要。root 模式下通知由 AutoBook 自己读通知栏，
@@ -674,6 +687,7 @@ private fun PermissionsPage(
                 )
             }
 
+            }
             // 无障碍保活：只显示**实测**状态 + 跳系统设置，不假装能替用户开
             if (mode == CaptureMode.ACCESSIBILITY) {
                 val manufacturer = keepAlive?.manufacturer
@@ -914,7 +928,8 @@ private fun AppearancePage(onBack: () -> Unit) {
             val context = LocalContext.current
             val revision = com.example.autobook.ui.design.appearanceRevision()
             val prefs = remember(revision) { com.example.autobook.ui.design.Appearance.prefs(context) }
-            GroupHeader("主题")
+            AppIconPicker()
+            GroupHeader("明暗模式")
             Segmented(listOf("跟随系统", "浅色", "深色"), listOf("SYSTEM", "LIGHT", "DARK").indexOf(prefs.getString("theme", "SYSTEM")).coerceAtLeast(0), { index -> prefs.edit().putString("theme", listOf("SYSTEM", "LIGHT", "DARK")[index]).apply() })
             GroupHeader("文字大小")
             Segmented(listOf("标准", "大", "特大"), listOf("STANDARD", "LARGE", "EXTRA_LARGE").indexOf(prefs.getString("text_size", "STANDARD")).coerceAtLeast(0), { index -> prefs.edit().putString("text_size", listOf("STANDARD", "LARGE", "EXTRA_LARGE")[index]).apply() })
@@ -1378,7 +1393,7 @@ private fun DebugPage(onBack: () -> Unit, notifications: Boolean) {
                 androidx.compose.material3.TextButton(enabled = !notificationSaving, onClick = {
                     notificationSaving = true
                     notificationExport = preview
-                    notificationExportLauncher.launch("AutoBook-notification-${System.currentTimeMillis()}.json")
+                    notificationExportLauncher.launch("麦米-notification-${System.currentTimeMillis()}.json")
                 }) { Text(if (notificationSaving) "保存中…" else "保存到文件") }
             },
             dismissButton = {
@@ -1460,7 +1475,7 @@ private fun saveSample(context: Context, debug: DebugBus.State): Boolean = runCa
 
 private fun copy(context: Context, text: String) {
     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    cm.setPrimaryClip(ClipData.newPlainText("autobook", text))
+    cm.setPrimaryClip(ClipData.newPlainText("麦米", text))
 }
 
 /** Explicitly confirmed, already redacted preview only; never called by the listener itself. */

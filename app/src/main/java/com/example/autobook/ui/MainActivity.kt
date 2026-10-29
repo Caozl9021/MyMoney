@@ -70,6 +70,9 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         foregroundRefreshRate.resume()
+        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            com.example.autobook.systems.LauncherIcons.reconcile(this@MainActivity)
+        }
         val capture = CaptureModeManager.state.value
         if (capture.mode == com.example.autobook.data.CaptureMode.ROOT && capture.hookEnabled)
             com.example.autobook.capture.HookTargetMonitor.detect(this)
@@ -321,7 +324,11 @@ private fun AppContent(tabState: MutableIntState, requestAdd: Int, onEditorVisib
     ActiveBackHandler(enabled = captureState.configured && tab != 0) { tabState.intValue = 0 }
 
     if (!captureState.configured) {
-        CaptureModeScreen()
+        CaptureModeScreen(onOrdinarySetup = {
+            captureSettingsDestination = CaptureSettingsDestination.SETUP
+            tabState.intValue = 3
+            CaptureModeManager.prepareOrdinarySetup(context)
+        })
         return
     }
 

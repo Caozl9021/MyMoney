@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -35,7 +34,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -65,7 +63,7 @@ private sealed interface SummaryState {
     data class Ready(val summary: BillQuerySummary) : SummaryState
 }
 
-/** Both summaries use the same unbounded DAO aggregation, independently of the recent list. */
+/** The period summary uses unbounded DAO aggregation, independently of the paged daily list. */
 @Composable
 private fun rememberSummary(start: LocalDate, end: LocalDate, clock: LedgerClock, retry: Int): SummaryState {
     val context = LocalContext.current.applicationContext
@@ -91,7 +89,7 @@ private fun monthLabel(back: Int, target: YearMonth): String =
 /**
  * 首页主视觉：本月支出。
  *
- * 中性紧凑卡集成月汇总与独立今日摘要；月支出仍为最大数字。
+ * 中性紧凑卡保留账期汇总；自然日小计由下方日卡呈现。
  *
  * 口径：支出是所选本地账期 EXPENSE 总额，不扣退款；结余 = 收入 − 原支出 + 退款；
  * 转账不计收支。退款非零才单独出现，不为了「统一四行」硬凑一个 ¥0.00。
@@ -147,8 +145,6 @@ internal fun MonthlySummaryCard(
                 SummarySecondary(summary, p)
             }
         }
-        HorizontalDivider(color = p.separator.copy(alpha = p.separator.alpha * 0.5f))
-        TodaySummaryCard(clock)
     }
 }
 
@@ -220,52 +216,6 @@ private fun SummarySecondary(summary: BillQuerySummary, p: AbPalette) {
                         }
                     }
                 }
-            }
-        }
-    }
-}
-
-/**
- * 今日辅助摘要：一行，不再是首页最大的数字。
- *
- * 区间固定是「今天」，不随上面的月份切换变化 —— 看 9 月的月支出时，
- * 这一行仍然是今天的支出，两者口径不同，不能混。
- */
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
-@Composable
-internal fun TodaySummaryCard(clock: LedgerClock) {
-    val p = LocalAbPalette.current
-    var retry by remember { mutableIntStateOf(0) }
-    val state = rememberSummary(clock.date, clock.date, clock, retry)
-    androidx.compose.foundation.layout.FlowRow(
-        Modifier.fillMaxWidth().semantics(mergeDescendants = true) {},
-        horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
-        verticalArrangement = Arrangement.spacedBy(AbSpacing.xs),
-    ) {
-        Text("今日支出", style = AbType.footnote, color = p.secondaryLabel)
-        when (state) {
-            SummaryState.Loading -> Text("读取中…", style = AbType.footnote, color = p.secondaryLabel)
-            SummaryState.Failed -> TextButton(onClick = { retry++ }, modifier = Modifier.heightIn(min = 48.dp)) {
-                Text("今日读取失败，重试", color = p.red, style = AbType.footnote)
-            }
-            is SummaryState.Ready -> {
-                val summary = state.summary
-                Text(
-                    formatAmount(summary.expense),
-                    style = AbType.footnote.copy(fontWeight = FontWeight.Medium),
-                    color = p.label,
-                )
-                Text(
-                    if (summary.count == 0) "今天还没有记录" else "· ${summary.count} 笔",
-                    style = AbType.caption1,
-                    color = p.secondaryLabel,
-                )
-                if (summary.count != 0) Text(
-                    clock.date.format(java.time.format.DateTimeFormatter.ofPattern("M月d日", java.util.Locale.CHINA)),
-                    style = AbType.caption1,
-                    color = p.secondaryLabel,
-                    textAlign = TextAlign.End,
-                )
             }
         }
     }

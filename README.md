@@ -1,16 +1,12 @@
-# AutoBook
+# 麦米
 
 Android本地自动记账：交易通知、页面辅助、短信或微信/支付宝LSP凭证经本地规则生成草稿，用户确认后记入账本。
 
 ## 当前状态
 
-当前交付 **0.28.4/92**，Room9/JSON8（兼容JSON1–7）。本轮 **LSPosed管理器兼容与一键重启微信/支付宝已获用户确认“验证通过”**；不扩展到历史未独立确认的范围。BUG-BACK-GHOST-001仍OPEN。完整[进度](docs/PROGRESS.md)、[剩余计划](docs/PLAN_1.0.md)与[本轮验收](deliverables/0.28.4/acceptance.md)。
+同步日期：2026-10-29。当前交付 **0.32.0/99（麦米），待用户验收**。Room9/JSON8（兼容JSON1–7）。首页期摘要去掉重复今日行，三款图标联动品牌主题与柔和切换动画。0.31.0三款图标功能既有用户验收保持，0.28.5/0.28.4等历史独立范围不扩大，BUG-BACK-GHOST-001仍OPEN。
 
-当前正式包：[AutoBook 0.28.4 release](dist/AutoBook-0.28.4-release.apk)，已同签名安装真机。本轮739项唯一JVM（app639执行、billkit100缓存）、三构建/strict28和安装版本/摘要通过；双目标重启的实际验收依据用户“验证通过”，我方未替用户执行。当前数据为Room9/JSON8，保留旧迁移/JSON1–7；0.28.0–0.28.2等历史范围未独立确认的不补记验收。
-
-[功能验证](runs/20261028-232511-restart-wechat-alipay/outputs/verification.md) · [验收](deliverables/0.28.4/acceptance.md) · [本次文档核查](runs/20261028-234127-all-progress-docs-sync/outputs/verification.md)
-
-LSPosed页现提供独立/寄生管理器入口和“重启微信与支付宝”：点击后通过Root结束并重开两应用、重新检测模块，可能中断未完成操作；不重启手机或改作用域。
+当前正式包：[麦米 0.32.0 release](dist/AutoBook-0.32.0-release.apk)。首页期摘要移除重复今日支出行；设置→外观选择青绿/蓝白/红金图标时，App主题同步换色，并有轻压回弹、选框滑移和柔和换色。降低动效时即时切换。切换可能返回桌面，重新打开直接显示已选主题。通知和组件保持默认logo1，收入/支出/退款等语义色保持。[完整记录](runs/20261029-150728-brand-theme-soft-motion/outputs/verification.md) · [待验收状态](deliverables/0.32.0/acceptance.md)。
 
 ## 已有能力与使用入口
 
@@ -34,14 +30,14 @@ source ~/opt/autobook-env.sh
 ./gradlew :app:testDebugUnitTest
 ./gradlew :app:assembleDebug :app:assembleRelease :app:assembleDebugAndroidTest
 # 安装已核验的同签名正式包
-adb install -r dist/AutoBook-0.28.4-release.apk
+adb install -r dist/AutoBook-0.29.1-release.apk
 ```
 
 仅在依赖缓存完整时添加`--offline`。正式签名在仓库外的用户配置中读取，debug与release签名不同；覆盖升级以连续release签名为准，不能用卸载规避签名冲突。
 
 ## 工程与文档
 
-仅`:app`依赖`:billkit`；LSP内置主APK，没有独立xposed-module。规则核心不联网。项目图稿Auto.jpg及本地AAR保留，工作区沿现有布局。
+仅`:app`依赖`:billkit`；LSP内置主APK，没有独立xposed-module。规则核心不联网。项目当前logo目录图稿及本地AAR保留，工作区沿现有布局。
 
 [文档索引](docs/README.md) · [快速参考](QUICKREF.md) · [部署](DEPLOYMENT.md) · [开发约定](AGENTS.md) · [钱迹导入](docs/QIANJI_IMPORT.md) · [每月起始日](docs/LEDGER_MONTH_PERIOD.md)
 
@@ -88,7 +84,7 @@ adb install -r dist/AutoBook-0.28.4-release.apk
 
 > 2026-10-26 历史验收结论（0.11.0）：**0.11.0/46 部分通过**——分类图标与「常用预设」、账户真实标识（支付宝/微信/工行/农行/中行/建行）**用户验收通过**；**自绘 dock 动态图标不合格、支付宝标识比其余账户图标偏小，两项未通过、待修改**。本轮按用户要求仅更新验收文档，未改任何代码。现状：dock 四个 Tab 为 Compose 手绘动态字形（首页画入、资产卡片滑入、统计饼图扫过、设置滑杆归位，选中 420ms，未选中停终帧，减少动效跳终帧；未引 Lottie）；分类页统一实心 Material Symbols 图标（按关键字匹配，自定义分类有兜底）；账户头像按名字匹配真实标识，认不出退回首字圆头像。396项/50类JVM、双构建、OpenSpec strict21、release 证书与 0.10.1 连续、设备包 SHA 与 dist 一致。证据：`runs/20261025-230000-dock-icons-shapes/outputs/verification.md`。
 
-# AutoBook
+# 麦米
 
 > 2026-10-25 历史交付：**统计页第二轮 0.9.1/43 已实施并同签名安装真机，待用户验收**。分段控件改为「胶囊底槽 + 单枚滑动滑块」（150ms 平移过渡、胶囊圆角，减少动效时 0ms 且不画投影），统计页、设置页与确认卡同时生效；统计默认进入周视图，周柱图按可用宽度自适应，10/19–10/25 七天柱与日期标签完整呈现、无需横滚；月视图改为日历热力图（周一起始、5 档深浅、图例「少→多」、选中格描边、格内数字按混色底计算对比度）；周期标签缩短为「10月第4周」与「2026年10月」，不再被省略号截断；统计左右滑动可切周期。367项/47类JVM、四构建任务、OpenSpec strict19通过；真机浅色/深色/1.3大字下统计周视图、月热力图、收入退款分页、账户汇总、上一周期与回跳、统计说明均可达，滑块动画经录屏抽帧测得 2–3 帧平移；原 5 笔账单/12 条历史逐字段一致，采集/外观/学习设置与 120Hz 保留，设备安装包 SHA 与 dist 一致。真实支付/外部导入/低API/完整TalkBack 等未测边界保留。证据：`runs/20261025-180345-stats-slider-heatmap/`。
 
@@ -236,7 +232,7 @@ adb install -r dist/AutoBook-0.9.1-release.apk
 
 > 2026-10-28 0.26.0/84交付：确认卡去重复标题/长说明/商户输入，备注无图标紧凑自适应；二级同排展开、连续滑选/移出松手取消与边缘滚动保留；手动/编辑可选日期时分，转账手续费同步改期，真实成功直接收起无成功弹窗/Toast。备注全链路优先，来源商户/身份保留、空备注导出不偷填。87类711项JVM、三构建、strict28、连续签名/实装SHA通过；API35只读模拟器4项真实内存Room、7组核心UI、深色1.3/IME与18分类边缘检查、正式包升级/保存/详情入口通过。debug13表与全部偏好恢复一致，测试包移除、模拟器退出。未操作真机，未测矩阵见报告；Room8/JSON7不变，残影OPEN；**待用户验收**。证据`runs/20261028-132914-confirm-refinement/outputs/verification.md`；包`dist/AutoBook-0.26.0-release.apk`。
 
-# AutoBook
+# 麦米
 
 > 2026-10-27文档核查：已同步当前交付及28项OpenSpec变更的适用状态，旧阶段证据保留；[文件留存与清理清单](docs/FILE_CLEANUP_REVIEW_2026-10-27.md)供审阅，本轮未清理文件，忽略_spec。
 
@@ -248,7 +244,7 @@ Android 本地自动记账：交易通知与页面辅助识别生成草稿，用
 
 721项JVM、Android专项6项/资产14项/备份8项、三构建、OpenSpec strict28、连续签名与debug实装SHA通过。API35临时只读模拟器已做页面和真实UI转账保存、深色1.3/IME检查，原应用文件恢复一致并退出。未操作真机，release/全悬浮宿主等边界见报告。
 
-当前正式包：[AutoBook 0.28.4 release](dist/AutoBook-0.28.4-release.apk)。支持LSPosed独立/寄生管理器入口，LSPosed页提供“重启微信与支付宝”，点击后通过Root重启并检测加载，可能中断这两个应用未完成的操作。本轮用户已确认“验证通过”；[验证](/home/caozl/Projects/AutoBook/runs/20261028-232511-restart-wechat-alipay/outputs/verification.md) · [验收](deliverables/0.28.4/acceptance.md)。既有[设置文案精简](runs/20261028-195614-remove-selected-copy/outputs/verification.md)、[资产/转账验证](runs/20261028-170253-asset-period-transfer-refinement/outputs/verification.md)及各自验收边界保留。BUG-BACK-GHOST-001继续OPEN。
+当前正式包：[麦米 0.31.0 release](dist/AutoBook-0.31.0-release.apk)。新版logo1默认，设置→外观可选青绿/蓝白/红金桌面图标，其他默认品牌保持logo1。保持46/108dp/legacy47%留白。670项应用JVM、三构建、strict28与API35专项/最终release实装通过；切换可能返回桌面，原手机与实际低API待测，用户已明确验收通过（2026-10-29）。[完整记录](runs/20261029-135945-selectable-icons/outputs/verification.md) · [验收状态](deliverables/0.31.0/acceptance.md)。
 
 ## 已有能力与使用入口
 
@@ -279,7 +275,7 @@ adb install -r dist/AutoBook-0.23.0-release.apk
 
 ## 工程与文档
 
-仅`:app`依赖`:billkit`；LSP内置主APK，没有独立xposed-module。规则核心不联网。项目图稿Auto.jpg及本地AAR保留，工作区沿现有布局。
+仅`:app`依赖`:billkit`；LSP内置主APK，没有独立xposed-module。规则核心不联网。项目当前logo目录图稿及本地AAR保留，工作区沿现有布局。
 
 [文档索引](docs/README.md) · [快速参考](QUICKREF.md) · [部署](DEPLOYMENT.md) · [开发约定](AGENTS.md) · [钱迹导入](docs/QIANJI_IMPORT.md) · [每月起始日](docs/LEDGER_MONTH_PERIOD.md)
 
@@ -326,7 +322,7 @@ adb install -r dist/AutoBook-0.23.0-release.apk
 
 > 2026-10-26 历史验收结论（0.11.0）：**0.11.0/46 部分通过**——分类图标与「常用预设」、账户真实标识（支付宝/微信/工行/农行/中行/建行）**用户验收通过**；**自绘 dock 动态图标不合格、支付宝标识比其余账户图标偏小，两项未通过、待修改**。本轮按用户要求仅更新验收文档，未改任何代码。现状：dock 四个 Tab 为 Compose 手绘动态字形（首页画入、资产卡片滑入、统计饼图扫过、设置滑杆归位，选中 420ms，未选中停终帧，减少动效跳终帧；未引 Lottie）；分类页统一实心 Material Symbols 图标（按关键字匹配，自定义分类有兜底）；账户头像按名字匹配真实标识，认不出退回首字圆头像。396项/50类JVM、双构建、OpenSpec strict21、release 证书与 0.10.1 连续、设备包 SHA 与 dist 一致。证据：`runs/20261025-230000-dock-icons-shapes/outputs/verification.md`。
 
-# AutoBook
+# 麦米
 
 > 2026-10-25 历史交付：**统计页第二轮 0.9.1/43 已实施并同签名安装真机，待用户验收**。分段控件改为「胶囊底槽 + 单枚滑动滑块」（150ms 平移过渡、胶囊圆角，减少动效时 0ms 且不画投影），统计页、设置页与确认卡同时生效；统计默认进入周视图，周柱图按可用宽度自适应，10/19–10/25 七天柱与日期标签完整呈现、无需横滚；月视图改为日历热力图（周一起始、5 档深浅、图例「少→多」、选中格描边、格内数字按混色底计算对比度）；周期标签缩短为「10月第4周」与「2026年10月」，不再被省略号截断；统计左右滑动可切周期。367项/47类JVM、四构建任务、OpenSpec strict19通过；真机浅色/深色/1.3大字下统计周视图、月热力图、收入退款分页、账户汇总、上一周期与回跳、统计说明均可达，滑块动画经录屏抽帧测得 2–3 帧平移；原 5 笔账单/12 条历史逐字段一致，采集/外观/学习设置与 120Hz 保留，设备安装包 SHA 与 dist 一致。真实支付/外部导入/低API/完整TalkBack 等未测边界保留。证据：`runs/20261025-180345-stats-slider-heatmap/`。
 

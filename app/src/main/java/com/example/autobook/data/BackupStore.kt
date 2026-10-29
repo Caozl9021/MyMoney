@@ -128,12 +128,18 @@ object BackupStore {
                 val historyDao = db.recognitions()
                 val assetDao = db.assets()
                 val localAssetSnapshot = AssetSnapshot(assetDao.accounts(), assetDao.entries())
-                // Validate both identities and references before any destructive operation.
-                val targetAssets = snapshot.assets?.let { incoming ->
-                    if (mode == Mode.MERGE) AssetBackupCodec.merge(localAssetSnapshot, incoming) else incoming
-                }
                 val existingBills = db.bills().allOnce()
                 val existingImports = db.imports().all()
+                // First launch has already seeded default accounts. They are placeholders only
+                // when the entire asset shape is untouched and no business record uses the database.
+                val initializeAssets = mode == Mode.MERGE && snapshot.assets?.accounts?.isNotEmpty() == true &&
+                    existingBills.isEmpty() && existingImports.isEmpty() &&
+                    AssetBackupCodec.isUntouchedDefaultSnapshot(localAssetSnapshot, LedgerConfig.DEFAULT_ACCOUNTS) &&
+                    historyDao.allOnce().isEmpty()
+                // Validate both identities and references before any destructive operation.
+                val targetAssets = snapshot.assets?.let { incoming ->
+                    if (mode == Mode.MERGE && !initializeAssets) AssetBackupCodec.merge(localAssetSnapshot, incoming) else incoming
+                }
                 val importedKeys = existingImports.map { it.sourceKey }.toSet()
                 val existingFingerprints = existingBills.map { it.fingerprint }.toSet()
                 val targetImports = snapshot.imports?.let {
@@ -155,9 +161,10 @@ object BackupStore {
                     } else historyDao.allOnce().forEach { historyDao.update(it.copy(billId = null)) }
                 }
                 if (targetAssets != null) {
-                    if (mode == Mode.REPLACE) { assetDao.clearEntries(); assetDao.clearAccounts() }
-                    val localAccountIds = if (mode == Mode.REPLACE) emptySet() else localAssetSnapshot.accounts.map { it.id }.toSet()
-                    val localEntryIds = if (mode == Mode.REPLACE) emptySet() else localAssetSnapshot.entries.map { it.id }.toSet()
+                    val resetAssets = mode == Mode.REPLACE || initializeAssets
+                    if (resetAssets) { assetDao.clearEntries(); assetDao.clearAccounts() }
+                    val localAccountIds = if (resetAssets) emptySet() else localAssetSnapshot.accounts.map { it.id }.toSet()
+                    val localEntryIds = if (resetAssets) emptySet() else localAssetSnapshot.entries.map { it.id }.toSet()
                     targetAssets.accounts.filterNot { it.id in localAccountIds }.forEach { assetDao.upsertAccount(it) }
                     targetAssets.entries.filterNot { it.id in localEntryIds }.forEach { assetDao.insertEntry(it) }
                     assetDao.putMeta(AssetMeta("legacy-accounts-v1", "complete"))
@@ -298,11 +305,11 @@ object BackupStore {
             local.transferAccount == incoming.transferAccount && local.transferAccountId == incoming.transferAccountId && local.assetLinked == incoming.assetLinked &&
             local.assetKey == incoming.assetKey && local.transferFeeCents == incoming.transferFeeCents && local.feeParentKey == incoming.feeParentKey
 
-    /** 备份默认文件名：`autobook-backup-20261021-2015.json` */
+    /** 备份默认文件名：`麦米-备份-20261021-2015.json` */
     fun fileName(atMillis: Long = System.currentTimeMillis()): String {
         val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US)
             .format(java.util.Date(atMillis))
-        return "autobook-backup-$stamp.json"
+        return "麦米-备份-$stamp.json"
     }
 
     /** 恢复后把"能从备份带回来的设置"写回去；返回是否改过白名单（调用方据此刷新 BillKit） */

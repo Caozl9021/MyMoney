@@ -7,7 +7,7 @@
         android:orientation="horizontal" android:gravity="center_vertical">
         <ImageView android:layout_width="24dp" android:layout_height="24dp"
             android:layout_marginEnd="8dp" android:src="@drawable/ic_brand_color"
-            android:scaleType="fitCenter" android:contentDescription="AutoBook" />
+            android:scaleType="fitCenter" android:contentDescription="@string/app_name" />
         <TextView android:id="@+id/widget_month"
             android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
             android:text="本月原支出" android:textColor="@color/widget_secondary" android:textSize="13sp" />

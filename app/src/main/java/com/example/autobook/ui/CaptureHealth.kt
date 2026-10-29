@@ -93,9 +93,9 @@ internal fun captureHealth(input: CaptureHealthInput): CaptureHealth = with(inpu
         }
         if (pageChannelEnabled) when {
             !accessibilityAuthorized -> add(CaptureHealth(CaptureHealthKind.ACCESSIBILITY_DISABLED,
-                "尚未就绪 · 还差无障碍授权", "无障碍服务未授权，请在系统设置中开启 AutoBook。", listOf(CaptureAction.ACCESSIBILITY)))
+                "尚未就绪 · 还差无障碍授权", "无障碍服务未授权，请在系统设置中开启 麦米。", listOf(CaptureAction.ACCESSIBILITY)))
             !accessibilityBound -> add(CaptureHealth(CaptureHealthKind.ACCESSIBILITY_UNBOUND,
-                "尚未就绪 · 页面辅助尚未连接", "无障碍已授权但服务未连接，请在系统设置中重新开启 AutoBook。", listOf(CaptureAction.ACCESSIBILITY)))
+                "尚未就绪 · 页面辅助尚未连接", "无障碍已授权但服务未连接，请在系统设置中重新开启 麦米。", listOf(CaptureAction.ACCESSIBILITY)))
         }
         if (smsEnabled && !smsGranted) add(CaptureHealth(CaptureHealthKind.SMS_UNAUTHORIZED,
             "尚未就绪 · 还差短信权限", "银行短信识别已开启，还需授予短信权限。", listOf(CaptureAction.SMS_PERMISSION)))
@@ -122,4 +122,4 @@ internal fun captureHealth(input: CaptureHealthInput): CaptureHealth = with(inpu
 }
 
 /** Navigation only; deliberately separate from persisted capture modes. */
-enum class CaptureSettingsDestination { MODE, ROOT_STATUS, SUPPORTED_APPS, SMS }
+enum class CaptureSettingsDestination { MODE, SETUP, ROOT_STATUS, SUPPORTED_APPS, SMS }

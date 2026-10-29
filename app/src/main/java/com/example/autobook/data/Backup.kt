@@ -170,7 +170,7 @@ object Backup {
         val root = MiniJson.decode(text) as? Map<*, *>
             ?: throw IllegalArgumentException("备份文件不是 JSON 对象")
         val kind = root["kind"] as? String
-        if (kind != null && kind != KIND) throw IllegalArgumentException("不是 AutoBook 备份（kind=$kind）")
+        if (kind != null && kind != KIND) throw IllegalArgumentException("不是麦米备份（kind=$kind）")
         val rawFormat = root["format"]
         require(rawFormat == null || rawFormat is Number) { "备份版本无效" }
         val format = (rawFormat as? Number)?.toInt() ?: 1

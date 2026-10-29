@@ -1,5 +1,7 @@
 package com.example.autobook.data
 
+import java.util.UUID
+
 /** Strict portable asset ledger codec. A malformed snapshot must never be partially restored. */
 object AssetBackupCodec {
     private val kinds = setOf("CASH", "PAYMENT", "SAVINGS", "CREDIT", "OTHER_ASSET", "OTHER_DEBT")
@@ -79,6 +81,19 @@ object AssetBackupCodec {
         require(totals.values.none { it == Long.MIN_VALUE }) { "资产余额超出范围" }
         try { AssetMath.summary(snapshot.accounts, snapshot.entries) }
         catch (_: ArithmeticException) { errorInvalid("资产汇总超出范围") }
+    }
+
+    /** Exact bootstrap shape only; caller must also rule out local business records in its transaction. */
+    fun isUntouchedDefaultSnapshot(snapshot: AssetSnapshot, defaultNames: List<String>): Boolean {
+        if (defaultNames.isEmpty() || snapshot.entries.isNotEmpty() || snapshot.accounts.size != defaultNames.size) return false
+        val createdAt = snapshot.accounts.first().createdAt
+        val expected = defaultNames.mapIndexed { index, name ->
+            AssetAccount(
+                id = UUID.nameUUIDFromBytes(("legacy-account:" + name).toByteArray(Charsets.UTF_8)).toString(),
+                name = name, sortOrder = index, createdAt = createdAt, updatedAt = createdAt,
+            )
+        }
+        return createdAt >= 0 && snapshot.accounts.toSet() == expected.toSet()
     }
 
     /** Merge only identical UUIDs; names are never used to guess identity across devices. */

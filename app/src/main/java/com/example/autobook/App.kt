@@ -29,6 +29,7 @@ class App : Application() {
         com.example.autobook.data.CoverageStore.init(this)
         ConfirmDelivery.ensureChannel(this)
         ensureGuardianChannel()
+        com.example.autobook.root.RootForegroundService.ensureChannel(this)
 
         com.example.autobook.systems.SystemIntegration.init(this)
         com.example.autobook.capture.HookTargetMonitor.init(this)
@@ -36,6 +37,7 @@ class App : Application() {
         val settings = Settings(this)
 
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        scope.launch { com.example.autobook.systems.LauncherIcons.reconcile(this@App) }
         scope.launch {
             runCatching { com.example.autobook.data.BackupStore.completePendingConfiguration(this@App) }
                 .onFailure { android.util.Log.e("AutoBook", "恢复配置尚未完成", it) }

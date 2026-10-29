@@ -129,6 +129,29 @@ class Settings(context: Context) {
         }
     }
 
+    /** Publish one paused initial snapshot, never a transient enabled page-capture state. */
+    fun prepareOrdinarySetup() {
+        val current = CaptureModeState(captureMode, enabled, pageEnabled, notificationCaptureEnabled,
+            smsCaptureEnabled, hookCaptureEnabled)
+        val next = CaptureModePolicy.prepareOrdinary(current)
+        if (next == current) return
+        captureEdit {
+            putString(KEY_CAPTURE_MODE, next.mode?.name)
+            putBoolean(KEY_ROOT_MODE, false)
+            putBoolean(KEY_ENABLED, next.enabled)
+            putBoolean(KEY_NOTIFICATION_CAPTURE_ENABLED, next.notificationsEnabled)
+            putBoolean(KEY_PAGE_FALLBACK_ENABLED, next.pageEnabled)
+        }
+    }
+
+    fun useRecommendedOrdinarySources() {
+        if (captureMode != CaptureMode.ACCESSIBILITY) return
+        captureEdit {
+            putBoolean(KEY_NOTIFICATION_CAPTURE_ENABLED, true)
+            putBoolean(KEY_PAGE_FALLBACK_ENABLED, true)
+        }
+    }
+
     fun selectCaptureMode(mode: CaptureMode) {
         val next = CaptureModePolicy.select(CaptureModeState(captureMode, enabled, pageEnabled, notificationCaptureEnabled, smsCaptureEnabled, hookCaptureEnabled), mode)
         captureEdit {

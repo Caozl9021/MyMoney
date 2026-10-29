@@ -1,8 +1,8 @@
 <resources>
     <string name="shortcut_add_bill_short">记一笔</string>
-    <string name="shortcut_add_bill_long">手动记录一笔账单</string>
-    <string name="recognition_tile_label">账单识别</string>
-    <string name="monthly_widget_label">本月支出与记一笔</string>
+    <string name="shortcut_add_bill_long">麦米 · 记一笔</string>
+    <string name="recognition_tile_label">麦米</string>
+    <string name="monthly_widget_label">麦米 · 本月支出</string>
     <string name="monthly_widget_description">查看本月原支出，轻点记一笔手动记账</string>
     <color name="widget_surface">#F7F7F7</color>
     <color name="widget_primary">#1C1C1E</color>
