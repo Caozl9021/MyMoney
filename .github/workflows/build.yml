@@ -26,7 +26,15 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - uses: android-actions/setup-android@v3
+      # ubuntu-latest 镜像自带 Android SDK，不再用 android-actions/setup-android：
+      # 它硬编码 cmdline-tools 下载地址，Google 轮换 URL 后整个 job 直接失败。
+      # 这里只打印一下环境，缺组件时 AGP 会自己按 compileSdk 补装。
+      - name: Check Android SDK
+        run: |
+          echo "ANDROID_HOME=${ANDROID_HOME}"
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}"
+          ls "${ANDROID_HOME}/platforms" 2>/dev/null || echo "!! platforms 目录不存在"
+          ls "${ANDROID_HOME}/build-tools" 2>/dev/null || echo "!! build-tools 目录不存在"
 
       - uses: gradle/actions/setup-gradle@v4
 
