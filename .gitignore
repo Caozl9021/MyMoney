@@ -69,10 +69,14 @@ tmp/
 截图/
 
 # ---------- 6. 文档、计划与测试（只留本地） ----------
-# 文档仅保留各目录的 README.md；不删除本地文件。
+# 文档仅保留仓库根目录的 README.md；不删除本地文件。
 *.md
 *.MD
 !README.md
+
+# docs/ 全部只留本地：不再纳入版本库（含 docs/README.md），
+# 需写在 /README.md 之后再声明，否则会被上面的 !README.md 重新放行。
+/docs/
 
 # OpenSpec 规划、测试记录、交付快照和临时验证脚本
 openspec/
@@ -111,6 +115,3 @@ scratch/
 .tmp-icons/
 .tmp-probe/
 .dsh-write-test
-
-
-_spec

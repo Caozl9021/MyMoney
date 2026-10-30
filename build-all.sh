@@ -1,5 +1,5 @@
 #!/bin/bash
-# AutoBook 完整构建脚本 - 构建到 dist 目录
+# 麦米 My Money 完整构建脚本 - 构建到 dist 目录
 #
 # 版本号不再硬编码：直接从 app/build.gradle.kts 里读 versionName，避免
 # "改了版本却忘了改脚本"导致 dist/ 里文件名与 APK 实际版本不一致。
@@ -17,7 +17,7 @@ if [ -z "$VERSION_NAME" ] || [ -z "$VERSION_CODE" ]; then
 fi
 
 echo "=========================================="
-echo "AutoBook $VERSION_NAME ($VERSION_CODE) - 完整构建"
+echo "My Money $VERSION_NAME ($VERSION_CODE) - 完整构建"
 echo "=========================================="
 
 # 环境检查
@@ -71,8 +71,8 @@ APP_RELEASE="app/build/outputs/apk/release/app-release.apk"
 BRANCH_TAG="$(git branch --show-current)"
 BRANCH_TAG="${BRANCH_TAG//\//-}"
 BRANCH_TAG="${BRANCH_TAG:-detached}"
-DIST_DEBUG="dist/AutoBook-${VERSION_NAME}-${BRANCH_TAG}-debug.apk"
-DIST_RELEASE="dist/AutoBook-${VERSION_NAME}-${BRANCH_TAG}-release.apk"
+DIST_DEBUG="dist/MyMoney-${VERSION_NAME}-${BRANCH_TAG}-debug.apk"
+DIST_RELEASE="dist/MyMoney-${VERSION_NAME}-${BRANCH_TAG}-release.apk"
 
 # 复制 + 核对版本（aapt2 读到的不一致就报错，不静默通过）
 echo ""
@@ -111,7 +111,7 @@ echo ""
 echo "=========================================="
 echo "📊 构建产物："
 echo "=========================================="
-ls -lh dist/ | grep "AutoBook"
+ls -lh dist/ | grep "MyMoney"
 
 echo ""
 echo "=========================================="
@@ -120,4 +120,4 @@ echo "=========================================="
 echo ""
 echo "LSP 增强已内置，无需第二个 APK："
 echo "  - 标准模式：直接安装使用"
-echo "  - LSP 增强：在 LSPosed 中启用 AutoBook，作用域只勾「系统框架 (android)」"
+echo "  - LSP 增强：在 LSPosed 中启用麦米 My Money，作用域只勾「系统框架 (android)」"
