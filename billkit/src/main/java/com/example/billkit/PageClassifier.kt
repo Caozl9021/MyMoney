@@ -98,6 +98,9 @@ class PageClassifier {
 
     private val dateRowRe = Regex("""^\d{1,2}月\d{1,2}日\s*\d{1,2}:\d{2}$""")
 
+    /** 「待小千寻乐确认收款」「待对方确认收款」：转账付款后、对方还没点确认的那一页。 */
+    private val PENDING_TRANSFER_RE = Regex("""待\s*\S{0,24}\s*确认收款""")
+
     fun classify(snapshot: UiSnapshot): PageMatch? {
         val items = PaymentResultParser.normalize(snapshot.items)
         if (items.size < 3) return null
@@ -145,6 +148,13 @@ class PageClassifier {
         // 转账成功页：转账成功 + 金额
         if (has(items, "转账成功") || (hasAny(items, "转账金额", "确认收款") && has(items, "转账"))) {
             return PageMatch(PageKind.WECHAT_TRANSFER, "微信转账成功")
+        }
+
+        // 转账给好友的付款结果页：整页只有「支付成功」「¥x」「待某某确认收款」「完成」，
+        // 一个字都不写「转账」。以前它会落进下面的极简支付成功页，被记成一笔支出。
+        // 收款方那一侧的待确认页写的是「转账给你」，没有「支付成功」，不会命中这里。
+        if (has(items, "支付成功") && PENDING_TRANSFER_RE.containsMatchIn(items.joinToString(" "))) {
+            return PageMatch(PageKind.WECHAT_TRANSFER, "微信转账待收款")
         }
 
         // 账单详情：必须同时有「单号类字段」和「状态/财付通/时间」

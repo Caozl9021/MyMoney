@@ -14,7 +14,7 @@
 [![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)](#构建)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?logo=kotlin&logoColor=white)](#项目结构)
 [![Compose](https://img.shields.io/badge/Jetpack-Compose-4285F4?logo=jetpackcompose&logoColor=white)](#项目结构)
-![Version](https://img.shields.io/badge/版本-1.0.0%20%2F%20105-00847D)
+![Version](https://img.shields.io/badge/版本-1.0.1%20%2F%20110-00847D)
 
 **[⬇ 下载最新版本](../../releases/latest)**
 
@@ -158,7 +158,7 @@ echo "sdk.dir=$HOME/Android/Sdk" > local.properties
 - **不声明 `INTERNET` 权限。** 规则、账单、学习与备份全部在本机处理，没有云端账号、没有云端学习。可以自己验证：
 
   ```bash
-  aapt dump permissions MyMoney-1.0.0-release.apk
+  aapt dump permissions MyMoney-1.0.1-release.apk
   ```
 
 - 不读写第三方 App 的私有数据库，不 Hook 微信 / 支付宝的 Flutter / Dart 层，不做截图 OCR，不恢复任何「两路同时采集」的旧方案。

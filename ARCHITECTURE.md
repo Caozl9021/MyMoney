@@ -61,7 +61,7 @@ Room 当前 v9，保留 1→9 的非破坏迁移链。备份格式 JSON8，兼�
 ## 目录
 
 ```
-app/src/main/java/io/github/caozl9021/mymoney/
+app/src/main/java/io/github/mymoney/
 ├── App.kt              应用装配：规则推荐、备注、投递
 ├── capture/            四条采集通道、调度、投递与守护
 ├── data/               Room 实体、RecognitionStore、BillWriter、备份、学习

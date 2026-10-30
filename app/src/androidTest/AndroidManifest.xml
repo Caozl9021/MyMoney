@@ -1,21 +1,25 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.HIDE_OVERLAY_WINDOWS" />
     <application>
-        <activity android:name="io.github.caozl9021.mymoney.ProtectedPaymentTestActivity" android:exported="true" />
+        <activity android:name="io.github.mymoney.ProtectedPaymentTestActivity" android:exported="true" />
     </application>
-    <instrumentation android:name="io.github.caozl9021.mymoney.AssetsInstrumentation" android:targetPackage="io.github.caozl9021.mymoney" />
-    <instrumentation android:name="io.github.caozl9021.mymoney.AssetMigrationInstrumentation" android:targetPackage="io.github.caozl9021.mymoney" />
-    <instrumentation android:name="io.github.caozl9021.mymoney.AssetBackupInstrumentation" android:targetPackage="io.github.caozl9021.mymoney" />
-    <instrumentation android:name="io.github.caozl9021.mymoney.FreshBackupRestoreInstrumentation" android:targetPackage="io.github.caozl9021.mymoney" />
-    <instrumentation android:name="io.github.caozl9021.mymoney.AssetUiFixtureInstrumentation" android:targetPackage="io.github.caozl9021.mymoney" />
-    <instrumentation android:name="io.github.caozl9021.mymoney.NoteMetadataInstrumentation" android:targetPackage="io.github.caozl9021.mymoney" />
-    <instrumentation android:name="io.github.caozl9021.mymoney.NoteTemplateRuntimeInstrumentation" android:targetPackage="io.github.caozl9021.mymoney" />
-    <instrumentation android:name="io.github.caozl9021.mymoney.BackGestureInstrumentation" android:targetPackage="io.github.caozl9021.mymoney" />
-    <instrumentation android:name="io.github.caozl9021.mymoney.LauncherIconsInstrumentation" android:targetPackage="io.github.caozl9021.mymoney" />
-    <instrumentation android:name="io.github.caozl9021.mymoney.BrandThemeInstrumentation" android:targetPackage="io.github.caozl9021.mymoney" />
-    <instrumentation android:name="io.github.caozl9021.mymoney.RuleBundleInstrumentation" android:targetPackage="io.github.caozl9021.mymoney" />
-    <instrumentation android:name="io.github.caozl9021.mymoney.WechatTransferInstrumentation" android:targetPackage="io.github.caozl9021.mymoney" />
-    <instrumentation android:name="io.github.caozl9021.mymoney.WechatPopupInstrumentation" android:targetPackage="io.github.caozl9021.mymoney" />
-    <instrumentation android:name="io.github.caozl9021.mymoney.WechatRedpacketInstrumentation" android:targetPackage="io.github.caozl9021.mymoney" />
-    <instrumentation android:name="io.github.caozl9021.mymoney.CaptureScopeInstrumentation" android:targetPackage="io.github.caozl9021.mymoney" />
+    <instrumentation android:name="io.github.mymoney.AssetsInstrumentation" android:targetPackage="io.github.mymoney" />
+    <instrumentation android:name="io.github.mymoney.AssetMigrationInstrumentation" android:targetPackage="io.github.mymoney" />
+    <instrumentation android:name="io.github.mymoney.AssetBackupInstrumentation" android:targetPackage="io.github.mymoney" />
+    <instrumentation android:name="io.github.mymoney.FreshBackupRestoreInstrumentation" android:targetPackage="io.github.mymoney" />
+    <instrumentation android:name="io.github.mymoney.AssetUiFixtureInstrumentation" android:targetPackage="io.github.mymoney" />
+    <instrumentation android:name="io.github.mymoney.NoteMetadataInstrumentation" android:targetPackage="io.github.mymoney" />
+    <instrumentation android:name="io.github.mymoney.NoteTemplateRuntimeInstrumentation" android:targetPackage="io.github.mymoney" />
+    <instrumentation android:name="io.github.mymoney.BackGestureInstrumentation" android:targetPackage="io.github.mymoney" />
+    <instrumentation android:name="io.github.mymoney.LauncherIconsInstrumentation" android:targetPackage="io.github.mymoney" />
+    <instrumentation android:name="io.github.mymoney.BrandThemeInstrumentation" android:targetPackage="io.github.mymoney" />
+    <instrumentation android:name="io.github.mymoney.RuleBundleInstrumentation" android:targetPackage="io.github.mymoney" />
+    <instrumentation android:name="io.github.mymoney.WechatTransferInstrumentation" android:targetPackage="io.github.mymoney" />
+    <instrumentation android:name="io.github.mymoney.WechatPopupInstrumentation" android:targetPackage="io.github.mymoney" />
+    <instrumentation android:name="io.github.mymoney.WechatRedpacketInstrumentation" android:targetPackage="io.github.mymoney" />
+    <instrumentation android:name="io.github.mymoney.CaptureScopeInstrumentation" android:targetPackage="io.github.mymoney" />
+    <instrumentation android:name="io.github.mymoney.PendingReplayInstrumentation" android:targetPackage="io.github.mymoney" />
+    <instrumentation android:name="io.github.mymoney.HookUnbindInstrumentation" android:targetPackage="io.github.mymoney" />
+    <instrumentation android:name="io.github.mymoney.ChannelPlanInstrumentation" android:targetPackage="io.github.mymoney" />
+    <instrumentation android:name="io.github.mymoney.ConfigurationMigrationInstrumentation" android:targetPackage="io.github.mymoney" />
 </manifest>

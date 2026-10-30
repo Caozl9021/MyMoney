@@ -43,14 +43,52 @@ class NotificationDumpDedupTest {
         )
     }
 
-    /** 有槽位时不去看内容：内容不同也认成同一条通知，这正是要的语义。 */
+    /**
+     * 槽位即身份：同一通知位上正文更新不算新通知。
+     *
+     * 这是有意的取舍——归组、补字段、改措辞比重用同一位发第二笔常见得多。
+     * 代价写在类注释里：真若出现「同槽位复用发第二笔」，这一层会压掉它；
+     * 到那时应改成「内容变化 → 待核对」而不是在这里直接放行。
+     */
     @Test
     fun `槽位相同时正文不同也算同一条通知`() {
         val slot = "0|com.tencent.mm|1|null|10299"
+        val dedup = NotificationDumpDedup()
+        val now = 1_000_000L
         assertEquals(
             NotificationDumpDedup.keyOf(dumped("com.tencent.mm", "微信支付", "已支付¥1.00", 1L, slot)),
             NotificationDumpDedup.keyOf(dumped("com.tencent.mm", "微信支付", "已支付¥9.99", 2L, slot)),
         )
+        assertTrue(dedup.accept(dumped("com.tencent.mm", "微信支付", "已支付¥1.00", 1L, slot), now))
+        assertFalse(dedup.accept(dumped("com.tencent.mm", "微信支付", "已支付¥9.99", 2L, slot), now + 5_000L))
+    }
+
+    /** 没有槽位的老 ROM 靠内容做身份，归一化必须抹掉归组前缀，否则同一笔会记两次。 */
+    @Test
+    fun `没有槽位时分组前缀不会产生第二条`() {
+        val plain = dumped("com.tencent.mm", "微信支付", "已支付¥0.01", 1L)
+        val grouped = dumped("com.tencent.mm", "微信支付", "[2条]微信支付: 已支付¥0.01", 1L)
+        val fullWidth = dumped("com.tencent.mm", "微信支付", "【3条消息】微信支付：　已支付¥0.01", 1L)
+        assertEquals(NotificationDumpDedup.keyOf(plain), NotificationDumpDedup.keyOf(grouped))
+        assertEquals(NotificationDumpDedup.keyOf(plain), NotificationDumpDedup.keyOf(fullWidth))
+    }
+
+    /** 归一化不能过头：金额与商户差异必须保留，否则真实第二笔会被合并掉。 */
+    @Test
+    fun `归一化不吞掉真实差异`() {
+        val base = NotificationDumpDedup.normalize("微信支付", "已支付¥0.01")
+        assertNotEquals(base, NotificationDumpDedup.normalize("微信支付", "已支付¥0.02"))
+        assertNotEquals(base, NotificationDumpDedup.normalize("收款方", "已支付¥0.01"))
+        assertNotEquals(base, NotificationDumpDedup.normalize("微信支付", "已收款¥0.01"))
+    }
+
+    /** 归一化只抹装饰，不改内容本身。 */
+    @Test
+    fun `归一化抹掉分组前缀与空白差异`() {
+        val plain = NotificationDumpDedup.normalize("微信支付", "已支付¥0.01")
+        assertEquals(plain, NotificationDumpDedup.normalize("微信支付", "[2条]微信支付: 已支付¥0.01"))
+        assertEquals(plain, NotificationDumpDedup.normalize("微信支付", "【3条消息】微信支付：　已支付¥0.01"))
+        assertEquals(plain, NotificationDumpDedup.normalize(" 微信支付 ", "已支付¥0.01  "))
     }
 
     /** 槽位不同就是两条通知——同一应用连着两笔付款靠这个分开。 */
@@ -86,15 +124,31 @@ class NotificationDumpDedupTest {
         assertEquals(1, dedup.size())
     }
 
+    /**
+     * 旧实现把 TTL 当「抑制窗口」：同一条通知只要在通知栏里挂满 15 分钟就会被重放一次。
+     * 现在的 TTL 是「记住多久」——每轮被读到就续命，挂再久也只处理一次。
+     */
     @Test
-    fun `超过十五分钟后同一条文案可以再次处理`() {
+    fun `仍在通知栏中的旧通知不会被重放`() {
+        val dedup = NotificationDumpDedup()
+        var now = 1_000_000L
+        assertTrue(dedup.accept(dumped(), now))
+        repeat(60) {
+            now += 60_000L // 连续一小时，每轮都还在通知栏里
+            assertFalse(dedup.accept(dumped(), now))
+        }
+        assertEquals(1, dedup.size())
+    }
+
+    /** 消失超过保留窗口后再出现，才算新通知。 */
+    @Test
+    fun `消失超过保留窗口后重现视为新通知`() {
         val dedup = NotificationDumpDedup()
         val now = 1_000_000L
         assertTrue(dedup.accept(dumped(), now))
-        // TTL 边界取「到点即过期」：14 分 59 秒仍算重复，满 15 分钟就算新的。
-        // 取闭区间会把边界留成一处含糊，这里明确成半开区间，测试跟着钉住。
-        assertFalse(dedup.accept(dumped(), now + 15 * 60 * 1000L - 1))
-        assertTrue(dedup.accept(dumped(), now + 15 * 60 * 1000L))
+        // 边界取半开区间：满 15 分钟即视为已遗忘。
+        assertFalse(dedup.accept(dumped(), now + 1_000L))
+        assertTrue(dedup.accept(dumped(), now + 15 * 60 * 1000L + 2_000L))
     }
 
     @Test
