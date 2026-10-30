@@ -68,25 +68,54 @@ tmp/
 # 个人截图与录屏（含交易页面，避免隐私外泄；如作规则样本请先脱敏）
 截图/
 
-# ---------- 6. 文档、计划与测试（只留本地） ----------
-# 文档仅保留仓库根目录的 README.md；不删除本地文件。
+# ---------- 6. 文档与内部记录 ----------
+# 根目录只放行面向社区的文档，其余 Markdown 仍只留本地。
 *.md
 *.MD
-!README.md
+!/README.md
+!/CHANGELOG.md
+!/CONTRIBUTING.md
+!/SECURITY.md
+!/CODE_OF_CONDUCT.md
+!/ARCHITECTURE.md
 
-# docs/ 全部只留本地：不再纳入版本库（含 docs/README.md），
-# 需写在 /README.md 之后再声明，否则会被上面的 !README.md 重新放行。
-/docs/
+# 本地 vendored 依赖与第三方资产的来源说明需要入库
+!/app/libs/*.md
+!/app/src/main/assets/licenses/**/*.md
 
-# OpenSpec 规划、测试记录、交付快照和临时验证脚本
+# GitHub 协作模板需要入库
+!/.github/**/*.md
+
+# docs/ 只放行面向用户的专题文档；内部进度、计划与分支说明仍只留本地。
+# 注意：例外必须写在忽略规则之后，否则会被上面的通配重新覆盖。
+/docs/*
+!/docs/README.md
+!/docs/LOCAL_RULES.md
+!/docs/UI_COMPONENTS.md
+!/docs/ASSET_MANAGEMENT.md
+!/docs/LEDGER_MONTH_PERIOD.md
+!/docs/ICOST_IMPORT.md
+!/docs/QIANJI_IMPORT.md
+!/docs/LSP_MODULE.md
+
+# 内部规划、交付快照、验证记录与交接文档
 openspec/
 runs/
 deliverables/
 scratch/
+/AGENTS.md
+/agent.md
+/PROGRESS.md
+/PLAN_1.0.md
+/QUICKREF.md
+/DEPLOYMENT.md
+/docs/PROGRESS.md
+/docs/PLAN_1.0.md
+/docs/SELF_BRANCH.md
+/docs/ROOT_PLAN.md
 
-# 各模块单元/设备测试源码、资源及 fixtures
-**/src/test/
-**/src/androidTest/
+# ---------- 7. 测试（源码入库，产物不入库） ----------
+# 单元测试与设备测试源码、脱敏 fixtures 均入库，便于他人复现。
 **/src/testFixtures/
 /tests/
 /test-results/

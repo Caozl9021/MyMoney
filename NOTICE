@@ -1,0 +1,55 @@
+My Money (麦米)
+Copyright 2026 caozl9021
+
+This product is licensed under the Apache License, Version 2.0.
+See the LICENSE file for the full text.
+
+--------------------------------------------------------------------------
+Third-party components
+--------------------------------------------------------------------------
+
+This product includes or links against the following third-party software.
+Each component remains under its own license; the notices below are provided
+in accordance with those licenses.
+
+1. Mozilla Rhino
+   License : Mozilla Public License 2.0 (MPL-2.0)
+   Source  : https://github.com/mozilla/rhino
+   Usage   : Executes the local recognition rules in :billkit. No native code.
+   Note    : MPL-2.0 is file-level copyleft. Rhino itself is used unmodified
+             as a Maven dependency (org.mozilla:rhino:1.7.15).
+
+2. AndroidLiquidGlassView
+   License : MIT
+   Copyright (c) 2025-2026 Donny Yang (QmDeve)
+   Source  : https://github.com/QmDeve/AndroidLiquidGlassView
+   Usage   : Liquid glass refraction effect for the top/bottom bars.
+   Note    : A locally patched AAR is vendored at app/libs/liquidglass-1.1.0.aar.
+             See app/libs/LIQUIDGLASS-SOURCE.md for the exact upstream version
+             and the modifications applied.
+
+3. Lucide / lucide-animated
+   License : ISC
+   Source  : https://github.com/lucide-icons/lucide
+   Usage   : Animated dock icon paths, adapted for Jetpack Compose.
+   Note    : Upstream sources and license texts are kept in
+             app/src/main/assets/licenses/lucide-animated/.
+
+4. AndroidX / Jetpack Compose / Material 3
+   License : Apache License 2.0
+   Source  : https://developer.android.com/jetpack
+   Usage   : UI toolkit, lifecycle, Room, and core libraries.
+
+5. Material Symbols
+   License : Apache License 2.0
+   Source  : https://fonts.google.com/icons
+   Usage   : Category glyphs inside the app.
+
+--------------------------------------------------------------------------
+Trademarks
+--------------------------------------------------------------------------
+
+WeChat (微信) and Alipay (支付宝) are trademarks of Tencent Holdings Limited
+and Ant Group Co., Ltd. respectively. iCost (钱迹) is a trademark of its
+respective owner. This project is an independent, unofficial tool. It is not
+affiliated with, endorsed by, or sponsored by any of the above.

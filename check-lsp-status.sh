@@ -44,7 +44,7 @@ fi
 echo ""
 
 echo "4. APK 里的 xposed_init（拉回本地读，不依赖设备端 unzip）："
-APK_PATH=$(adb shell pm path com.example.mymoney 2>/dev/null | sed -n 's/^package://p' | tr -d '\r' | head -1)
+APK_PATH=$(adb shell pm path io.github.caozl9021.mymoney 2>/dev/null | sed -n 's/^package://p' | tr -d '\r' | head -1)
 if [ -n "$APK_PATH" ]; then
     TMP_DIR="$(mktemp -d)"
     TMP_APK="$TMP_DIR/mymoney.apk"
@@ -64,7 +64,7 @@ if [ -n "$APK_PATH" ]; then
     fi
     rm -rf "$TMP_DIR"
 else
-    echo "   ⚠️  设备上没有安装 com.example.mymoney"
+    echo "   ⚠️  设备上没有安装 io.github.caozl9021.mymoney"
 fi
 echo ""
 

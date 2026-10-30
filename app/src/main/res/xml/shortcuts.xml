@@ -3,8 +3,8 @@
         android:icon="@drawable/ic_brand_color"
         android:shortcutShortLabel="@string/shortcut_add_bill_short"
         android:shortcutLongLabel="@string/shortcut_add_bill_long">
-        <intent android:action="com.example.mymoney.action.ADD_BILL"
-            android:targetPackage="com.example.mymoney"
-            android:targetClass="com.example.mymoney.ui.MainActivity" />
+        <intent android:action="io.github.caozl9021.mymoney.action.ADD_BILL"
+            android:targetPackage="io.github.caozl9021.mymoney"
+            android:targetClass="io.github.caozl9021.mymoney.ui.MainActivity" />
     </shortcut>
 </shortcuts>

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <permission android:name="com.example.mymoney.permission.LSP_PROBE" android:protectionLevel="signature" />
-    <uses-permission android:name="com.example.mymoney.permission.LSP_PROBE" />
+    <permission android:name="io.github.caozl9021.mymoney.permission.LSP_PROBE" android:protectionLevel="signature" />
+    <uses-permission android:name="io.github.caozl9021.mymoney.permission.LSP_PROBE" />
 
     <!-- 记录类 App 不需要联网；如果以后要同步，再加 INTERNET -->
     <!-- 悬浮确认卡片（root 路径下唯一不受后台启动限制的弹窗方式） -->
@@ -57,7 +57,7 @@
 
         <provider
             android:name=".lsp.LspStatusProvider"
-            android:authorities="com.example.mymoney.lsp.status"
+            android:authorities="io.github.caozl9021.mymoney.lsp.status"
             android:exported="true"
             android:grantUriPermissions="false" />
 

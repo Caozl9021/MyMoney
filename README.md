@@ -10,11 +10,13 @@
 
 <sub>My Money — a local-first auto bookkeeping app for WeChat Pay &amp; Alipay</sub>
 
-[![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)](#快速开始)
+[![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+[![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)](#构建)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?logo=kotlin&logoColor=white)](#项目结构)
 [![Compose](https://img.shields.io/badge/Jetpack-Compose-4285F4?logo=jetpackcompose&logoColor=white)](#项目结构)
-![Version](https://img.shields.io/badge/版本-0.34.0%20%2F%20104-00847D)
-[![Offline](https://img.shields.io/badge/数据-仅本机-4C8FAF)](#数据与隐私)
+![Version](https://img.shields.io/badge/版本-1.0.0%20%2F%20105-00847D)
+
+**[⬇ 下载最新版本](../../releases/latest)**
 
 </div>
 
@@ -89,7 +91,7 @@ flowchart LR
 
 - 输入通道：**通知识别**、**页面辅助（无障碍）**、**Root 通知**、**LSPosed 交易凭证**。Root 与无障碍互斥，首次选择即保存，暂停不清模式。
 - 红包金额按同一红包单号关联经过核验的回执，缺金额、串单或冲突一律拒绝，不用群总额凑数。
-- 银行短信与其他 App 渠道不在本分支范围：权限、receiver 与入口均已移除，旧配置原值只做兼容，不会越界生效。
+- 银行短信与其他 App 渠道不在范围内：权限、receiver 与入口均已移除，旧配置原值只做兼容，不会越界生效。
 
 ---
 
@@ -120,31 +122,46 @@ flowchart TB
 | `:app` | Compose 界面与宿主、采集通道、确认卡投递、Room 账本、备份与导入导出、LSP 内核（内置主 APK） |
 | 构建 | JDK 17 · Gradle 8.14 · AGP 8.7 · Kotlin 2.0.21 · `minSdk 26` / `targetSdk 35` |
 
+更细的设计说明见 [ARCHITECTURE.md](ARCHITECTURE.md)，各功能专题见 [docs/](docs/)。
+
 ---
 
-## 快速开始
+## 构建
+
+需要 JDK 17 与 Android SDK（compileSdk 35）。项目自带 Gradle wrapper，不需要单独装 Gradle。
 
 ```bash
-source ~/opt/mymoney-env.sh                    # JDK 17 + Android SDK
+# 1. 指向本机 SDK（local.properties 不进版本库）
+echo "sdk.dir=$HOME/Android/Sdk" > local.properties
+
+# 2. 跑单元测试
 ./gradlew :billkit:testDebugUnitTest :app:testDebugUnitTest
-./gradlew :app:assembleDebug :app:assembleRelease
+
+# 3. 构建
+./gradlew :app:assembleDebug        # 可直接安装的调试包
+./gradlew :app:assembleRelease      # 未签名时产出 -unsigned.apk
 ```
 
-```bash
-# 安装已核验的正式包（同一个 release 签名）
-adb -s <设备序列号> install -r dist/MyMoney-0.34.0-self-release.apk
-```
+- release 签名从仓库外的 `~/.mymoney-keys/keystore.properties` 读取；缺失时产物为 unsigned，不影响本地调试，但**不能当正式包分发**。
+- debug 与 release 签名不同，不能互相覆盖。覆盖升级请勿卸载，避免丢数据。
+- 构建需要访问 `https://api.xposed.info/` 拉取 `de.robv.android.xposed:api:82`（`compileOnly`，不进 APK）。该仓库不可用时，可先注释掉这一行，只构建非 LSP 部分。
+- 依赖缓存完整时才加 `--offline`。
 
-- 依赖缓存完整时才加 `--offline`；`local.properties` 的 `sdk.dir` 随机器调整。
-- release 签名从仓库外的 `~/.mymoney-keys/keystore.properties` 读取；缺失时产物为 unsigned，不可当正式包交付。
-- debug 与 release 签名不同，不能互相覆盖；覆盖升级请勿卸载，避免丢数据。
+`./build-all.sh` 会读取 `app/build.gradle.kts` 里的版本号，把 debug / release 两个包输出到 `dist/MyMoney-<版本>-<分支>-<类型>.apk`。
+
+> **自行构建的包使用你自己的签名，与官方 Release 的签名不同，无法覆盖安装官方包。** 想跟官方版本共存或升级，请从 Releases 下载。
 
 ---
 
 ## 数据与隐私
 
-- **不声明 `INTERNET` 权限。** 规则、账单、学习与备份全部在本机处理，没有云端账号、没有云端学习。
-- 不读写第三方 App 的私有数据库，不 Hook 微信 / 支付宝的 Flutter / Dart 层，不做截图 OCR，不恢复任何"两路同时采集"的旧方案。
+- **不声明 `INTERNET` 权限。** 规则、账单、学习与备份全部在本机处理，没有云端账号、没有云端学习。可以自己验证：
+
+  ```bash
+  aapt dump permissions MyMoney-1.0.0-release.apk
+  ```
+
+- 不读写第三方 App 的私有数据库，不 Hook 微信 / 支付宝的 Flutter / Dart 层，不做截图 OCR，不恢复任何「两路同时采集」的旧方案。
 - 金额一律以 **分（Long）** 存储；账单、识别历史、资产流水保留各自身份与关联，重复提交幂等。
 - 备份是 **JSON v8**，含账单、历史、账户余额与流水、采集配置、导入身份、账期与备注，兼容 v1–v7；系统 `allowBackup` 关闭，数据只走你自己导出与恢复的文件。
 - 诊断样本与截图先脱敏再导出；分享给第三方 App（如 iCost）是否入账由对方与你自己确认。
@@ -163,14 +180,29 @@ adb -s <设备序列号> install -r dist/MyMoney-0.34.0-self-release.apk
 </details>
 
 <details>
-<summary><b>打包产物命名</b>（点开）</summary>
+<summary><b>第三方组件与许可</b>（点开）</summary>
 
-`dist/MyMoney-<版本>-<分支>-<debug|release>.apk`，分支标签由 `build-all.sh` 自动写入，`self` 与 `master` 同版本号不会互相覆盖。安装包不入库。
+本项目以 [Apache-2.0](LICENSE) 发布。完整声明见 [NOTICE](NOTICE)。
 
-> **0.34.0 起全面改名：包名 `com.example.mymoney`，数据库 `mymoney.db`，偏好文件 `mymoney`，备份 `kind=MyMoneyBackup`，通知渠道 `mymoney_*`，深链 `mymoney://`，签名配置 `~/.mymoney-keys/keystore.properties`。**
-> 系统会把它当成一个新 App：旧包可以继续共存，但两边的账单、账户与配置互不相通。设备侧还需要重新给新包名勾选 LSPosed 作用域、重建 Root 授权。
+| 组件 | 许可 | 用途 |
+| --- | --- | --- |
+| [Mozilla Rhino](https://github.com/mozilla/rhino) | MPL-2.0 | 在设备上执行本地识别规则，无原生 `.so` |
+| [AndroidLiquidGlassView](https://github.com/QmDeve/AndroidLiquidGlassView) | MIT | 顶栏与底栏的液体玻璃折射效果；本地 AAR 的来源与改动见 [说明](app/libs/LIQUIDGLASS-SOURCE.md) |
+| [Lucide](https://github.com/lucide-icons/lucide) | ISC | 底部 dock 的动态图标路径，已适配 Compose |
+| AndroidX / Jetpack Compose / Material 3 | Apache-2.0 | UI 工具链、生命周期、Room |
+| Material Symbols | Apache-2.0 | 应用内的分类图标 |
+
+**商标**：微信、支付宝分别是腾讯控股有限公司与蚂蚁集团股份有限公司的商标；iCost（钱迹）为其各自所有者的商标。本项目是独立的非官方工具，与上述公司无关联、未获其背书或赞助。
 
 </details>
+
+---
+
+## 参与贡献
+
+欢迎 Issue 与 PR。提交前请先读 [CONTRIBUTING.md](CONTRIBUTING.md)——里面写了代码约定、如何新增一条识别规则，以及**报告问题前如何脱敏诊断样本**。
+
+发现安全问题请走 [SECURITY.md](SECURITY.md) 里的私密渠道，不要开公开 Issue。
 
 ---
 

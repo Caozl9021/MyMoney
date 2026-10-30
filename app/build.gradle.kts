@@ -9,17 +9,17 @@ plugins {
 }
 
 android {
-    namespace = "com.example.mymoney"
+    namespace = "io.github.caozl9021.mymoney"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.mymoney"
+        applicationId = "io.github.caozl9021.mymoney"
         minSdk = 26
         targetSdk = 35
         testInstrumentationRunner = providers.gradleProperty("mymoneyTestRunner")
-            .getOrElse("com.example.mymoney.HistoryInstrumentation")
-        versionCode = 104
-        versionName = "0.34.0"
+            .getOrElse("io.github.caozl9021.mymoney.HistoryInstrumentation")
+        versionCode = 105
+        versionName = "1.0.0"
     }
 
     // 签名信息放在仓库之外（~/.mymoney-keys/keystore.properties），不进版本库。

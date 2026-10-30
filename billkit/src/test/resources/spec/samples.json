@@ -1,0 +1,2790 @@
+{
+  "schemaVersion": 1,
+  "samples": [
+    {
+      "id": "maimi_wechat_redpackage_expense_v1-positive-0",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "红包发送成功¥19.99",
+          "description": "红包已发出",
+          "t": 1793289600000,
+          "orderId": "SYNTH-REDPACKET-1999"
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_redpackage_expense_v1",
+        "billType": "Expend",
+        "cents": 1999,
+        "merchant": "",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_redpackage_expense_v1-positive-1",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "红包发送成功¥0.01",
+          "description": "红包已发出",
+          "t": 1793289600000,
+          "orderId": "SYNTH-REDPACKET-001"
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_redpackage_expense_v1",
+        "billType": "Expend",
+        "cents": 1,
+        "merchant": "",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_redpackage_expense_v1-positive-2",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "红包发送成功¥1,234.50",
+          "description": "红包已发出",
+          "t": 1793289600000,
+          "orderId": "SYNTH-REDPACKET-123450"
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_redpackage_expense_v1",
+        "billType": "Expend",
+        "cents": 123450,
+        "merchant": "",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_redpackage_expense_v1-negative-0",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "普通公众号",
+          "title": "红包发送成功¥19.99",
+          "description": "红包已发出",
+          "t": 1793289600000,
+          "orderId": "SYNTH-REDPACKET-1999"
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_redpackage_expense_v1-negative-1",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "红包发送成功¥19.99",
+          "description": "红包未领取",
+          "t": 1793289600000,
+          "orderId": "SYNTH-REDPACKET-1999"
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_redpackage_expense_v1-negative-2",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "红包发送成功¥19.999",
+          "description": "红包已发出",
+          "t": 1793289600000,
+          "orderId": "SYNTH-REDPACKET-1999"
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_redpackage_expense_v1-negative-3",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "红包发送成功¥0.00",
+          "description": "红包已发出",
+          "t": 1793289600000,
+          "orderId": "SYNTH-REDPACKET-1999"
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_redpackage_expense_v1-negative-4",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "红包发送成功",
+          "description": "红包已发出",
+          "t": 1793289600000,
+          "orderId": "SYNTH-REDPACKET-1999",
+          "cachedPayMoney": "19.99"
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_redpackage_income_v1-positive-0",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已领取红包¥19.99",
+          "description": "本人已领取红包",
+          "t": 1793289600000,
+          "orderId": "SYNTH-REDPACKET-1999"
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_redpackage_income_v1",
+        "billType": "Income",
+        "cents": 1999,
+        "merchant": "",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_redpackage_income_v1-positive-1",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已领取红包¥0.01",
+          "description": "本人已领取红包",
+          "t": 1793289600000,
+          "orderId": "SYNTH-REDPACKET-001"
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_redpackage_income_v1",
+        "billType": "Income",
+        "cents": 1,
+        "merchant": "",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_redpackage_income_v1-positive-2",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已领取红包¥1,234.50",
+          "description": "本人已领取红包",
+          "t": 1793289600000,
+          "orderId": "SYNTH-REDPACKET-123450"
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_redpackage_income_v1",
+        "billType": "Income",
+        "cents": 123450,
+        "merchant": "",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_redpackage_income_v1-negative-0",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "普通公众号",
+          "title": "已领取红包¥19.99",
+          "description": "本人已领取红包",
+          "t": 1793289600000,
+          "orderId": "SYNTH-REDPACKET-1999"
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_redpackage_income_v1-negative-1",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已领取红包¥19.99",
+          "description": "红包未领取",
+          "t": 1793289600000,
+          "orderId": "SYNTH-REDPACKET-1999"
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_redpackage_income_v1-negative-2",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已领取红包¥19.999",
+          "description": "本人已领取红包",
+          "t": 1793289600000,
+          "orderId": "SYNTH-REDPACKET-1999"
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_redpackage_income_v1-negative-3",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已领取红包¥0.00",
+          "description": "本人已领取红包",
+          "t": 1793289600000,
+          "orderId": "SYNTH-REDPACKET-1999"
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_redpackage_income_v1-negative-4",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "红包发送成功",
+          "description": "本人已领取红包",
+          "t": 1793289600000,
+          "orderId": "SYNTH-REDPACKET-1999",
+          "cachedPayMoney": "19.99"
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-positive-0",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "已支付¥19.99",
+          "description": "收款方：麦米测试店\n使用零钱支付¥19.99\n交易状态支付成功，对方已收款",
+          "source": "微信支付",
+          "display_name": "微信支付",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_data_expense_v1",
+        "billType": "Expend",
+        "cents": 1999,
+        "merchant": "麦米测试店",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-positive-1",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "captured-redacted",
+      "evidence": "local-device-20261027-app-data-39",
+      "raw": {
+        "mMap": {
+          "title": "已支付¥0.01",
+          "description": "收款方测试商户甲\n使用零钱支付¥0.01\n交易状态支付成功，对方已收款",
+          "source": "微信支付",
+          "display_name": "微信支付",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_data_expense_v1",
+        "billType": "Expend",
+        "cents": 1,
+        "merchant": "",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-positive-2",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "已支付¥1,234.50",
+          "description": "收款方：麦米测试店\n使用零钱支付¥1,234.50\n交易状态支付成功，对方已收款",
+          "source": "微信支付",
+          "display_name": "微信支付",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_data_expense_v1",
+        "billType": "Expend",
+        "cents": 123450,
+        "merchant": "麦米测试店",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-negative-0",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "已支付¥19.99",
+          "description": "收款方：麦米测试店\n使用零钱支付¥19.99\n交易状态支付成功，对方已收款",
+          "source": "普通公众号",
+          "display_name": "微信支付",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-negative-1",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "已支付¥19.99",
+          "description": "支付失败",
+          "source": "微信支付",
+          "display_name": "微信支付",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-negative-2",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "已支付¥19.999",
+          "description": "收款方：麦米测试店\n使用零钱支付¥19.99\n交易状态支付成功，对方已收款",
+          "source": "微信支付",
+          "display_name": "微信支付",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-negative-3",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "已支付¥0.00",
+          "description": "收款方：麦米测试店\n使用零钱支付¥19.99\n交易状态支付成功，对方已收款",
+          "source": "微信支付",
+          "display_name": "微信支付",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-negative-4",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "已支付¥19.99",
+          "description": "余额100.00元，交易尚未完成",
+          "source": "微信支付",
+          "display_name": "微信支付",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_income_v1-positive-0",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "已收款¥19.99",
+          "description": "收款已到账\n付款方：测试付款人",
+          "source": "微信支付",
+          "display_name": "微信支付",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_data_income_v1",
+        "billType": "Income",
+        "cents": 1999,
+        "merchant": "测试付款人",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_data_income_v1-positive-1",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "已收款¥0.01",
+          "description": "收款已到账\n付款方：测试付款人",
+          "source": "微信支付",
+          "display_name": "微信支付",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_data_income_v1",
+        "billType": "Income",
+        "cents": 1,
+        "merchant": "测试付款人",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_data_income_v1-positive-2",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "已收款¥1,234.50",
+          "description": "收款已到账\n付款方：测试付款人",
+          "source": "微信支付",
+          "display_name": "微信支付",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_data_income_v1",
+        "billType": "Income",
+        "cents": 123450,
+        "merchant": "测试付款人",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_data_income_v1-negative-0",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "已收款¥19.99",
+          "description": "收款已到账\n付款方：测试付款人",
+          "source": "普通公众号",
+          "display_name": "微信支付",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_income_v1-negative-1",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "已收款¥19.99",
+          "description": "支付失败",
+          "source": "微信支付",
+          "display_name": "微信支付",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_income_v1-negative-2",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "已收款¥19.999",
+          "description": "收款已到账\n付款方：测试付款人",
+          "source": "微信支付",
+          "display_name": "微信支付",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_income_v1-negative-3",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "已收款¥0.00",
+          "description": "收款已到账\n付款方：测试付款人",
+          "source": "微信支付",
+          "display_name": "微信支付",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_income_v1-negative-4",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "已收款¥19.99",
+          "description": "余额100.00元，交易尚未完成",
+          "source": "微信支付",
+          "display_name": "微信支付",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_refund_v1-positive-0",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "退款到账¥19.99",
+          "description": "原支付退款已到账",
+          "source": "微信支付",
+          "display_name": "微信支付",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_data_refund_v1",
+        "billType": "Refund",
+        "cents": 1999,
+        "merchant": "",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_data_refund_v1-positive-1",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "退款到账¥0.01",
+          "description": "原支付退款已到账",
+          "source": "微信支付",
+          "display_name": "微信支付",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_data_refund_v1",
+        "billType": "Refund",
+        "cents": 1,
+        "merchant": "",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_data_refund_v1-positive-2",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "退款到账¥1,234.50",
+          "description": "原支付退款已到账",
+          "source": "微信支付",
+          "display_name": "微信支付",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_data_refund_v1",
+        "billType": "Refund",
+        "cents": 123450,
+        "merchant": "",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_data_refund_v1-negative-0",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "退款到账¥19.99",
+          "description": "原支付退款已到账",
+          "source": "普通公众号",
+          "display_name": "微信支付",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_refund_v1-negative-1",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "退款到账¥19.99",
+          "description": "支付失败",
+          "source": "微信支付",
+          "display_name": "微信支付",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_refund_v1-negative-2",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "退款到账¥19.999",
+          "description": "原支付退款已到账",
+          "source": "微信支付",
+          "display_name": "微信支付",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_refund_v1-negative-3",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "退款到账¥0.00",
+          "description": "原支付退款已到账",
+          "source": "微信支付",
+          "display_name": "微信支付",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_refund_v1-negative-4",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "退款到账¥19.99",
+          "description": "余额100.00元，交易尚未完成",
+          "source": "微信支付",
+          "display_name": "微信支付",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_alipay_data_expense_v1-positive-0",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": [
+        {
+          "pl": "{\"title\": \"付款成功\", \"money\": \"19.99\", \"content\": \"{\\\"money\\\": \\\"19.99\\\", \\\"content\\\": [{\\\"title\\\": \\\"收款方：\\\", \\\"content\\\": \\\"麦米测试店\\\"}, {\\\"title\\\": \\\"付款方式：\\\", \\\"content\\\": \\\"余额\\\"}]}\"}",
+          "mct": 1793289600
+        }
+      ],
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_alipay_data_expense_v1",
+        "billType": "Expend",
+        "cents": 1999,
+        "merchant": "麦米测试店",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_alipay_data_expense_v1-positive-1",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": [
+        {
+          "pl": "{\"title\": \"付款成功\", \"money\": \"0.01\", \"content\": \"{\\\"money\\\": \\\"0.01\\\", \\\"content\\\": [{\\\"title\\\": \\\"收款方：\\\", \\\"content\\\": \\\"麦米测试店\\\"}, {\\\"title\\\": \\\"付款方式：\\\", \\\"content\\\": \\\"余额\\\"}]}\"}",
+          "mct": 1793289600
+        }
+      ],
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_alipay_data_expense_v1",
+        "billType": "Expend",
+        "cents": 1,
+        "merchant": "麦米测试店",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_alipay_data_expense_v1-positive-2",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": [
+        {
+          "pl": "{\"title\": \"付款成功\", \"money\": \"1,234.50\", \"content\": \"{\\\"money\\\": \\\"1,234.50\\\", \\\"content\\\": [{\\\"title\\\": \\\"收款方：\\\", \\\"content\\\": \\\"麦米测试店\\\"}, {\\\"title\\\": \\\"付款方式：\\\", \\\"content\\\": \\\"余额\\\"}]}\"}",
+          "mct": 1793289600
+        }
+      ],
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_alipay_data_expense_v1",
+        "billType": "Expend",
+        "cents": 123450,
+        "merchant": "麦米测试店",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_alipay_data_expense_v1-negative-0",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": [
+        {
+          "pl": "{\"title\": \"交易处理中\", \"money\": \"19.99\", \"content\": \"{\\\"money\\\": \\\"19.99\\\", \\\"content\\\": [{\\\"title\\\": \\\"收款方：\\\", \\\"content\\\": \\\"麦米测试店\\\"}, {\\\"title\\\": \\\"付款方式：\\\", \\\"content\\\": \\\"余额\\\"}]}\"}",
+          "mct": 1793289600
+        }
+      ],
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_alipay_data_expense_v1-negative-1",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": [
+        {
+          "pl": "{\"title\": \"付款成功\", \"money\": \"19.999\", \"content\": \"{\\\"money\\\": \\\"19.99\\\", \\\"content\\\": [{\\\"title\\\": \\\"收款方：\\\", \\\"content\\\": \\\"麦米测试店\\\"}, {\\\"title\\\": \\\"付款方式：\\\", \\\"content\\\": \\\"余额\\\"}]}\"}",
+          "mct": 1793289600
+        }
+      ],
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_alipay_data_expense_v1-negative-2",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": [
+        {
+          "pl": "{\"title\": \"付款成功\", \"money\": \"19.99\", \"content\": \"{\\\"money\\\": \\\"20.00\\\", \\\"content\\\": [{\\\"title\\\": \\\"收款方：\\\", \\\"content\\\": \\\"麦米测试店\\\"}, {\\\"title\\\": \\\"付款方式：\\\", \\\"content\\\": \\\"余额\\\"}]}\"}",
+          "mct": 1793289600
+        }
+      ],
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_alipay_data_expense_v1-negative-3",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": [
+        {
+          "pl": "{\"title\": \"付款成功\", \"money\": \"19.99\", \"content\": \"{\\\"money\\\": \\\"19.99\\\", \\\"content\\\": [{\\\"title\\\": \\\"收款方：\\\", \\\"content\\\": \\\"麦米测试店\\\"}, {\\\"title\\\": \\\"付款方式：\\\", \\\"content\\\": \\\"余额\\\"}, {\\\"title\\\": \\\"状态：\\\", \\\"content\\\": \\\"支付失败\\\"}]}\"}",
+          "mct": 1793289600
+        }
+      ],
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_alipay_data_expense_v1-negative-4",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": [
+        {
+          "pl": "{\"title\": \"付款成功\", \"money\": \"19.99\", \"content\": \"{\\\"money\\\": \\\"19.99\\\", \\\"content\\\": [{\\\"title\\\": \\\"收款方：\\\", \\\"content\\\": \\\"麦米测试店\\\"}, {\\\"title\\\": \\\"付款方式：\\\", \\\"content\\\": \\\"余额\\\"}, {\\\"title\\\": \\\"币种：\\\", \\\"content\\\": \\\"USD\\\"}]}\"}",
+          "mct": 1793289600
+        }
+      ],
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_alipay_data_income_v1-positive-0",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": [
+        {
+          "pl": "{\"title\": \"收款成功\", \"money\": \"19.99\", \"content\": \"{\\\"money\\\": \\\"19.99\\\", \\\"content\\\": [{\\\"title\\\": \\\"付款方：\\\", \\\"content\\\": \\\"麦米测试店\\\"}, {\\\"title\\\": \\\"付款方式：\\\", \\\"content\\\": \\\"余额\\\"}]}\"}",
+          "mct": 1793289600
+        }
+      ],
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_alipay_data_income_v1",
+        "billType": "Income",
+        "cents": 1999,
+        "merchant": "麦米测试店",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_alipay_data_income_v1-positive-1",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": [
+        {
+          "pl": "{\"title\": \"收款成功\", \"money\": \"0.01\", \"content\": \"{\\\"money\\\": \\\"0.01\\\", \\\"content\\\": [{\\\"title\\\": \\\"付款方：\\\", \\\"content\\\": \\\"麦米测试店\\\"}, {\\\"title\\\": \\\"付款方式：\\\", \\\"content\\\": \\\"余额\\\"}]}\"}",
+          "mct": 1793289600
+        }
+      ],
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_alipay_data_income_v1",
+        "billType": "Income",
+        "cents": 1,
+        "merchant": "麦米测试店",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_alipay_data_income_v1-positive-2",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": [
+        {
+          "pl": "{\"title\": \"收款成功\", \"money\": \"1,234.50\", \"content\": \"{\\\"money\\\": \\\"1,234.50\\\", \\\"content\\\": [{\\\"title\\\": \\\"付款方：\\\", \\\"content\\\": \\\"麦米测试店\\\"}, {\\\"title\\\": \\\"付款方式：\\\", \\\"content\\\": \\\"余额\\\"}]}\"}",
+          "mct": 1793289600
+        }
+      ],
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_alipay_data_income_v1",
+        "billType": "Income",
+        "cents": 123450,
+        "merchant": "麦米测试店",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_alipay_data_income_v1-negative-0",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": [
+        {
+          "pl": "{\"title\": \"交易处理中\", \"money\": \"19.99\", \"content\": \"{\\\"money\\\": \\\"19.99\\\", \\\"content\\\": [{\\\"title\\\": \\\"付款方：\\\", \\\"content\\\": \\\"麦米测试店\\\"}, {\\\"title\\\": \\\"付款方式：\\\", \\\"content\\\": \\\"余额\\\"}]}\"}",
+          "mct": 1793289600
+        }
+      ],
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_alipay_data_income_v1-negative-1",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": [
+        {
+          "pl": "{\"title\": \"收款成功\", \"money\": \"19.999\", \"content\": \"{\\\"money\\\": \\\"19.99\\\", \\\"content\\\": [{\\\"title\\\": \\\"付款方：\\\", \\\"content\\\": \\\"麦米测试店\\\"}, {\\\"title\\\": \\\"付款方式：\\\", \\\"content\\\": \\\"余额\\\"}]}\"}",
+          "mct": 1793289600
+        }
+      ],
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_alipay_data_income_v1-negative-2",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": [
+        {
+          "pl": "{\"title\": \"收款成功\", \"money\": \"19.99\", \"content\": \"{\\\"money\\\": \\\"20.00\\\", \\\"content\\\": [{\\\"title\\\": \\\"付款方：\\\", \\\"content\\\": \\\"麦米测试店\\\"}, {\\\"title\\\": \\\"付款方式：\\\", \\\"content\\\": \\\"余额\\\"}]}\"}",
+          "mct": 1793289600
+        }
+      ],
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_alipay_data_income_v1-negative-3",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": [
+        {
+          "pl": "{\"title\": \"收款成功\", \"money\": \"19.99\", \"content\": \"{\\\"money\\\": \\\"19.99\\\", \\\"content\\\": [{\\\"title\\\": \\\"付款方：\\\", \\\"content\\\": \\\"麦米测试店\\\"}, {\\\"title\\\": \\\"付款方式：\\\", \\\"content\\\": \\\"余额\\\"}, {\\\"title\\\": \\\"状态：\\\", \\\"content\\\": \\\"支付失败\\\"}]}\"}",
+          "mct": 1793289600
+        }
+      ],
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_alipay_data_income_v1-negative-4",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": [
+        {
+          "pl": "{\"title\": \"收款成功\", \"money\": \"19.99\", \"content\": \"{\\\"money\\\": \\\"19.99\\\", \\\"content\\\": [{\\\"title\\\": \\\"付款方：\\\", \\\"content\\\": \\\"麦米测试店\\\"}, {\\\"title\\\": \\\"付款方式：\\\", \\\"content\\\": \\\"余额\\\"}, {\\\"title\\\": \\\"币种：\\\", \\\"content\\\": \\\"USD\\\"}]}\"}",
+          "mct": 1793289600
+        }
+      ],
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_alipay_data_refund_v1-positive-0",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": [
+        {
+          "pl": "{\"title\": \"退款到账\", \"money\": \"19.99\", \"content\": \"{\\\"money\\\": \\\"19.99\\\", \\\"content\\\": [{\\\"title\\\": \\\"收款方：\\\", \\\"content\\\": \\\"麦米测试店\\\"}, {\\\"title\\\": \\\"付款方式：\\\", \\\"content\\\": \\\"余额\\\"}]}\"}",
+          "mct": 1793289600
+        }
+      ],
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_alipay_data_refund_v1",
+        "billType": "Refund",
+        "cents": 1999,
+        "merchant": "麦米测试店",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_alipay_data_refund_v1-positive-1",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": [
+        {
+          "pl": "{\"title\": \"退款到账\", \"money\": \"0.01\", \"content\": \"{\\\"money\\\": \\\"0.01\\\", \\\"content\\\": [{\\\"title\\\": \\\"收款方：\\\", \\\"content\\\": \\\"麦米测试店\\\"}, {\\\"title\\\": \\\"付款方式：\\\", \\\"content\\\": \\\"余额\\\"}]}\"}",
+          "mct": 1793289600
+        }
+      ],
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_alipay_data_refund_v1",
+        "billType": "Refund",
+        "cents": 1,
+        "merchant": "麦米测试店",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_alipay_data_refund_v1-positive-2",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": [
+        {
+          "pl": "{\"title\": \"退款到账\", \"money\": \"1,234.50\", \"content\": \"{\\\"money\\\": \\\"1,234.50\\\", \\\"content\\\": [{\\\"title\\\": \\\"收款方：\\\", \\\"content\\\": \\\"麦米测试店\\\"}, {\\\"title\\\": \\\"付款方式：\\\", \\\"content\\\": \\\"余额\\\"}]}\"}",
+          "mct": 1793289600
+        }
+      ],
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_alipay_data_refund_v1",
+        "billType": "Refund",
+        "cents": 123450,
+        "merchant": "麦米测试店",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_alipay_data_refund_v1-negative-0",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": [
+        {
+          "pl": "{\"title\": \"交易处理中\", \"money\": \"19.99\", \"content\": \"{\\\"money\\\": \\\"19.99\\\", \\\"content\\\": [{\\\"title\\\": \\\"收款方：\\\", \\\"content\\\": \\\"麦米测试店\\\"}, {\\\"title\\\": \\\"付款方式：\\\", \\\"content\\\": \\\"余额\\\"}]}\"}",
+          "mct": 1793289600
+        }
+      ],
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_alipay_data_refund_v1-negative-1",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": [
+        {
+          "pl": "{\"title\": \"退款到账\", \"money\": \"19.999\", \"content\": \"{\\\"money\\\": \\\"19.99\\\", \\\"content\\\": [{\\\"title\\\": \\\"收款方：\\\", \\\"content\\\": \\\"麦米测试店\\\"}, {\\\"title\\\": \\\"付款方式：\\\", \\\"content\\\": \\\"余额\\\"}]}\"}",
+          "mct": 1793289600
+        }
+      ],
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_alipay_data_refund_v1-negative-2",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": [
+        {
+          "pl": "{\"title\": \"退款到账\", \"money\": \"19.99\", \"content\": \"{\\\"money\\\": \\\"20.00\\\", \\\"content\\\": [{\\\"title\\\": \\\"收款方：\\\", \\\"content\\\": \\\"麦米测试店\\\"}, {\\\"title\\\": \\\"付款方式：\\\", \\\"content\\\": \\\"余额\\\"}]}\"}",
+          "mct": 1793289600
+        }
+      ],
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_alipay_data_refund_v1-negative-3",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": [
+        {
+          "pl": "{\"title\": \"退款到账\", \"money\": \"19.99\", \"content\": \"{\\\"money\\\": \\\"19.99\\\", \\\"content\\\": [{\\\"title\\\": \\\"收款方：\\\", \\\"content\\\": \\\"麦米测试店\\\"}, {\\\"title\\\": \\\"付款方式：\\\", \\\"content\\\": \\\"余额\\\"}, {\\\"title\\\": \\\"状态：\\\", \\\"content\\\": \\\"支付失败\\\"}]}\"}",
+          "mct": 1793289600
+        }
+      ],
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_alipay_data_refund_v1-negative-4",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": [
+        {
+          "pl": "{\"title\": \"退款到账\", \"money\": \"19.99\", \"content\": \"{\\\"money\\\": \\\"19.99\\\", \\\"content\\\": [{\\\"title\\\": \\\"收款方：\\\", \\\"content\\\": \\\"麦米测试店\\\"}, {\\\"title\\\": \\\"付款方式：\\\", \\\"content\\\": \\\"余额\\\"}, {\\\"title\\\": \\\"币种：\\\", \\\"content\\\": \\\"USD\\\"}]}\"}",
+          "mct": 1793289600
+        }
+      ],
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_notice_expense_v1-positive-0",
+      "app": "com.tencent.mm",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "title": "微信支付",
+        "text": "已支付¥19.99",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": true
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_notice_expense_v1",
+        "billType": "Expend",
+        "cents": 1999,
+        "merchant": "",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_notice_expense_v1-positive-1",
+      "app": "com.tencent.mm",
+      "type": "NOTICE",
+      "provenance": "captured-redacted",
+      "evidence": "local-device-20261027-app-data-40",
+      "raw": {
+        "title": "微信支付",
+        "text": "已支付¥0.01",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": true
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_notice_expense_v1",
+        "billType": "Expend",
+        "cents": 1,
+        "merchant": "",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_notice_expense_v1-positive-2",
+      "app": "com.tencent.mm",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "title": "微信支付",
+        "text": "已支付¥1,234.50",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": true
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_notice_expense_v1",
+        "billType": "Expend",
+        "cents": 123450,
+        "merchant": "",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_notice_expense_v1-negative-0",
+      "app": "com.tencent.mm",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "title": "微信支付",
+        "text": "已支付¥19.99",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": false
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_notice_expense_v1-negative-1",
+      "app": "com.tencent.mm",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "title": "普通聊天",
+        "text": "已支付¥19.99",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": true
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_notice_expense_v1-negative-2",
+      "app": "com.tencent.mm",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "title": "微信支付",
+        "text": "已支付¥19.99 支付失败",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": true
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_notice_expense_v1-negative-3",
+      "app": "com.tencent.mm",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "title": "微信支付",
+        "text": "[2条]微信支付: 已支付¥19.99",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": true
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_notice_expense_v1-negative-4",
+      "app": "com.tencent.mm",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "title": "微信支付",
+        "text": "已支付¥19.999",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": true
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_notice_income_v1-positive-0",
+      "app": "com.tencent.mm",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "title": "微信支付",
+        "text": "已收款¥19.99",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": true
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_notice_income_v1",
+        "billType": "Income",
+        "cents": 1999,
+        "merchant": "",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_notice_income_v1-positive-1",
+      "app": "com.tencent.mm",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "title": "微信支付",
+        "text": "已收款¥0.01",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": true
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_notice_income_v1",
+        "billType": "Income",
+        "cents": 1,
+        "merchant": "",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_notice_income_v1-positive-2",
+      "app": "com.tencent.mm",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "title": "微信支付",
+        "text": "已收款¥1,234.50",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": true
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_notice_income_v1",
+        "billType": "Income",
+        "cents": 123450,
+        "merchant": "",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_notice_income_v1-negative-0",
+      "app": "com.tencent.mm",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "title": "微信支付",
+        "text": "已收款¥19.99",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": false
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_notice_income_v1-negative-1",
+      "app": "com.tencent.mm",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "title": "普通聊天",
+        "text": "已收款¥19.99",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": true
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_notice_income_v1-negative-2",
+      "app": "com.tencent.mm",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "title": "微信支付",
+        "text": "已收款¥19.99 支付失败",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": true
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_notice_income_v1-negative-3",
+      "app": "com.tencent.mm",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "title": "微信支付",
+        "text": "[2条]微信支付: 已收款¥19.99",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": true
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_notice_income_v1-negative-4",
+      "app": "com.tencent.mm",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "title": "微信支付",
+        "text": "已收款¥19.999",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": true
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_alipay_notice_expense_v1-positive-0",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "title": "交易提醒",
+        "text": "已支付¥19.99",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": true
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_alipay_notice_expense_v1",
+        "billType": "Expend",
+        "cents": 1999,
+        "merchant": "",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_alipay_notice_expense_v1-positive-1",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "title": "交易提醒",
+        "text": "已支付¥0.01",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": true
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_alipay_notice_expense_v1",
+        "billType": "Expend",
+        "cents": 1,
+        "merchant": "",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_alipay_notice_expense_v1-positive-2",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "title": "交易提醒",
+        "text": "已支付¥1,234.50",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": true
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_alipay_notice_expense_v1",
+        "billType": "Expend",
+        "cents": 123450,
+        "merchant": "",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_alipay_notice_expense_v1-negative-0",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "title": "交易提醒",
+        "text": "已支付¥19.99",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": false
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_alipay_notice_expense_v1-negative-1",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "title": "普通聊天",
+        "text": "已支付¥19.99",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": true
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_alipay_notice_expense_v1-negative-2",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "title": "交易提醒",
+        "text": "已支付¥19.99 支付失败",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": true
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_alipay_notice_expense_v1-negative-3",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "title": "交易提醒",
+        "text": "[2条]微信支付: 已支付¥19.99",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": true
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_alipay_notice_expense_v1-negative-4",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "title": "交易提醒",
+        "text": "已支付¥19.999",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": true
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_alipay_notice_income_v1-positive-0",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "title": "交易提醒",
+        "text": "已收款¥19.99",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": true
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_alipay_notice_income_v1",
+        "billType": "Income",
+        "cents": 1999,
+        "merchant": "",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_alipay_notice_income_v1-positive-1",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "title": "交易提醒",
+        "text": "已收款¥0.01",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": true
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_alipay_notice_income_v1",
+        "billType": "Income",
+        "cents": 1,
+        "merchant": "",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_alipay_notice_income_v1-positive-2",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "title": "交易提醒",
+        "text": "已收款¥1,234.50",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": true
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_alipay_notice_income_v1",
+        "billType": "Income",
+        "cents": 123450,
+        "merchant": "",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_alipay_notice_income_v1-negative-0",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "title": "交易提醒",
+        "text": "已收款¥19.99",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": false
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_alipay_notice_income_v1-negative-1",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "title": "普通聊天",
+        "text": "已收款¥19.99",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": true
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_alipay_notice_income_v1-negative-2",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "title": "交易提醒",
+        "text": "已收款¥19.99 支付失败",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": true
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_alipay_notice_income_v1-negative-3",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "title": "交易提醒",
+        "text": "[2条]微信支付: 已收款¥19.99",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": true
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_alipay_notice_income_v1-negative-4",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "NOTICE",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "title": "交易提醒",
+        "text": "已收款¥19.999",
+        "t": 1793289600000,
+        "observedAt": 1793289600000,
+        "envelopeVerified": true
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_transfer_expense_v1-positive-0",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "type": "transfer",
+        "isSend": 1,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2000\", \"title\": \"微信转账\", \"des\": \"收到转账￥19.99元。如需收钱，请点此升级至最新版本\", \"wcpayinfo\": {\"paysubtype\": \"1\", \"feedesc\": \"￥19.99\", \"transferid\": \"SYNTH-TRANSFER-1999\", \"paymsgid\": \"SYNTH-TRANSFER-1999\", \"begintransfertime\": \"1793289600\", \"pay_memo\": \"合成转账\"}}}}",
+        "t": 1793289600000
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_transfer_expense_v1",
+        "billType": "Expend",
+        "cents": 1999,
+        "merchant": "",
+        "hasExplicitTime": true,
+        "time": 1793289600000
+      }
+    },
+    {
+      "id": "maimi_wechat_transfer_expense_v1-positive-1",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "captured-redacted",
+      "evidence": "local-device-20261029-app-data-27",
+      "raw": {
+        "type": "transfer",
+        "isSend": 1,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2000\", \"title\": \"微信转账\", \"des\": \"收到转账￥0.01元。如需收钱，请点此升级至最新版本\", \"wcpayinfo\": {\"paysubtype\": \"1\", \"feedesc\": \"￥0.01\", \"transferid\": \"SYNTH-TRANSFER-001\", \"paymsgid\": \"SYNTH-TRANSFER-001\", \"begintransfertime\": \"1793289600\", \"pay_memo\": \"合成转账\"}}}}",
+        "t": 1793289600000
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_transfer_expense_v1",
+        "billType": "Expend",
+        "cents": 1,
+        "merchant": "",
+        "hasExplicitTime": true,
+        "time": 1793289600000
+      }
+    },
+    {
+      "id": "maimi_wechat_transfer_expense_v1-positive-2",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "type": "transfer",
+        "isSend": 1,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2000\", \"title\": \"微信转账\", \"des\": \"收到转账￥1,234.50元。如需收钱，请点此升级至最新版本\", \"wcpayinfo\": {\"paysubtype\": \"1\", \"feedesc\": \"￥1,234.50\", \"transferid\": \"SYNTH-TRANSFER-123450\", \"paymsgid\": \"SYNTH-TRANSFER-123450\", \"begintransfertime\": \"1793289600\", \"pay_memo\": \"合成转账\"}}}}",
+        "t": 1793289600000
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_transfer_expense_v1",
+        "billType": "Expend",
+        "cents": 123450,
+        "merchant": "",
+        "hasExplicitTime": true,
+        "time": 1793289600000
+      }
+    },
+    {
+      "id": "maimi_wechat_transfer_expense_v1-negative-0",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "captured-redacted",
+      "evidence": "local-device-20261029-app-data-29",
+      "raw": {
+        "type": "transfer",
+        "isSend": 0,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2000\", \"title\": \"微信转账\", \"des\": \"收到转账￥0.01元。如需收钱，请点此升级至最新版本\", \"wcpayinfo\": {\"paysubtype\": \"1\", \"feedesc\": \"￥0.01\", \"transferid\": \"SYNTH-TRANSFER-001\", \"paymsgid\": \"SYNTH-TRANSFER-001\", \"begintransfertime\": \"1793289600\", \"pay_memo\": \"合成转账\"}}}}",
+        "t": 1793289600000
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_transfer_expense_v1-negative-1",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "type": "transfer",
+        "isSend": 1,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2000\", \"title\": \"微信转账\", \"des\": \"收到转账￥19.99元。如需收钱，请点此升级至最新版本\", \"wcpayinfo\": {\"paysubtype\": \"4\", \"feedesc\": \"￥19.99\", \"transferid\": \"SYNTH-TRANSFER-1999\", \"paymsgid\": \"SYNTH-TRANSFER-1999\", \"begintransfertime\": \"1793289600\", \"pay_memo\": \"合成转账\"}}}}",
+        "t": 1793289600000
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_transfer_expense_v1-negative-2",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "type": "transfer",
+        "isSend": 1,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2000\", \"title\": \"微信转账\", \"des\": \"收到转账￥19.99元。如需收钱，请点此升级至最新版本\", \"wcpayinfo\": {\"paysubtype\": \"1\", \"feedesc\": \"￥19.999\", \"transferid\": \"SYNTH-TRANSFER-1999\", \"paymsgid\": \"SYNTH-TRANSFER-1999\", \"begintransfertime\": \"1793289600\", \"pay_memo\": \"合成转账\"}}}}",
+        "t": 1793289600000
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_transfer_expense_v1-negative-3",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "type": "transfer",
+        "isSend": 1,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2000\", \"title\": \"微信转账\", \"des\": \"收到转账￥19.99元。如需收钱，请点此升级至最新版本\", \"wcpayinfo\": {\"paysubtype\": \"1\", \"feedesc\": \"￥19.99\", \"transferid\": \"SYNTH-TRANSFER-1999\", \"paymsgid\": \"SYNTH-TRANSFER-1999\", \"begintransfertime\": \"not-a-time\", \"pay_memo\": \"合成转账\"}}}}",
+        "t": 1793289600000
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_transfer_expense_v1-negative-4",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "type": "transfer",
+        "isSend": 1,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2000\", \"title\": \"微信转账\", \"des\": \"收到转账￥19.99元。如需收钱，请点此升级至最新版本\", \"wcpayinfo\": {\"paysubtype\": \"1\", \"feedesc\": \"￥19.99\", \"transferid\": \"SYNTH-TRANSFER-1999\", \"paymsgid\": \"SYNTH-OTHER-TRANSFER\", \"begintransfertime\": \"1793289600\", \"pay_memo\": \"合成转账\"}}}}",
+        "t": 1793289600000
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_transfer_income_v1-positive-0",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "type": "transfer",
+        "isSend": 1,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2000\", \"title\": \"微信转账\", \"des\": \"本人已确认收款\", \"wcpayinfo\": {\"paysubtype\": \"3\", \"feedesc\": \"￥19.99\", \"transferid\": \"SYNTH-TRANSFER-1999\", \"paymsgid\": \"SYNTH-TRANSFER-1999\", \"begintransfertime\": \"1793289600\", \"pay_memo\": \"合成转账\"}}}}",
+        "t": 1793289600000
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_transfer_income_v1",
+        "billType": "Income",
+        "cents": 1999,
+        "merchant": "",
+        "hasExplicitTime": true,
+        "time": 1793289600000
+      }
+    },
+    {
+      "id": "maimi_wechat_transfer_income_v1-positive-1",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "type": "transfer",
+        "isSend": 1,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2000\", \"title\": \"微信转账\", \"des\": \"本人已确认收款\", \"wcpayinfo\": {\"paysubtype\": \"3\", \"feedesc\": \"￥0.01\", \"transferid\": \"SYNTH-TRANSFER-001\", \"paymsgid\": \"SYNTH-TRANSFER-001\", \"begintransfertime\": \"1793289600\", \"pay_memo\": \"合成转账\"}}}}",
+        "t": 1793289600000
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_transfer_income_v1",
+        "billType": "Income",
+        "cents": 1,
+        "merchant": "",
+        "hasExplicitTime": true,
+        "time": 1793289600000
+      }
+    },
+    {
+      "id": "maimi_wechat_transfer_income_v1-positive-2",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "type": "transfer",
+        "isSend": 1,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2000\", \"title\": \"微信转账\", \"des\": \"本人已确认收款\", \"wcpayinfo\": {\"paysubtype\": \"3\", \"feedesc\": \"￥1,234.50\", \"transferid\": \"SYNTH-TRANSFER-123450\", \"paymsgid\": \"SYNTH-TRANSFER-123450\", \"begintransfertime\": \"1793289600\", \"pay_memo\": \"合成转账\"}}}}",
+        "t": 1793289600000
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_transfer_income_v1",
+        "billType": "Income",
+        "cents": 123450,
+        "merchant": "",
+        "hasExplicitTime": true,
+        "time": 1793289600000
+      }
+    },
+    {
+      "id": "maimi_wechat_transfer_income_v1-negative-0",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "captured-redacted",
+      "evidence": "local-device-20261029-app-data-33",
+      "raw": {
+        "type": "transfer",
+        "isSend": 0,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2000\", \"title\": \"微信转账\", \"des\": \"收到转账￥0.01元。如需收钱，请点此升级至最新版本\", \"wcpayinfo\": {\"paysubtype\": \"1\", \"feedesc\": \"￥0.01\", \"transferid\": \"SYNTH-TRANSFER-002\", \"paymsgid\": \"SYNTH-TRANSFER-002\", \"begintransfertime\": \"1793289600\", \"pay_memo\": \"合成转账\"}}}}",
+        "t": 1793289600000
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_transfer_income_v1-negative-1",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "type": "transfer",
+        "isSend": 1,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2000\", \"title\": \"微信转账\", \"des\": \"本人已确认收款\", \"wcpayinfo\": {\"paysubtype\": \"4\", \"feedesc\": \"￥19.99\", \"transferid\": \"SYNTH-TRANSFER-1999\", \"paymsgid\": \"SYNTH-TRANSFER-1999\", \"begintransfertime\": \"1793289600\", \"pay_memo\": \"合成转账\"}}}}",
+        "t": 1793289600000
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_transfer_income_v1-negative-2",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "type": "transfer",
+        "isSend": 1,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2000\", \"title\": \"微信转账\", \"des\": \"本人已确认收款\", \"wcpayinfo\": {\"paysubtype\": \"3\", \"feedesc\": \"￥19.999\", \"transferid\": \"SYNTH-TRANSFER-1999\", \"paymsgid\": \"SYNTH-TRANSFER-1999\", \"begintransfertime\": \"1793289600\", \"pay_memo\": \"合成转账\"}}}}",
+        "t": 1793289600000
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_transfer_income_v1-negative-3",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "type": "transfer",
+        "isSend": 1,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2000\", \"title\": \"微信转账\", \"des\": \"本人已确认收款\", \"wcpayinfo\": {\"paysubtype\": \"3\", \"feedesc\": \"￥19.99\", \"transferid\": \"SYNTH-TRANSFER-1999\", \"paymsgid\": \"SYNTH-TRANSFER-1999\", \"begintransfertime\": \"not-a-time\", \"pay_memo\": \"合成转账\"}}}}",
+        "t": 1793289600000
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_transfer_income_v1-negative-4",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "type": "transfer",
+        "isSend": 1,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2000\", \"title\": \"微信转账\", \"des\": \"本人已确认收款\", \"wcpayinfo\": {\"paysubtype\": \"3\", \"feedesc\": \"￥19.99\", \"transferid\": \"SYNTH-TRANSFER-1999\", \"paymsgid\": \"SYNTH-OTHER-TRANSFER\", \"begintransfertime\": \"1793289600\", \"pay_memo\": \"合成转账\"}}}}",
+        "t": 1793289600000
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "linked-redpacket-positive-1-0",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "host-joined-receipt-contract-v1",
+      "raw": {
+        "type": "redPackage",
+        "isSend": 1,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2001\", \"title\": \"微信红包\", \"des\": \"我给你发了一个红包，赶紧去拆!\", \"wcpayinfo\": {\"paymsgid\": \"SYNTH-REDPACKET-CORRELATED-001\", \"nativeurl\": \"wxpay://c2cbizmessagehandler/hongbao/receivehongbao?sendid=SYNTH-REDPACKET-CORRELATED-001&channelid=1\", \"receivertitle\": \"恭喜发财，大吉大利\", \"sendertitle\": \"恭喜发财，大吉大利\"}}}}",
+        "cachedPayMoney": "",
+        "cachedPayTools": "",
+        "cachedPayShop": "",
+        "t": 1793289600000,
+        "hostCorrelationSchema": 1,
+        "linkedReceipt": {
+          "packetId": "SYNTH-REDPACKET-CORRELATED-001",
+          "amountFen": 1,
+          "role": "sent_total",
+          "phase": "prepared",
+          "success": true,
+          "observedAt": 1793289605000,
+          "messageObservedAt": 1793289600000,
+          "adapterVersion": "wx-8.0.79-3200-v1",
+          "messageRowId": 11,
+          "receiptRowId": 12
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_redpackage_expense_v1",
+        "billType": "Expend",
+        "cents": 1,
+        "merchant": "",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "linked-redpacket-positive-1-1",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "host-joined-receipt-contract-v1",
+      "raw": {
+        "type": "redPackage",
+        "isSend": 1,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2001\", \"title\": \"微信红包\", \"des\": \"我给你发了一个红包，赶紧去拆!\", \"wcpayinfo\": {\"paymsgid\": \"SYNTH-REDPACKET-CORRELATED-001\", \"nativeurl\": \"wxpay://c2cbizmessagehandler/hongbao/receivehongbao?sendid=SYNTH-REDPACKET-CORRELATED-001&channelid=1\", \"receivertitle\": \"恭喜发财，大吉大利\", \"sendertitle\": \"恭喜发财，大吉大利\"}}}}",
+        "cachedPayMoney": "",
+        "cachedPayTools": "",
+        "cachedPayShop": "",
+        "t": 1793289600000,
+        "hostCorrelationSchema": 1,
+        "linkedReceipt": {
+          "packetId": "SYNTH-REDPACKET-CORRELATED-001",
+          "amountFen": 1999,
+          "role": "sent_total",
+          "phase": "detail",
+          "success": true,
+          "observedAt": 1793289605000,
+          "messageObservedAt": 1793289600000,
+          "adapterVersion": "wx-8.0.79-3200-v1",
+          "messageRowId": 11,
+          "receiptRowId": 12
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_redpackage_expense_v1",
+        "billType": "Expend",
+        "cents": 1999,
+        "merchant": "",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "linked-redpacket-positive-1-2",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "host-joined-receipt-contract-v1",
+      "raw": {
+        "type": "redPackage",
+        "isSend": 1,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2001\", \"title\": \"微信红包\", \"des\": \"我给你发了一个红包，赶紧去拆!\", \"wcpayinfo\": {\"paymsgid\": \"SYNTH-REDPACKET-CORRELATED-001\", \"nativeurl\": \"wxpay://c2cbizmessagehandler/hongbao/receivehongbao?sendid=SYNTH-REDPACKET-CORRELATED-001&channelid=1\", \"receivertitle\": \"恭喜发财，大吉大利\", \"sendertitle\": \"恭喜发财，大吉大利\"}}}}",
+        "cachedPayMoney": "",
+        "cachedPayTools": "",
+        "cachedPayShop": "",
+        "t": 1793289600000,
+        "hostCorrelationSchema": 1,
+        "linkedReceipt": {
+          "packetId": "SYNTH-REDPACKET-CORRELATED-001",
+          "amountFen": 100000000,
+          "role": "sent_total",
+          "phase": "prepared",
+          "success": true,
+          "observedAt": 1793289605000,
+          "messageObservedAt": 1793289600000,
+          "adapterVersion": "wx-8.0.79-3200-v1",
+          "messageRowId": 11,
+          "receiptRowId": 12
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_redpackage_expense_v1",
+        "billType": "Expend",
+        "cents": 100000000,
+        "merchant": "",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "linked-redpacket-positive-0-0",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "host-joined-receipt-contract-v1",
+      "raw": {
+        "type": "redPackage",
+        "isSend": 0,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2001\", \"title\": \"微信红包\", \"des\": \"我给你发了一个红包，赶紧去拆!\", \"wcpayinfo\": {\"paymsgid\": \"SYNTH-REDPACKET-CORRELATED-001\", \"nativeurl\": \"wxpay://c2cbizmessagehandler/hongbao/receivehongbao?sendid=SYNTH-REDPACKET-CORRELATED-001&channelid=1\", \"receivertitle\": \"恭喜发财，大吉大利\", \"sendertitle\": \"恭喜发财，大吉大利\"}}}}",
+        "cachedPayMoney": "",
+        "cachedPayTools": "",
+        "cachedPayShop": "",
+        "t": 1793289600000,
+        "hostCorrelationSchema": 1,
+        "linkedReceipt": {
+          "packetId": "SYNTH-REDPACKET-CORRELATED-001",
+          "amountFen": 1,
+          "role": "received_personal",
+          "phase": "opened",
+          "success": true,
+          "observedAt": 1793289605000,
+          "messageObservedAt": 1793289600000,
+          "adapterVersion": "wx-8.0.79-3200-v1",
+          "messageRowId": 11,
+          "receiptRowId": 12
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_redpackage_income_v1",
+        "billType": "Income",
+        "cents": 1,
+        "merchant": "",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "linked-redpacket-positive-0-1",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "host-joined-receipt-contract-v1",
+      "raw": {
+        "type": "redPackage",
+        "isSend": 0,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2001\", \"title\": \"微信红包\", \"des\": \"我给你发了一个红包，赶紧去拆!\", \"wcpayinfo\": {\"paymsgid\": \"SYNTH-REDPACKET-CORRELATED-001\", \"nativeurl\": \"wxpay://c2cbizmessagehandler/hongbao/receivehongbao?sendid=SYNTH-REDPACKET-CORRELATED-001&channelid=1\", \"receivertitle\": \"恭喜发财，大吉大利\", \"sendertitle\": \"恭喜发财，大吉大利\"}}}}",
+        "cachedPayMoney": "",
+        "cachedPayTools": "",
+        "cachedPayShop": "",
+        "t": 1793289600000,
+        "hostCorrelationSchema": 1,
+        "linkedReceipt": {
+          "packetId": "SYNTH-REDPACKET-CORRELATED-001",
+          "amountFen": 1999,
+          "role": "received_personal",
+          "phase": "opened",
+          "success": true,
+          "observedAt": 1793289605000,
+          "messageObservedAt": 1793289600000,
+          "adapterVersion": "wx-8.0.79-3200-v1",
+          "messageRowId": 11,
+          "receiptRowId": 12
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_redpackage_income_v1",
+        "billType": "Income",
+        "cents": 1999,
+        "merchant": "",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "linked-redpacket-positive-0-2",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "host-joined-receipt-contract-v1",
+      "raw": {
+        "type": "redPackage",
+        "isSend": 0,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2001\", \"title\": \"微信红包\", \"des\": \"我给你发了一个红包，赶紧去拆!\", \"wcpayinfo\": {\"paymsgid\": \"SYNTH-REDPACKET-CORRELATED-001\", \"nativeurl\": \"wxpay://c2cbizmessagehandler/hongbao/receivehongbao?sendid=SYNTH-REDPACKET-CORRELATED-001&channelid=1\", \"receivertitle\": \"恭喜发财，大吉大利\", \"sendertitle\": \"恭喜发财，大吉大利\"}}}}",
+        "cachedPayMoney": "",
+        "cachedPayTools": "",
+        "cachedPayShop": "",
+        "t": 1793289600000,
+        "hostCorrelationSchema": 1,
+        "linkedReceipt": {
+          "packetId": "SYNTH-REDPACKET-CORRELATED-001",
+          "amountFen": 100000000,
+          "role": "received_personal",
+          "phase": "opened",
+          "success": true,
+          "observedAt": 1793289605000,
+          "messageObservedAt": 1793289600000,
+          "adapterVersion": "wx-8.0.79-3200-v1",
+          "messageRowId": 11,
+          "receiptRowId": 12
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_redpackage_income_v1",
+        "billType": "Income",
+        "cents": 100000000,
+        "merchant": "",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "linked-redpacket-negative-0",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "captured-redacted",
+      "evidence": "local-device-20261029-app-data-47-no-amount",
+      "raw": {
+        "type": "redPackage",
+        "isSend": 1,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2001\", \"title\": \"微信红包\", \"des\": \"我给你发了一个红包，赶紧去拆!\", \"wcpayinfo\": {\"paymsgid\": \"SYNTH-REDPACKET-CORRELATED-001\", \"nativeurl\": \"wxpay://c2cbizmessagehandler/hongbao/receivehongbao?sendid=SYNTH-REDPACKET-CORRELATED-001&channelid=1\", \"receivertitle\": \"恭喜发财，大吉大利\", \"sendertitle\": \"恭喜发财，大吉大利\"}}}}",
+        "cachedPayMoney": "",
+        "cachedPayTools": "",
+        "cachedPayShop": "",
+        "t": 1793289600000
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "linked-redpacket-negative-1",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "host-joined-receipt-negative-v1",
+      "raw": {
+        "type": "redPackage",
+        "isSend": 1,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2001\", \"title\": \"微信红包\", \"des\": \"我给你发了一个红包，赶紧去拆!\", \"wcpayinfo\": {\"paymsgid\": \"SYNTH-REDPACKET-CORRELATED-001\", \"nativeurl\": \"wxpay://c2cbizmessagehandler/hongbao/receivehongbao?sendid=SYNTH-REDPACKET-CORRELATED-001&channelid=1\", \"receivertitle\": \"恭喜发财，大吉大利\", \"sendertitle\": \"恭喜发财，大吉大利\"}}}}",
+        "cachedPayMoney": "19.99",
+        "cachedPayTools": "",
+        "cachedPayShop": "",
+        "t": 1793289600000
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "linked-redpacket-negative-2",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "host-joined-receipt-negative-v1",
+      "raw": {
+        "type": "redPackage",
+        "isSend": 1,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2001\", \"title\": \"微信红包\", \"des\": \"我给你发了一个红包，赶紧去拆!\", \"wcpayinfo\": {\"paymsgid\": \"SYNTH-REDPACKET-CORRELATED-001\", \"nativeurl\": \"wxpay://c2cbizmessagehandler/hongbao/receivehongbao?sendid=SYNTH-REDPACKET-CORRELATED-001&channelid=1\", \"receivertitle\": \"恭喜发财，大吉大利\", \"sendertitle\": \"恭喜发财，大吉大利\"}}}}",
+        "cachedPayMoney": "",
+        "cachedPayTools": "",
+        "cachedPayShop": "",
+        "t": 1793289600000,
+        "hostCorrelationSchema": 1,
+        "linkedReceipt": {
+          "packetId": "SYNTH-DIFFERENT-PACKET",
+          "amountFen": 1999,
+          "role": "sent_total",
+          "phase": "prepared",
+          "success": true,
+          "observedAt": 1793289605000,
+          "messageObservedAt": 1793289600000,
+          "adapterVersion": "wx-8.0.79-3200-v1",
+          "messageRowId": 11,
+          "receiptRowId": 12
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "linked-redpacket-negative-3",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "host-joined-receipt-negative-v1",
+      "raw": {
+        "type": "redPackage",
+        "isSend": 1,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2001\", \"title\": \"微信红包\", \"des\": \"我给你发了一个红包，赶紧去拆!\", \"wcpayinfo\": {\"paymsgid\": \"SYNTH-REDPACKET-CORRELATED-001\", \"nativeurl\": \"wxpay://c2cbizmessagehandler/hongbao/receivehongbao?sendid=SYNTH-REDPACKET-CORRELATED-001&channelid=1\", \"receivertitle\": \"恭喜发财，大吉大利\", \"sendertitle\": \"恭喜发财，大吉大利\"}}}}",
+        "cachedPayMoney": "",
+        "cachedPayTools": "",
+        "cachedPayShop": "",
+        "t": 1793289600000,
+        "hostCorrelationSchema": 1,
+        "linkedReceipt": {
+          "packetId": "SYNTH-REDPACKET-CORRELATED-001",
+          "amountFen": 19.99,
+          "role": "sent_total",
+          "phase": "prepared",
+          "success": true,
+          "observedAt": 1793289605000,
+          "messageObservedAt": 1793289600000,
+          "adapterVersion": "wx-8.0.79-3200-v1",
+          "messageRowId": 11,
+          "receiptRowId": 12
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "linked-redpacket-negative-4",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "host-joined-receipt-negative-v1",
+      "raw": {
+        "type": "redPackage",
+        "isSend": 1,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2001\", \"title\": \"微信红包\", \"des\": \"我给你发了一个红包，赶紧去拆!\", \"wcpayinfo\": {\"paymsgid\": \"SYNTH-REDPACKET-CORRELATED-001\", \"nativeurl\": \"wxpay://c2cbizmessagehandler/hongbao/receivehongbao?sendid=SYNTH-REDPACKET-CORRELATED-001&channelid=1\", \"receivertitle\": \"恭喜发财，大吉大利\", \"sendertitle\": \"恭喜发财，大吉大利\"}}}}",
+        "cachedPayMoney": "",
+        "cachedPayTools": "",
+        "cachedPayShop": "",
+        "t": 1793289600000,
+        "hostCorrelationSchema": 1,
+        "linkedReceipt": {
+          "packetId": "SYNTH-REDPACKET-CORRELATED-001",
+          "amountFen": "1999",
+          "role": "sent_total",
+          "phase": "prepared",
+          "success": true,
+          "observedAt": 1793289605000,
+          "messageObservedAt": 1793289600000,
+          "adapterVersion": "wx-8.0.79-3200-v1",
+          "messageRowId": 11,
+          "receiptRowId": 12
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "linked-redpacket-negative-5",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "host-joined-receipt-negative-v1",
+      "raw": {
+        "type": "redPackage",
+        "isSend": 1,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2001\", \"title\": \"微信红包\", \"des\": \"我给你发了一个红包，赶紧去拆!\", \"wcpayinfo\": {\"paymsgid\": \"SYNTH-REDPACKET-CORRELATED-001\", \"nativeurl\": \"wxpay://c2cbizmessagehandler/hongbao/receivehongbao?sendid=SYNTH-REDPACKET-CORRELATED-001&channelid=1\", \"receivertitle\": \"恭喜发财，大吉大利\", \"sendertitle\": \"恭喜发财，大吉大利\"}}}}",
+        "cachedPayMoney": "",
+        "cachedPayTools": "",
+        "cachedPayShop": "",
+        "t": 1793289600000,
+        "hostCorrelationSchema": 1,
+        "linkedReceipt": {
+          "packetId": "SYNTH-REDPACKET-CORRELATED-001",
+          "amountFen": 1999,
+          "role": "sent_total",
+          "phase": "prepared",
+          "success": false,
+          "observedAt": 1793289605000,
+          "messageObservedAt": 1793289600000,
+          "adapterVersion": "wx-8.0.79-3200-v1",
+          "messageRowId": 11,
+          "receiptRowId": 12
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "linked-redpacket-negative-6",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "host-joined-receipt-negative-v1",
+      "raw": {
+        "type": "redPackage",
+        "isSend": 0,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2001\", \"title\": \"微信红包\", \"des\": \"我给你发了一个红包，赶紧去拆!\", \"wcpayinfo\": {\"paymsgid\": \"SYNTH-REDPACKET-CORRELATED-001\", \"nativeurl\": \"wxpay://c2cbizmessagehandler/hongbao/receivehongbao?sendid=SYNTH-REDPACKET-CORRELATED-001&channelid=1\", \"receivertitle\": \"恭喜发财，大吉大利\", \"sendertitle\": \"恭喜发财，大吉大利\"}}}}",
+        "cachedPayMoney": "",
+        "cachedPayTools": "",
+        "cachedPayShop": "",
+        "t": 1793289600000,
+        "hostCorrelationSchema": 1,
+        "linkedReceipt": {
+          "packetId": "SYNTH-REDPACKET-CORRELATED-001",
+          "amountFen": 1999,
+          "role": "sent_total",
+          "phase": "opened",
+          "success": true,
+          "observedAt": 1793289605000,
+          "messageObservedAt": 1793289600000,
+          "adapterVersion": "wx-8.0.79-3200-v1",
+          "messageRowId": 11,
+          "receiptRowId": 12
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "linked-redpacket-negative-7",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "host-joined-receipt-negative-v1",
+      "raw": {
+        "type": "redPackage",
+        "isSend": 0,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2001\", \"title\": \"微信红包\", \"des\": \"我给你发了一个红包，赶紧去拆!\", \"wcpayinfo\": {\"paymsgid\": \"SYNTH-REDPACKET-CORRELATED-001\", \"nativeurl\": \"wxpay://c2cbizmessagehandler/hongbao/receivehongbao?sendid=SYNTH-REDPACKET-CORRELATED-001&channelid=1\", \"receivertitle\": \"恭喜发财，大吉大利\", \"sendertitle\": \"恭喜发财，大吉大利\"}}}}",
+        "cachedPayMoney": "",
+        "cachedPayTools": "",
+        "cachedPayShop": "",
+        "t": 1793289600000,
+        "hostCorrelationSchema": 1,
+        "linkedReceipt": {
+          "packetId": "SYNTH-REDPACKET-CORRELATED-001",
+          "amountFen": 1999,
+          "role": "received_personal",
+          "phase": "detail",
+          "success": true,
+          "observedAt": 1793289605000,
+          "messageObservedAt": 1793289600000,
+          "adapterVersion": "wx-8.0.79-3200-v1",
+          "messageRowId": 11,
+          "receiptRowId": 12
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "linked-redpacket-negative-8",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "host-joined-receipt-negative-v1",
+      "raw": {
+        "type": "redPackage",
+        "isSend": 1,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2001\", \"title\": \"微信红包\", \"des\": \"我给你发了一个红包，赶紧去拆!\", \"wcpayinfo\": {\"paymsgid\": \"SYNTH-REDPACKET-CORRELATED-001\", \"nativeurl\": \"wxpay://c2cbizmessagehandler/hongbao/receivehongbao?sendid=SYNTH-REDPACKET-CORRELATED-001&channelid=1\", \"receivertitle\": \"恭喜发财，大吉大利\", \"sendertitle\": \"恭喜发财，大吉大利\"}}}}",
+        "cachedPayMoney": "",
+        "cachedPayTools": "",
+        "cachedPayShop": "",
+        "t": 1793289600000,
+        "hostCorrelationSchema": 1,
+        "linkedReceipt": {
+          "packetId": "SYNTH-REDPACKET-CORRELATED-001",
+          "amountFen": 1999,
+          "role": "sent_total",
+          "phase": "prepared",
+          "success": true,
+          "observedAt": 1793289605000,
+          "messageObservedAt": 1793289600000,
+          "adapterVersion": "unknown",
+          "messageRowId": 11,
+          "receiptRowId": 12
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "linked-redpacket-negative-9",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "host-joined-receipt-negative-v1",
+      "raw": {
+        "type": "redPackage",
+        "isSend": 1,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2001\", \"title\": \"微信红包\", \"des\": \"我给你发了一个红包，赶紧去拆!\", \"wcpayinfo\": {\"paymsgid\": \"SYNTH-REDPACKET-CORRELATED-001\", \"nativeurl\": \"wxpay://c2cbizmessagehandler/hongbao/receivehongbao?sendid=SYNTH-REDPACKET-CORRELATED-001&channelid=1\", \"receivertitle\": \"恭喜发财，大吉大利\", \"sendertitle\": \"恭喜发财，大吉大利\"}}}}",
+        "cachedPayMoney": "",
+        "cachedPayTools": "",
+        "cachedPayShop": "",
+        "t": 1793289600000,
+        "hostCorrelationSchema": 1,
+        "linkedReceipt": {
+          "packetId": "SYNTH-REDPACKET-CORRELATED-001",
+          "amountFen": 1999,
+          "role": "sent_total",
+          "phase": "prepared",
+          "success": true,
+          "observedAt": 1793289605000,
+          "messageObservedAt": 1793289600000,
+          "adapterVersion": "wx-8.0.79-3200-v1",
+          "messageRowId": 0,
+          "receiptRowId": 12
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "linked-redpacket-negative-10",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "host-joined-receipt-negative-v1",
+      "raw": {
+        "type": "redPackage",
+        "isSend": 1,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2001\", \"title\": \"微信红包\", \"des\": \"我给你发了一个红包，赶紧去拆!\", \"wcpayinfo\": {\"paymsgid\": \"SYNTH-REDPACKET-CORRELATED-001\", \"nativeurl\": \"wxpay://c2cbizmessagehandler/hongbao/receivehongbao?sendid=SYNTH-REDPACKET-CORRELATED-001&channelid=1\", \"receivertitle\": \"恭喜发财，大吉大利\", \"sendertitle\": \"恭喜发财，大吉大利\"}}}}",
+        "cachedPayMoney": "",
+        "cachedPayTools": "",
+        "cachedPayShop": "",
+        "t": 1793289600000,
+        "hostCorrelationSchema": 2,
+        "linkedReceipt": {
+          "packetId": "SYNTH-REDPACKET-CORRELATED-001",
+          "amountFen": 1999,
+          "role": "sent_total",
+          "phase": "prepared",
+          "success": true,
+          "observedAt": 1793289605000,
+          "messageObservedAt": 1793289600000,
+          "adapterVersion": "wx-8.0.79-3200-v1",
+          "messageRowId": 11,
+          "receiptRowId": 12
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "linked-redpacket-negative-11",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "host-joined-receipt-negative-v1",
+      "raw": {
+        "type": "redPackage",
+        "isSend": 1,
+        "content": "{\"msg\": {\"appmsg\": {\"type\": \"2001\", \"title\": \"微信红包\", \"des\": \"我给你发了一个红包，赶紧去拆!\", \"wcpayinfo\": {\"paymsgid\": \"SYNTH-REDPACKET-CORRELATED-001\", \"nativeurl\": \"wxpay://c2cbizmessagehandler/hongbao/receivehongbao?sendid=SYNTH-REDPACKET-CORRELATED-001&channelid=1\", \"receivertitle\": \"恭喜发财，大吉大利\", \"sendertitle\": \"恭喜发财，大吉大利\"}}}}",
+        "cachedPayMoney": "",
+        "cachedPayTools": "",
+        "cachedPayShop": "",
+        "t": 1793289600000,
+        "hostCorrelationSchema": 1,
+        "linkedReceipt": {
+          "packetId": "SYNTH-REDPACKET-CORRELATED-001",
+          "amountFen": 1999,
+          "role": "sent_total",
+          "phase": "prepared",
+          "success": true,
+          "observedAt": 1793289605000,
+          "messageObservedAt": 1793289600000,
+          "adapterVersion": "wx-8.0.79-3200-v1",
+          "messageRowId": 11,
+          "receiptRowId": 12,
+          "currency": "USD"
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    }
+  ]
+}
