@@ -2,6 +2,7 @@
 function parse(raw, direction) {
   var root = common.object(common.json(raw));
   if (!root) return null;
+  if (Object.prototype.hasOwnProperty.call(root, 'linkedReceipt') || Object.prototype.hasOwnProperty.call(root, 'hostCorrelationSchema')) return linked(root, direction);
   var m = common.object(root.mMap);
   var title, description, money, id = '', time = 0, observedAt = root.t, standardPayment = false;
   if (m) {
@@ -61,4 +62,52 @@ function parse(raw, direction) {
   var success = direction === 'Expend' ? /(?:^|\n)(?:红包已发出|红包发送成功)(?:$|\n)/ : /(?:^|\n)(?:本人已领取红包|红包领取成功)(?:$|\n)/;
   if (!standardPayment && !success.test(description)) return null;
   return common.result(direction, money, observedAt, '', '', time, id ? 'hongbao_' + id : '');
+}
+
+
+/* 仅宿主已持久化并核对两个来源的联合输入；外部携带该字段在宿主入口拒绝。 */
+function linked(root, direction) {
+  var receipt = common.object(root.linkedReceipt);
+  if (root.type !== 'redPackage' || root.hostCorrelationSchema !== 1 || !receipt || receipt.success !== true ||
+      receipt.adapterVersion !== 'wx-8.0.79-3200-v1') return null;
+  if (direction === 'Expend' ? root.isSend !== 1 || receipt.role !== 'sent_total' || ['prepared', 'detail'].indexOf(receipt.phase) < 0 :
+      root.isSend !== 0 || receipt.role !== 'received_personal' || receipt.phase !== 'opened') return null;
+  var amount = receipt.amountFen;
+  if (typeof amount !== 'number' || !isFinite(amount) || Math.floor(amount) !== amount || amount < 1 || amount > 100000000) return null;
+  function positiveInteger(v) { return typeof v === 'number' && isFinite(v) && Math.floor(v) === v && v > 0; }
+  if (!positiveInteger(receipt.messageRowId) || !positiveInteger(receipt.receiptRowId) || receipt.messageRowId === receipt.receiptRowId ||
+      !positiveInteger(receipt.observedAt) || !positiveInteger(receipt.messageObservedAt)) return null;
+  var id = common.text(receipt.packetId);
+  if (!/^[A-Za-z0-9_-]{6,120}$/.test(id)) return null;
+  var content = common.object(typeof root.content === 'string' ? common.json(root.content) : root.content);
+  var msg = content && common.object(content.msg), app = msg && common.object(msg.appmsg), pay = app && common.object(app.wcpayinfo);
+  if (!pay || common.text(app.type) !== '2001') return null;
+  var direct = common.text(pay.sendid), native = common.text(pay.nativeurl), nativeId = '';
+  if (direct && !/^[A-Za-z0-9_-]{6,120}$/.test(direct)) return null;
+  if (native) {
+    var url = /^wxpay:\/\/c2cbizmessagehandler\/hongbao\/(?:receivehongbao|openhongbao)\?([^#]*)$/.exec(native);
+    if (!url) return null;
+    var parts = url[1].split('&'), count = 0;
+    try {
+      for (var i = 0; i < parts.length; i++) {
+        var pair = parts[i].split('=');
+        if (decodeURIComponent(pair[0]) === 'sendid') {
+          if (pair.length !== 2) return null;
+          nativeId = decodeURIComponent(pair[1]); count++;
+        }
+      }
+    } catch (_) { return null; }
+    if (count !== 1 || !/^[A-Za-z0-9_-]{6,120}$/.test(nativeId)) return null;
+  }
+  if (direct && nativeId && direct !== nativeId) return null;
+  var canonical = nativeId || direct || common.text(pay.paymsgid);
+  if (canonical !== id) return null;
+  if (Object.prototype.hasOwnProperty.call(pay, 'currency') && ['CNY', 'RMB', '人民币'].indexOf(common.text(pay.currency)) < 0) return null;
+  if (Object.prototype.hasOwnProperty.call(receipt, 'currency') && receipt.currency !== 'CNY') return null;
+  if (direction === 'Expend' && common.text(pay.feedesc)) {
+    var stated = common.displayed(pay.feedesc);
+    if (!stated || Math.round(Number(stated) * 100) !== amount) return null;
+  }
+  var money = Math.floor(amount / 100) + '.' + ('0' + (amount % 100)).slice(-2);
+  return common.result(direction, money, receipt.messageObservedAt, '', '', 0, 'hongbao_' + id);
 }

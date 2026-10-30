@@ -2,7 +2,6 @@ package com.example.autobook.data
 
 import android.content.Context
 import androidx.room.withTransaction
-import com.example.billkit.Packages
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
@@ -80,11 +79,7 @@ object BackupStore {
                 localRules = LocalRuleStore.snapshot(),
                 monthStartDay = LedgerPeriodStore.read(context),
             ),
-            settings = Backup.SettingsSnapshot(
-                whitelist = settings.whitelist.toList().sorted(),
-                minIntervalMs = settings.minIntervalMs,
-                rootMode = settings.rootMode,
-            ),
+            settings = settingsSnapshot(settings),
         ).let { Backup.encode(it) }
     }
 
@@ -312,21 +307,35 @@ object BackupStore {
         return "麦米-备份-$stamp.json"
     }
 
-    /** 恢复后把"能从备份带回来的设置"写回去；返回是否改过白名单（调用方据此刷新 BillKit） */
+    /** Uses original choices so a self-build export does not erase another build's saved scope. */
+    internal fun settingsSnapshot(settings: Settings): Backup.SettingsSnapshot = Backup.SettingsSnapshot(
+        whitelist = settings.configuredWhitelist.toList().sorted(),
+        minIntervalMs = settings.minIntervalMs,
+        rootMode = settings.rootMode,
+    )
+
+    /** 恢复后把可移植配置原值写回；运行范围仍由Settings统一限制。 */
     fun applySettings(context: Context, snapshot: Backup.SettingsSnapshot): Boolean {
-        val settings = Settings(context)
+        val changed = applySettingsTo(Settings(context), snapshot)
+        com.example.autobook.capture.CaptureModeManager.reconcile(context)
+        return changed
+    }
+
+    /** Isolated Android verification shares the exact restore path without starting global services. */
+    internal fun applySettingsTo(settings: Settings, snapshot: Backup.SettingsSnapshot): Boolean {
         val oldWhitelist = settings.whitelist
         if (snapshot.whitelist.isNotEmpty()) settings.whitelist = snapshot.whitelist.toSet()
         if (snapshot.minIntervalMs in 300L..10_000L) settings.minIntervalMs = snapshot.minIntervalMs
         val restoredMode = CaptureModePolicy.restore(settings.captureMode, snapshot.rootMode)
         if (settings.captureMode == null && restoredMode != null) settings.captureMode = restoredMode
-        com.example.autobook.capture.CaptureModeManager.reconcile(context)
         return settings.whitelist != oldWhitelist
     }
 
-    /** 白名单为空时至少保留默认清单，避免恢复后什么都识别不到 */
+    /** Compatibility helper returns only packages accepted by this build. */
     fun safeWhitelist(list: List<String>): Set<String> =
-        list.filter { it.isNotBlank() }.toSet().ifEmpty { Packages.defaultWhitelist }
+        if (list.isEmpty()) CaptureScope.packages
+        else CaptureScope.filterPackages(list.filter { it.isNotBlank() }.toSet())
+
 }
 
 /** A restore may advance processing state, but cannot make a recorded item pending again. */

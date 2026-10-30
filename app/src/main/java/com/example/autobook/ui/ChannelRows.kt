@@ -35,24 +35,7 @@ internal fun ChannelRows(
                         }
                     },
                 )
-                CaptureChannel.SMS -> ListRow(
-                    title = "银行短信",
-                    subtitle = when {
-                        !state.smsEnabled -> "已关闭"
-                        !state.smsGranted -> "还差短信权限 · 点击授权"
-                        !state.enabled -> "已开启 · 自动记账已暂停"
-                        else -> "已就绪 · 识别新收到的银行短信"
-                    },
-                    leading = { SettingsIconBadge("银行短信", AbIcons.Note) }, dividerAbove = index > 0,
-                    trailing = { AbSwitch(state.smsEnabled) {
-                        CaptureModeManager.setSmsEnabled(context, it)
-                        if (it && !state.smsGranted) onAction(CaptureAction.SMS_PERMISSION)
-                    } },
-                    onClick = if (state.smsEnabled && state.smsGranted) null else ({
-                        if (!state.smsEnabled) CaptureModeManager.setSmsEnabled(context, true)
-                        if (!state.smsGranted) onAction(CaptureAction.SMS_PERMISSION)
-                    }),
-                )
+                CaptureChannel.SMS -> Unit // Legacy enum only; self has no SMS row.
                 CaptureChannel.PAGE -> ListRow(
                     title = "页面辅助",
                     subtitle = when {

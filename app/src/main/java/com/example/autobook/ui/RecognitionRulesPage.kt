@@ -75,7 +75,6 @@ internal fun RecognitionRulesPage(
     healthInput: CaptureHealthInput,
     onBack: () -> Unit,
     onToggleApp: (String) -> Unit,
-    onAddApp: (String) -> Unit,
     onOpenDebug: () -> Unit,
     section: RecognitionRuleSection = RecognitionRuleSection.APPS,
 ) {
@@ -86,8 +85,6 @@ internal fun RecognitionRulesPage(
     var appQuery by rememberSaveable { mutableStateOf("") }
     var appFilter by rememberSaveable { mutableStateOf(AppFilter.ALL) }
     var expandedApp by rememberSaveable { mutableStateOf<String?>(null) }
-    var newPackage by rememberSaveable { mutableStateOf("") }
-    var addError by rememberSaveable { mutableStateOf<String?>(null) }
 
     var learningQuery by rememberSaveable { mutableStateOf("") }
     var learningType by rememberSaveable { mutableStateOf<BillType?>(null) }
@@ -126,19 +123,6 @@ internal fun RecognitionRulesPage(
     val effectivePending = remember(ruleState) { LearningRules.effectivePending(ruleState) }
     val query = LearningQuery(learningQuery, learningType, learningField, learningSource)
     val learnedRows = remember(ruleState, query) { LearningRules.filter(ruleState.learned, query) }
-
-    fun submit() {
-        val pkg = newPackage.trim()
-        val error = when {
-            pkg.isEmpty() -> "请输入包名"
-            !pkg.matches(Regex("[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+")) -> "包名须形如 com.example.app"
-            pkg.length > 160 -> "包名过长"
-            pkg in whitelist -> "已在清单中"
-            else -> runCatching { onAddApp(pkg); null }.getOrElse { "未能添加：${it.message}" }
-        }
-        addError = error
-        if (error == null) newPackage = ""
-    }
 
     SubPageScaffold(title = section.title, onBack = onBack) { padding ->
         com.example.autobook.ui.design.SectionLazyColumn(
@@ -219,28 +203,6 @@ internal fun RecognitionRulesPage(
                             ChannelDetail(state, onToggleApp)
                         }
                     }
-                }
-                item {
-                    InsetGroup {
-                        Row(
-                            Modifier.fillMaxWidth().padding(horizontal = AbSpacing.l, vertical = AbSpacing.s),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
-                        ) {
-                            AbTextField(
-                                value = newPackage,
-                                onValueChange = { newPackage = it; addError = null },
-                                modifier = Modifier.weight(1f),
-                                placeholder = "com.example.app",
-                                onDone = { submit() },
-                            )
-                            PrimaryButton("添加", { submit() }, Modifier.width(88.dp))
-                        }
-                    }
-                }
-                item {
-                    if (addError != null) GroupFooter(addError!!)
-                    else Unit
                 }
 
             }

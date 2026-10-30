@@ -68,8 +68,11 @@ echo "🔨 构建主 App (Release，包含内置 LSP 增强)..."
 
 APP_DEBUG="app/build/outputs/apk/debug/app-debug.apk"
 APP_RELEASE="app/build/outputs/apk/release/app-release.apk"
-DIST_DEBUG="dist/AutoBook-${VERSION_NAME}-debug.apk"
-DIST_RELEASE="dist/AutoBook-${VERSION_NAME}-release.apk"
+BRANCH_TAG="$(git branch --show-current)"
+BRANCH_TAG="${BRANCH_TAG//\//-}"
+BRANCH_TAG="${BRANCH_TAG:-detached}"
+DIST_DEBUG="dist/AutoBook-${VERSION_NAME}-${BRANCH_TAG}-debug.apk"
+DIST_RELEASE="dist/AutoBook-${VERSION_NAME}-${BRANCH_TAG}-release.apk"
 
 # 复制 + 核对版本（aapt2 读到的不一致就报错，不静默通过）
 echo ""

@@ -106,7 +106,7 @@ import java.time.LocalDate
 private enum class SettingsPage(val title: String) {
     ROOT("设置"), LEDGER_PERIOD("记账周期"), CATEGORIES("分类"), EXPENSE_CATEGORIES("支出分类"), INCOME_CATEGORIES("收入分类"), CATEGORY_PRESETS("分类预设"), ASSETS("资产"), NOTE("备注"),
     NOTE_TEMPLATE("备注模板"), NOTE_SUGGESTIONS("备注建议"),
-    AUTOMATION("自动记账"), ORDINARY_SETUP("开启自动记账"), BACKGROUND("后台运行设置"), CHANNELS("识别设置"), AUTOMATION_MORE("更多设置"), LSP("LSPosed 模块"), SMS("银行短信"), CONFIRMATION("确认卡"),
+    AUTOMATION("自动记账"), ORDINARY_SETUP("开启自动记账"), BACKGROUND("后台运行设置"), CHANNELS("识别设置"), AUTOMATION_MORE("更多设置"), LSP("LSPosed 模块"), SMS("自动记账"), CONFIRMATION("确认卡"),
     RECOGNITION("应用与通道"), LEARNING("学习记忆"), TEMPLATES("通知模板"),
     RULE_FILES("规则文件"), MEALS("餐段设置"), STATISTICS("识别统计"),
     PERMISSIONS("权限与后台运行"), MODE("使用方式"), ROOT_MODE("Root 状态"),
@@ -120,7 +120,7 @@ private fun captureSettingsPage(destination: CaptureSettingsDestination): Settin
     CaptureSettingsDestination.SETUP -> SettingsPage.ORDINARY_SETUP
     CaptureSettingsDestination.ROOT_STATUS -> SettingsPage.ROOT_MODE
     CaptureSettingsDestination.SUPPORTED_APPS -> SettingsPage.RECOGNITION
-    CaptureSettingsDestination.SMS -> SettingsPage.SMS
+    CaptureSettingsDestination.SMS -> SettingsPage.RECOGNITION
 }
 
 /**
@@ -217,8 +217,6 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
     val serviceBound = healthInput.accessibilityAuthorized && healthInput.accessibilityBound
     var overlayGranted by remember { mutableStateOf(OverlayAnchor.canShow(context)) }
     var notifyGranted by remember { mutableStateOf(ConfirmDelivery.hasNotificationPermission(context)) }
-    // 短信通道：RECEIVE_SMS 是运行时权限，开关打开但没授权时通道是哑的，必须显式提示。
-    var smsGranted by remember { mutableStateOf(hasSmsPermission(context)) }
     var rootGranted by remember { mutableStateOf<Boolean?>(null) }
 
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -227,7 +225,6 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
             if (event == Lifecycle.Event.ON_RESUME) {
                 overlayGranted = OverlayAnchor.canShow(context)
                 notifyGranted = ConfirmDelivery.hasNotificationPermission(context)
-                smsGranted = hasSmsPermission(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -333,19 +330,18 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
             onToggleConfirm = { autoConfirm = it; settings.autoConfirm = it },
             onNavigate = { navigate(settingsPageFor(it)) }, gate = modeGate, checkingRoot = checkingRoot,
         )
-        SettingsPage.ORDINARY_SETUP -> OrdinarySetupPage(back, { navigate(SettingsPage.SMS) }, { navigate(SettingsPage.BACKGROUND) })
+        SettingsPage.ORDINARY_SETUP -> OrdinarySetupPage(back, { navigate(SettingsPage.BACKGROUND) })
         SettingsPage.CHANNELS -> if (mode != CaptureMode.ROOT) {
-            OrdinarySetupPage(back, { navigate(SettingsPage.SMS) }, { navigate(SettingsPage.BACKGROUND) })
+            OrdinarySetupPage(back, { navigate(SettingsPage.BACKGROUND) })
         } else RecognitionSettingsPage(mode, snapshot, autoConfirm, back,
             ::handleHealthAction, { navigate(SettingsPage.PERMISSIONS) }, { navigate(SettingsPage.ROOT_MODE) })
         SettingsPage.LSP -> LspSettingsPage(mode, captureState.hookEnabled, enabled, back) { action ->
             performCaptureAction(context, action, { navigate(captureSettingsPage(it)) }, { navigate(SettingsPage.PENDING) })
         }
-        SettingsPage.SMS -> SmsSettingsPage(snapshot, back)
+        SettingsPage.SMS -> OrdinarySetupPage(back, { navigate(SettingsPage.BACKGROUND) })
         SettingsPage.AUTOMATION_MORE -> SettingsMenuPage("更多设置", back, listOf(
             "识别" to listOf(
                 SettingsLink("应用范围", "${whitelist.size} 个应用", AbIcons.Store) { navigate(SettingsPage.RECOGNITION) },
-                SettingsLink("银行短信", if (captureState.smsEnabled) "已开启" else "按需开启", AbIcons.Note) { navigate(SettingsPage.SMS) },
             ),
             "学习与规则" to listOf(
                 SettingsLink("学习记忆", "${ruleState.learned.size} 条已生效记忆", AbIcons.Note) { navigate(SettingsPage.LEARNING) },
@@ -438,11 +434,6 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
                 whitelist = settings.whitelist
                 applyKit()
             },
-            onAddApp = { pkg ->
-                settings.setSupported(pkg, true)
-                whitelist = settings.whitelist
-                applyKit()
-            },
             onOpenDebug = { navigate(SettingsPage.DEBUG) },
         )
 
@@ -456,7 +447,7 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
         }
 
         SettingsPage.PERMISSIONS, SettingsPage.BACKGROUND -> if (shown == SettingsPage.PERMISSIONS && mode != CaptureMode.ROOT) {
-            OrdinarySetupPage(back, { navigate(SettingsPage.SMS) }, { navigate(SettingsPage.BACKGROUND) })
+            OrdinarySetupPage(back, { navigate(SettingsPage.BACKGROUND) })
         } else PermissionsPage(
             mode = mode,
             rootGranted = rootGranted,
@@ -466,8 +457,6 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
             overlayGranted = overlayGranted,
             notifyGranted = notifyGranted,
             onNotifyGranted = { notifyGranted = it },
-            smsGranted = smsGranted,
-            onSmsGranted = { smsGranted = it },
             onBack = back,
             backgroundOnly = shown == SettingsPage.BACKGROUND,
         )
@@ -556,8 +545,6 @@ private fun PermissionsPage(
     overlayGranted: Boolean,
     notifyGranted: Boolean,
     onNotifyGranted: (Boolean) -> Unit,
-    smsGranted: Boolean,
-    onSmsGranted: (Boolean) -> Unit,
     onBack: () -> Unit,
     backgroundOnly: Boolean = false,
 ) {
@@ -570,9 +557,6 @@ private fun PermissionsPage(
     ) { granted ->
         onNotifyGranted(ConfirmDelivery.hasNotificationPermission(context))
     }
-    val smsLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { onSmsGranted(hasSmsPermission(context)) }
 
     // 保活体检结果：全部来自实测，不含推断。每次回到前台重读一次（用户可能刚去系统里改过）。
     var keepAlive by remember { mutableStateOf<AccessibilityEnhancer.KeepAliveStatus?>(null) }
@@ -635,24 +619,6 @@ private fun PermissionsPage(
                         onClick = { openAccessibilitySettings(context) },
                     )
                 }
-                InsetDivider()
-                ListRow(
-                    title = "读取银行短信",
-                    subtitle = if (smsGranted) {
-                        "已授权 · 只接收新短信，不读取历史短信"
-                    } else {
-                        "未授权 — 短信通道打开后也收不到内容"
-                    },
-                    chevron = true,
-                    dividerAbove = true,
-                    onClick = {
-                        if (smsGranted) {
-                            openAppDetailsSettings(context)
-                        } else {
-                            smsLauncher.launch(Manifest.permission.RECEIVE_SMS)
-                        }
-                    },
-                )
                 InsetDivider()
                 ListRow(
                     title = "显示在其他应用上层",
@@ -1438,16 +1404,6 @@ private fun openAppDetailsSettings(context: Context) {
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     runCatching { context.startActivity(intent) }
 }
-
-/**
- * 短信权限是否已授予。
- *
- * 只查 RECEIVE_SMS：短信通道只接收新短信，不读历史库，所以不需要 READ_SMS。
- * 权限被用户在系统里撤销后，开关仍然开着但通道是哑的 —— UI 必须能看出这个差别。
- */
-private fun hasSmsPermission(context: Context): Boolean =
-    androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) ==
-        android.content.pm.PackageManager.PERMISSION_GRANTED
 
 /** 通知被用户在系统里关掉时，直接跳到本 App 的通知设置页 */
 private fun openNotificationChannelSettings(context: Context) {

@@ -34,7 +34,7 @@ import com.example.autobook.data.Settings
 import com.example.autobook.ui.design.*
 
 @Composable
-internal fun OrdinarySetupPage(onBack: () -> Unit, onSms: () -> Unit, onBackground: () -> Unit) {
+internal fun OrdinarySetupPage(onBack: () -> Unit, onBackground: () -> Unit) {
     val context = LocalContext.current
     val settings = remember { Settings(context) }
     val input = rememberCaptureHealthInput()
@@ -206,11 +206,6 @@ internal fun OrdinarySetupPage(onBack: () -> Unit, onSms: () -> Unit, onBackgrou
                                 }
                             }
                         }))
-                    ListRow(title = "银行短信", subtitle = when {
-                        !input.smsEnabled -> "按需开启 · 不影响通知和页面识别"
-                        !input.smsGranted -> "已开启，待短信授权"
-                        else -> "已授权 · 接收新银行短信"
-                    }, dividerAbove = true, chevron = true, onClick = onSms)
                     ListRow(title = "后台运行设置", subtitle = "电池、自启动与服务检查", dividerAbove = true,
                         chevron = true, onClick = onBackground)
                     ListRow(title = "识别后弹出确认卡", subtitle = if (input.autoConfirm) "核对后保存" else "稍后到待确认处理",

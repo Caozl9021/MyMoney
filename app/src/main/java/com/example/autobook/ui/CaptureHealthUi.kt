@@ -1,8 +1,5 @@
 package com.example.autobook.ui
 
-import android.Manifest
-import android.content.pm.PackageManager
-import androidx.core.content.ContextCompat
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -87,8 +84,8 @@ internal fun readCaptureHealthInput(context: Context): CaptureHealthInput {
         SystemSettings.canDrawOverlays(context), Settings(context).autoConfirm,
         capture.pageEnabled, capture.notificationsEnabled,
         PaymentNotificationListener.isAuthorized(context), notificationBound,
-        smsEnabled = capture.smsEnabled,
-        smsGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED,
+        smsEnabled = false,
+        smsGranted = false,
         hookEnabled = capture.hookEnabled,
         hookReady = selectedHookPackages.isNotEmpty(),
         rootNotificationReady = rootRuntime.ready && rootServiceActive,
@@ -120,9 +117,8 @@ internal fun performDirectCaptureAction(context: Context, action: CaptureAction,
         CaptureAction.PENDING -> onPending()
         CaptureAction.ACCESSIBILITY -> launchCaptureSettings(context, Intent(SystemSettings.ACTION_ACCESSIBILITY_SETTINGS))
         CaptureAction.OVERLAY -> launchCaptureSettings(context, Intent(SystemSettings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}")))
-        // 短信权限是运行时权限，必须走应用自己的请求才能弹出系统对话框；
-        // 直接跳系统设置页在 MIUI 上会被折叠进「其他权限」深处。
-        CaptureAction.SMS_PERMISSION -> onSettings(CaptureSettingsDestination.SMS)
+        // Legacy actions never request SMS or reopen an unsupported source.
+        CaptureAction.SMS_PERMISSION -> onSettings(CaptureSettingsDestination.SUPPORTED_APPS)
         CaptureAction.NOTIFY -> launchCaptureSettings(context, Intent(SystemSettings.ACTION_APP_NOTIFICATION_SETTINGS)
             .putExtra(SystemSettings.EXTRA_APP_PACKAGE, context.packageName))
         CaptureAction.ROOT -> onSettings(CaptureSettingsDestination.ROOT_STATUS)

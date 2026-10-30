@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "version": "maimi-rules-2",
+  "version": "maimi-rules-4",
   "files": {
-    "rules_all.json": "7f1b0356de0aa0bba331a35eeaa342a40c84bea3bbf4233c38e4cdfebe675dca",
+    "rules_all.json": "784aa16fd3fc151d2533a71e3c9402a01d79596d26edf0662890e248ed40c9af",
     "js_common.js": "fa457e05031e14e44c696c29179cefd882560a779dee993056cc00f508cde919",
     "js_category.js": "b5e40731bf06cd8968a3cebdb3ed30cc12a15e76bdcca08d80a33d6c2328e5e1",
     "categories.json": "e244c251bf4072c659d3740fc60224106d7109887225ce25c8cb5981d40b7b0e",
@@ -110,22 +110,6 @@
       "validationLevel": "synthetic-only"
     },
     {
-      "id": "maimi_cmb_data_expense_v1",
-      "app": "com.android.phone",
-      "type": "DATA",
-      "enabled": true,
-      "evidence": [],
-      "validationLevel": "synthetic-only"
-    },
-    {
-      "id": "maimi_cmb_data_income_v1",
-      "app": "com.android.phone",
-      "type": "DATA",
-      "enabled": true,
-      "evidence": [],
-      "validationLevel": "synthetic-only"
-    },
-    {
       "id": "maimi_wechat_transfer_expense_v1",
       "app": "com.tencent.mm",
       "type": "DATA",
@@ -144,5 +128,5 @@
       "validationLevel": "synthetic-only"
     }
   ],
-  "enabledCount": 16
+  "enabledCount": 14
 }

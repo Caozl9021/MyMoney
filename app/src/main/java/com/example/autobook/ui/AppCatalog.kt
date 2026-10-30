@@ -1,6 +1,7 @@
 package com.example.autobook.ui
 
 import com.example.billkit.Packages
+import com.example.autobook.data.CaptureScope
 
 /**
  * 应用清单的显示名与顺序（纯数据，无 Compose 依赖）。
@@ -31,17 +32,17 @@ private val appEntries: List<Pair<String, String>> = listOf(
 )
 
 /** 预设包名，顺序即清单顺序。 */
-internal val knownPackages: List<String> = appEntries.map { it.second }
+internal val knownPackages: List<String> = appEntries.map { it.second }.filter(CaptureScope::supports)
 
 // 注意方向：entries 是「显示名 to 包名」，查表要反过来按包名取显示名。
 // 直接 toMap() 会得到「显示名 → 包名」，查不到就退化成裸包名。
 private val packageLabels: Map<String, String> = appEntries.associate { (label, pkg) -> pkg to label }
 
 /**
- * 清单里出现的包名：预设在前，白名单里手动加的排在后面。
- * 只来自本地配置，不查询设备上装了哪些应用、也不读运行中的进程。
+ * self应用清单只展示微信与支付宝；旧配置中的其他包名不形成新入口。
+ * 历史应用显示名仍保留，不查询安装应用或运行进程。
  */
 internal fun appPackages(whitelist: Set<String>): List<String> =
-    (knownPackages + whitelist.sorted()).distinct()
+    knownPackages
 
 internal fun appLabel(pkg: String): String = packageLabels[pkg] ?: pkg

@@ -43,7 +43,7 @@ internal enum class CaptureAction(val label: String) {
     ACCESSIBILITY("打开无障碍设置"), OVERLAY("允许悬浮窗"), PENDING("查看待确认"), SUPPORTED_APPS("查看应用与通道"),
     // 通道行专用的三个动作：渠道开关与它依赖的系统授权在同一个视线里，
     // 所以动作粒度是「补这一个授权」而不是「跳到某个设置页」。
-    SMS_PERMISSION("授予短信权限"), NOTIFY("允许通知"), ROOT("授予 Root"),
+    SMS_PERMISSION("查看应用范围"), NOTIFY("允许通知"), ROOT("授予 Root"),
     LSP("去启用 LSPosed 模块"),
 }
 internal enum class CaptureHealthKind { MODE_REQUIRED, PAUSED, ACCESSIBILITY_DISABLED, ACCESSIBILITY_UNBOUND, NOTIFICATION_DISABLED, NOTIFICATION_UNBOUND, ROOT_UNREADY, SMS_UNAUTHORIZED, HOOK_UNCONFIRMED, RULES_UNAVAILABLE, DEGRADED, SOURCES_DISABLED, NOTIFICATION_OBSERVING, OVERLAY_MISSING, PENDING_MODE, RUNNING }
@@ -54,13 +54,13 @@ internal data class CaptureHealth(
     val attention: Boolean get() = kind !in setOf(CaptureHealthKind.RUNNING, CaptureHealthKind.PENDING_MODE, CaptureHealthKind.NOTIFICATION_OBSERVING)
 }
 
-/** LSP has a dedicated Root-only page; the regular channel list contains notification, SMS and page. */
+/** LSP has a dedicated Root-only page; the regular channel list contains notification and page. */
 internal enum class CaptureChannel { NOTIFICATION, SMS, HOOK, PAGE }
 
 internal fun channelsFor(mode: CaptureMode?): List<CaptureChannel> = when (mode) {
-    CaptureMode.ROOT -> listOf(CaptureChannel.NOTIFICATION, CaptureChannel.SMS)
-    CaptureMode.ACCESSIBILITY -> listOf(CaptureChannel.NOTIFICATION, CaptureChannel.SMS, CaptureChannel.PAGE)
-    null -> listOf(CaptureChannel.NOTIFICATION, CaptureChannel.SMS)
+    CaptureMode.ROOT -> listOf(CaptureChannel.NOTIFICATION)
+    CaptureMode.ACCESSIBILITY -> listOf(CaptureChannel.NOTIFICATION, CaptureChannel.PAGE)
+    null -> listOf(CaptureChannel.NOTIFICATION)
 }
 
 internal val CaptureHealthInput.pageReady: Boolean
@@ -75,7 +75,7 @@ internal val CaptureHealthInput.notificationRulesAvailable: Boolean
         supported.any { selectedPackages == null || it in selectedPackages }
     } ?: true
 internal val CaptureHealthInput.smsReady: Boolean
-    get() = smsEnabled && smsGranted && (ruleCapabilities == null || "com.android.phone|DATA" in ruleCapabilities)
+    get() = false // Legacy fields remain readable, but self has no SMS source.
 internal val CaptureHealthInput.lspReady: Boolean
     get() = mode == CaptureMode.ROOT && hookEnabled && hookReady &&
         (ruleCapabilities == null || hookPackages.any { "$it|DATA" in ruleCapabilities })
@@ -84,7 +84,7 @@ internal val CaptureHealthInput.recognitionReady: Boolean
     get() = enabled && (pageReady || notificationReady || smsReady || lspReady)
 
 internal fun captureHealth(input: CaptureHealthInput): CaptureHealth = with(input) {
-    if (mode == null && !notificationsEnabled && !smsEnabled) return CaptureHealth(CaptureHealthKind.MODE_REQUIRED,
+    if (mode == null && !notificationsEnabled) return CaptureHealth(CaptureHealthKind.MODE_REQUIRED,
         "选择使用方式", "选择普通模式或 Root 模式后，按提示完成设置。", listOf(CaptureAction.SELECT_MODE))
     if (!enabled) return CaptureHealth(CaptureHealthKind.PAUSED, "自动记账已暂停",
         "已保留使用方式与通道设置。", listOf(CaptureAction.RESUME))
@@ -108,12 +108,9 @@ internal fun captureHealth(input: CaptureHealthInput): CaptureHealth = with(inpu
             !accessibilityBound -> add(CaptureHealth(CaptureHealthKind.ACCESSIBILITY_UNBOUND,
                 "尚未就绪 · 页面辅助尚未连接", "无障碍已授权但服务未连接，请在系统设置中重新开启 麦米。", listOf(CaptureAction.ACCESSIBILITY)))
         }
-        if (smsEnabled && !smsGranted) add(CaptureHealth(CaptureHealthKind.SMS_UNAUTHORIZED,
-            "尚未就绪 · 还差短信权限", "银行短信识别已开启，还需授予短信权限。", listOf(CaptureAction.SMS_PERMISSION)))
         if (mode == CaptureMode.ROOT && hookEnabled && !hookReady) add(CaptureHealth(CaptureHealthKind.HOOK_UNCONFIRMED,
             "尚未确认应用模块加载", "请在 LSPosed 设置中检测微信、支付宝的模块加载状态。", listOf(CaptureAction.LSP)))
         if (ruleCapabilities != null && ((notificationsEnabled && !notificationRulesAvailable) ||
-                (smsEnabled && "com.android.phone|DATA" !in ruleCapabilities) ||
                 (mode == CaptureMode.ROOT && hookEnabled && hookReady && !lspReady))) {
             add(CaptureHealth(CaptureHealthKind.RULES_UNAVAILABLE,
                 if (!ruleEngineReady) "本地规则尚未就绪" else "部分来源暂无匹配规则",
@@ -127,7 +124,6 @@ internal fun captureHealth(input: CaptureHealthInput): CaptureHealth = with(inpu
     val sources = buildList {
         if (notificationReady) add(if (mode == CaptureMode.ROOT) "Root 通知识别" else "通知识别")
         if (pageReady) add("页面辅助")
-        if (smsReady) add("银行短信")
         if (lspReady) add("LSPosed 采集")
     }.joinToString("、")
     if (!autoConfirm) return CaptureHealth(CaptureHealthKind.PENDING_MODE, "已开启 · 待确认模式",

@@ -1,6 +1,6 @@
 {
-  "version": "maimi-rules-2",
-  "enableDecision": "2026-10-29 user: enable all and restore transfer/redpackage coverage",
+  "version": "maimi-rules-4",
+  "enableDecision": "2026-10-30 user: self branch only WeChat and Alipay; all remaining 14 rules enabled",
   "scenarios": [
     {
       "id": "maimi_wechat_data_expense_v1",
@@ -97,24 +97,6 @@
       "negativeSamples": 5
     },
     {
-      "id": "maimi_cmb_data_expense_v1",
-      "name": "麦米·招行短信消费",
-      "enabled": true,
-      "validation": "synthetic-only",
-      "evidence": [],
-      "positiveSamples": 3,
-      "negativeSamples": 5
-    },
-    {
-      "id": "maimi_cmb_data_income_v1",
-      "name": "麦米·招行短信工资",
-      "enabled": true,
-      "validation": "synthetic-only",
-      "evidence": [],
-      "positiveSamples": 3,
-      "negativeSamples": 5
-    },
-    {
       "id": "maimi_wechat_transfer_expense_v1",
       "name": "麦米·微信转账支出",
       "enabled": true,
@@ -138,19 +120,29 @@
       "id": "maimi_wechat_redpackage_expense_v1",
       "name": "麦米·微信红包支出",
       "enabled": true,
-      "validation": "synthetic-only",
-      "evidence": [],
-      "positiveSamples": 3,
-      "negativeSamples": 5
+      "validation": "captured-message-structure+synthetic-correlated-receipt",
+      "evidence": [
+        "local-device-20261029-app-data-47-no-amount",
+        "wx-8.0.79-3200-public-interface-contract"
+      ],
+      "positiveSamples": 6,
+      "negativeSamples": 5,
+      "limitations": "真实金额回执与同单弹卡待真机验证；不能以合成联合输入作为实机成功证据",
+      "extraCorrelatedNegativeSamples": 12
     },
     {
       "id": "maimi_wechat_redpackage_income_v1",
       "name": "麦米·微信红包收入",
       "enabled": true,
-      "validation": "synthetic-only",
-      "evidence": [],
-      "positiveSamples": 3,
-      "negativeSamples": 5
+      "validation": "captured-message-structure+synthetic-correlated-receipt",
+      "evidence": [
+        "local-device-20261029-app-data-47-no-amount",
+        "wx-8.0.79-3200-public-interface-contract"
+      ],
+      "positiveSamples": 6,
+      "negativeSamples": 5,
+      "limitations": "真实金额回执与同单弹卡待真机验证；不能以合成联合输入作为实机成功证据",
+      "extraCorrelatedNegativeSamples": 12
     }
   ],
   "notSupported": [
@@ -161,6 +153,8 @@
     "other-bank-sms",
     "other-app-notices",
     "unknown-transfer-stage",
-    "redpackage-without-own-completion-and-amount"
+    "redpackage-without-own-completion-and-amount",
+    "bank-sms",
+    "other-app-page-capture-in-self"
   ]
 }

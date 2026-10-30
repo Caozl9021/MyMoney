@@ -56,7 +56,7 @@ object SpecRuleStore {
 
     fun isReady(): Boolean = initialized && engine.isReady()
 
-    fun covers(packageName: String, type: String): Boolean = "$packageName|$type" in covered
+    fun covers(packageName: String, type: String): Boolean = CaptureScope.supports(packageName) && "$packageName|$type" in covered
 
     fun coversNotice(packageName: String): Boolean = covers(packageName, "NOTICE")
 
@@ -109,6 +109,7 @@ object SpecRuleStore {
         common: String,
         beforeInsert: (() -> Unit)? = null,
     ): SpecRuleEngine {
+        require(bundle.rules.all { CaptureScope.supports(it.app) }) { "self规则包只能包含微信和支付宝" }
         val prefs = context.getSharedPreferences("autobook", Context.MODE_PRIVATE)
         val candidate = SpecRuleEngine()
         db.withTransaction {
@@ -176,12 +177,23 @@ object SpecRuleStore {
             latestOutcome = outcome
             return ParseResult(hit, outcome)
         }
+        if (!CaptureScope.supports(app)) return finish(null, SpecRuleEngine.Outcome.REJECTED)
         val rowId = runCatching {
             db.rules().insertData(AppDataEntity(data = raw, type = type, app = app,
                 time = now, version = version))
         }.getOrNull()?.takeIf { it > 0 } ?: return finish(null, SpecRuleEngine.Outcome.ERROR)
         // 原始输入持久化失败时绝不继续识别或投递。
-        val parsed = activeEngine.parseDetailed(app, type, raw)
+        val linked = if (type == "DATA") runCatching {
+            RedpacketCorrelationStore.prepare(db, app, raw, rowId, now)
+        }.getOrElse { return finish(null, SpecRuleEngine.Outcome.ERROR) } else RedpacketCorrelationStore.Result.Other
+        if (linked is RedpacketCorrelationStore.Result.Rejected) {
+            runCatching { db.rules().markIssue(rowId) }
+            return finish(null, SpecRuleEngine.Outcome.REJECTED)
+        }
+        // 只有宿主用已经落盘的两个原始行验证后，才可把联合凭证交给原红包规则。
+        // Waiting仍可走原完成凭证规则；无金额邀请和孤立准备回执本身不会命中。
+        val parsingRaw = (linked as? RedpacketCorrelationStore.Result.Linked)?.raw ?: raw
+        val parsed = activeEngine.parseDetailed(app, type, parsingRaw)
         val result = parsed.result
         if (result == null) {
             if (parsed.outcome == SpecRuleEngine.Outcome.ERROR) runCatching { db.rules().markIssue(rowId) }
@@ -190,6 +202,10 @@ object SpecRuleStore {
         val draft = SpecDraftAdapter.toDraft(result.bill, app, result.ruleId, now)
             ?: return finish(null, SpecRuleEngine.Outcome.REJECTED)
         runCatching { db.rules().markMatched(rowId, result.ruleName) }
+        if (linked is RedpacketCorrelationStore.Result.Linked) {
+            runCatching { db.rules().markMatched(linked.messageId, result.ruleName) }
+            runCatching { db.rules().markMatched(linked.receiptId, result.ruleName) }
+        }
         return finish(Hit(draft, result.ruleName, result.ruleId, false), SpecRuleEngine.Outcome.MATCHED)
     }
 

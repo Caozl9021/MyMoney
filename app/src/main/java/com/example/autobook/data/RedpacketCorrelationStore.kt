@@ -22,9 +22,12 @@ internal object RedpacketCorrelationStore {
         val evidence = mutableListOf<RedpacketLinkPolicy.Evidence>()
         var after = 0L
         var rows = 0
+        var characters = 0L
         while (true) {
             val page = db.rules().correlationData(app, now - RedpacketLinkPolicy.WINDOW_MS, now + 60_000, after, 128)
             for (row in page) {
+                characters += row.data.length
+                if (characters > 4 * 1024 * 1024) return Result.Rejected("packet-evidence-size-limit")
                 val item = RedpacketLinkPolicy.decode(row.data, row.id, row.time)
                 if (item is RedpacketLinkPolicy.Decode.Value) evidence += item.evidence
             }

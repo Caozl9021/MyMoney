@@ -3,7 +3,6 @@ package com.example.autobook.data
 import android.content.Context
 import android.content.SharedPreferences
 import com.example.billkit.BillKitConfig
-import com.example.billkit.Packages
 
 /** 只有少量开关，SharedPreferences 足够；不引入 DataStore/Hilt 之类的依赖。 */
 class Settings(context: Context) {
@@ -34,14 +33,12 @@ class Settings(context: Context) {
         get() = prefs.getBoolean(KEY_ENABLED, false)
         set(value) = captureEdit { putBoolean(KEY_ENABLED, value) }
 
-    /**
-     * 短信通道（SPEC §8 阶段 2）。
-     *
-     * 默认关闭：`RECEIVE_SMS` 是敏感权限，读取全部短信，必须由用户显式打开并单独授权。
-     * 与通知通道互相独立——两者都是免 root 的通道，可以只开其一。
-     */
-    var smsCaptureEnabled: Boolean
+    /** Legacy choice stays portable; the self build never activates SMS collection. */
+    val configuredSmsCaptureEnabled: Boolean
         get() = prefs.getBoolean(KEY_SMS_CAPTURE_ENABLED, false)
+
+    var smsCaptureEnabled: Boolean
+        get() = CaptureScope.smsSupported && configuredSmsCaptureEnabled
         set(value) = captureEdit { putBoolean(KEY_SMS_CAPTURE_ENABLED, value) }
 
     /**
@@ -163,12 +160,18 @@ class Settings(context: Context) {
         }
     }
 
+    /** Original choices survive upgrades and backups even when outside this build's scope. */
+    val configuredWhitelist: Set<String>
+        get() = prefs.getStringSet(KEY_WHITELIST, null)?.toSet() ?: CaptureScope.packages
+
+    /** Only these packages may reach page, notification or Hook collection in this build. */
     var whitelist: Set<String>
-        get() = prefs.getStringSet(KEY_WHITELIST, null) ?: Packages.defaultWhitelist
+        get() = CaptureScope.filterPackages(configuredWhitelist)
         set(value) = captureEdit { putStringSet(KEY_WHITELIST, value.toSet()) }
 
     fun setSupported(pkg: String, supported: Boolean) {
-        val next = whitelist.toMutableSet()
+        if (!CaptureScope.supports(pkg)) return
+        val next = configuredWhitelist.toMutableSet()
         if (supported) next += pkg else next -= pkg
         whitelist = next
     }

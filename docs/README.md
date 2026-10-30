@@ -1,11 +1,13 @@
 # 本地文档索引
 
-同步日期：2026-10-29。当前交付 **0.32.0/99（麦米），用户验收通过**（用户于2026-10-29明确回复“0.32验收通过”）。Room9/JSON8（兼容JSON1–7）。首页期摘要去掉重复今日行，三款图标联动品牌主题与柔和切换动画。0.31.0三款图标功能既有用户验收保持，0.28.5/0.28.4等历史独立范围不扩大，BUG-BACK-GHOST-001仍OPEN。
+同步日期：2026-10-30。self 当前交付 **0.33.3/103，待用户验收**；仅微信、支付宝，`maimi-rules-4` 共14条规则全部启用。Room9/JSON8不变。856项JVM、42项Android、三构建/strict29及连续签名为该交付既有证据，本次文档更新未重跑业务测试、未构建或操作设备。0.33.2微信红包/转账用户通过范围保留；支付宝退出后显卡、返回残影和权限状态问题仍OPEN。
 
-进度、剩余范围、执行证据与用户验收分别维护；本轮普通模式配置已实施并出包，历史验收不扩展；不清理资料。
+self仅微信/支付宝，当前包待验收，历史验收不外推。旧文档折叠内容只解释当时阶段；本次仅同步文档，不改代码/包或清理资料。
 
 | 用途 | 入口 |
 | --- | --- |
+| self范围、模式与验收边界 | [SELF_BRANCH](SELF_BRANCH.md) |
+| 原创规则源与生成 | [规则README](../billkit/rules/README.md) |
 | 产品和当前使用 | [项目README](../README.md) |
 | 当前计划与真正未实施范围 | [PLAN_1.0](PLAN_1.0.md) |
 | 最新实现/验收与历史证据 | [PROGRESS](PROGRESS.md)、[CHANGELOG](../CHANGELOG.md) |
@@ -26,7 +28,7 @@
 | 确认卡精修与修订关系 | [确认卡方案](CONFIRM_SHEET_REFINEMENT_PLAN_2026-10-28.md) |
 | 设置文案删除结果 / 弹层审计 | [S001–S064](SETTINGS_COPY_REVIEW_2026-10-28.md)、[弹层清单](POPUP_STYLE_AUDIT_2026-10-28.md) |
 
-[本轮文档核查](../runs/20261028-234127-all-progress-docs-sync/outputs/verification.md) · [28项OpenSpec状态](../runs/20261028-234127-all-progress-docs-sync/outputs/openspec-status.md)
+[2026-10-28历史文档核查](../runs/20261028-234127-all-progress-docs-sync/outputs/verification.md) · [当时28项OpenSpec状态](../runs/20261028-234127-all-progress-docs-sync/outputs/openspec-status.md)
 
 
 <details>

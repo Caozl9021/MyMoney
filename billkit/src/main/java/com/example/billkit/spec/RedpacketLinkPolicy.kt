@@ -6,6 +6,7 @@ import java.net.URLDecoder
 /** 原始消息与真实成功金额凭证的严格同单关联。单位固定分，不按时间/金额相似度匹配。 */
 object RedpacketLinkPolicy {
     const val WINDOW_MS = 24 * 60 * 60 * 1000L
+    const val ADAPTER_VERSION = "wx-8.0.79-3200-v1"
     private val ID = Regex("[A-Za-z0-9_-]{6,120}")
     sealed interface Evidence { val rowId: Long; val observedAt: Long; val packetId: String }
     data class Message(override val rowId: Long, override val observedAt: Long, override val packetId: String,
@@ -24,7 +25,7 @@ object RedpacketLinkPolicy {
     }
 
     fun decode(raw: String, rowId: Long, hostObservedAt: Long): Decode {
-        if (raw.length > 65536) return Decode.Other
+        if (raw.length > 65536) return Decode.Invalid("oversized-packet-input")
         val root = runCatching { SpecJson.decodeObject(raw) }.getOrNull() ?: return Decode.Other
         if (root.containsKey("linkedReceipt") || root.containsKey("hostCorrelationSchema")) return Decode.Invalid("external-linked-receipt")
         return when (root["type"]) {
@@ -43,8 +44,8 @@ object RedpacketLinkPolicy {
         val phase = root["phase"] as? String
         if (root["success"] != true || !((role == "sent_total" && phase in setOf("prepared", "detail")) ||
                 (role == "received_personal" && phase == "opened"))) return Decode.Invalid("unqualified-receipt-role-or-phase")
-        val version = (root["adapterVersion"] as? String)?.takeIf { it.isNotBlank() && it.length <= 128 }
-            ?: return Decode.Invalid("missing-receipt-adapter")
+        val version = (root["adapterVersion"] as? String)?.takeIf { it == ADAPTER_VERSION }
+            ?: return Decode.Invalid("unsupported-receipt-adapter")
         if (root.containsKey("currency") && root["currency"] != "CNY") return Decode.Invalid("unsupported-currency")
         return Decode.Value(Receipt(rowId, observedAt, id, cents, role!!, phase!!, version))
     }
@@ -59,7 +60,11 @@ object RedpacketLinkPolicy {
         val app = msg?.get("appmsg") as? Map<*, *>
         val pay = app?.get("wcpayinfo") as? Map<*, *> ?: return Decode.Other
         if (app["type"]?.toString() != "2001") return Decode.Other
-        val direction = (root["isSend"] as? Number)?.toInt()?.takeIf { it in 0..1 }
+        val statusText = listOf(app["title"], app["des"]).filterIsInstance<String>().joinToString("\n")
+        if (Regex("失败|已取消|已撤销|已退回|已退还|已退款|已过期|红包过期").containsMatchIn(statusText)) {
+            return Decode.Invalid("unsuccessful-packet-message")
+        }
+        val direction = (root["isSend"] as? Number)?.takeIf { it.toDouble() == 0.0 || it.toDouble() == 1.0 }?.toInt()
             ?: return Decode.Invalid("missing-message-direction")
         val paymsg = (pay["paymsgid"] as? String)?.takeIf(String::isNotBlank)
         val direct = (pay["sendid"] as? String)?.takeIf(String::isNotBlank)
@@ -74,6 +79,9 @@ object RedpacketLinkPolicy {
                 ?.groupValues?.get(1)?.toBigDecimalOrNull()?.movePointRight(2)?.let {
                     runCatching { it.longValueExact() }.getOrNull()
                 }
+        }
+        if (!fee.isNullOrBlank() && (stated == null || stated !in 1..100_000_000)) {
+            return Decode.Invalid("invalid-stated-message-amount")
         }
         return Decode.Value(Message(rowId, observedAt, id, listOfNotNull(paymsg, direct, nativeId).toSet(), direction, raw, stated))
     }

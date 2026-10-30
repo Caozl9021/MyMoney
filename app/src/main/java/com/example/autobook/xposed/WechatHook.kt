@@ -39,8 +39,9 @@ internal object WechatHook {
         for (name in listOf("insertWithOnConflict", "insert")) {
             hooked += hookMethod(loader, name, instance, log)
         }
+        hooked += WechatRedpacketHook.install(loader, log)
         installedCount = hooked
-        log("微信采集：$hooked 个写入方法已注册（${if (hooked > 0) "可用" else "未找到，版本可能不兼容"}）")
+        log("微信采集：$hooked 个采集方法已注册（${if (hooked > 0) "可用" else "未找到，版本可能不兼容"}）")
         return hooked
     }
 

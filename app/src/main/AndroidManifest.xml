@@ -23,12 +23,6 @@
       只有用户主动点「保活体检」里的按钮才会跳这个系统对话框，不会偷偷弹。
     -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-    <!--
-      短信通道（SPEC §8 阶段 2）：银行消费短信是免 root 就能拿到的结构化交易事实。
-      只接收、不读取历史短信库 —— 因此只申请 RECEIVE_SMS，不申请 READ_SMS。
-      默认关闭，用户在「识别通道」里显式打开并单独授权后才会处理。
-    -->
-    <uses-permission android:name="android.permission.RECEIVE_SMS" />
 
     <!--
       Android 11+ 包可见性：不声明 queries 的话
@@ -201,15 +195,6 @@
             </intent-filter>
         </receiver>
 
-        <!-- 短信通道：只接收新短信，不读历史；判定交给 24 条银行规则 -->
-        <receiver
-            android:name=".capture.SmsReceiver"
-            android:exported="true"
-            android:permission="android.permission.BROADCAST_SMS">
-            <intent-filter android:priority="999">
-                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
-            </intent-filter>
-        </receiver>
 
         <!-- 导出 CSV → 分享给 iCost（走它公开的 ShareReceiveActivity 导入入口） -->
         <provider

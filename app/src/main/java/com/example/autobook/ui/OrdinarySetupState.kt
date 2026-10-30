@@ -20,7 +20,7 @@ internal fun ordinarySetupState(input: CaptureHealthInput): OrdinarySetupState =
     val available = mode != CaptureMode.ROOT
     val notification = available && notificationsEnabled && notificationAuthorized && notificationBound
     val page = mode == CaptureMode.ACCESSIBILITY && pageEnabled && accessibilityAuthorized && accessibilityBound
-    val source = notification || page || smsReady
+    val source = notification || page
     val presentation = !autoConfirm || overlayAllowed
     val next = if (!available) null else when {
         notificationsEnabled && !notificationAuthorized -> CaptureAction.NOTIFICATION_ACCESS
@@ -31,8 +31,7 @@ internal fun ordinarySetupState(input: CaptureHealthInput): OrdinarySetupState =
         else -> null
     }
     OrdinarySetupState(available, notification, page, source, presentation,
-        (!notificationsEnabled || notification) && (mode != CaptureMode.ACCESSIBILITY || !pageEnabled || page) &&
-            (!smsEnabled || smsGranted), next)
+        (!notificationsEnabled || notification) && (mode != CaptureMode.ACCESSIBILITY || !pageEnabled || page), next)
 }
 
 internal fun ordinarySetupDestination(mode: CaptureMode?, action: CaptureAction): Boolean =

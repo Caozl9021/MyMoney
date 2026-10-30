@@ -83,30 +83,3 @@ internal fun LspSettingsPage(mode: CaptureMode?, hookEnabled: Boolean, enabled: 
         }
     }
 }
-
-@Composable
-internal fun SmsSettingsPage(snapshot: CaptureModeStateSnapshot, onBack: () -> Unit) {
-    val context = LocalContext.current
-    var granted by remember { mutableStateOf(snapshot.smsGranted) }
-    val permission = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
-    ) { granted = it }
-    LaunchedEffect(snapshot.smsGranted) { granted = snapshot.smsGranted }
-    SettingsContentPage("银行短信", onBack) {
-        ChannelRows(mode = null, state = snapshot.copy(smsGranted = granted),
-            channels = listOf(CaptureChannel.SMS), onAction = {
-                permission.launch(android.Manifest.permission.RECEIVE_SMS)
-            })
-        if (snapshot.smsEnabled && !granted) {
-            InsetGroup {
-                ListRow(title = "授予短信权限", chevron = true,
-                    onClick = { permission.launch(android.Manifest.permission.RECEIVE_SMS) })
-                ListRow(title = "系统权限设置", subtitle = "无法弹出授权时，在系统中开启", dividerAbove = true,
-                    chevron = true, onClick = {
-                        context.startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                            android.net.Uri.parse("package:${context.packageName}")))
-                    })
-            }
-        }
-    }
-}
