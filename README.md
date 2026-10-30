@@ -198,6 +198,14 @@ echo "sdk.dir=$HOME/Android/Sdk" > local.properties
 
 ---
 
+## 致谢
+
+本项目的产品思路受 [AutoAccounting](https://github.com/AutoAccountingOrg/AutoAccounting) 启发：它证明了「支付后自动记账」可以做成真正能日常使用的工具，本项目在形态与交互上从中受益。
+
+My Money 是独立实现，没有使用该项目的代码、规则或资源，因此采用 Apache-2.0 而不是它的 GPL-3.0。
+
+---
+
 ## 参与贡献
 
 欢迎 Issue 与 PR。提交前请先读 [CONTRIBUTING.md](CONTRIBUTING.md)——里面写了代码约定、如何新增一条识别规则，以及**报告问题前如何脱敏诊断样本**。
