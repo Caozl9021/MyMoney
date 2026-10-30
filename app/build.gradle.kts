@@ -9,22 +9,22 @@ plugins {
 }
 
 android {
-    namespace = "com.example.autobook"
+    namespace = "io.github.caozl9021.mymoney"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.autobook"
+        applicationId = "io.github.caozl9021.mymoney"
         minSdk = 26
         targetSdk = 35
-        testInstrumentationRunner = providers.gradleProperty("autobookTestRunner")
-            .getOrElse("com.example.autobook.HistoryInstrumentation")
-        versionCode = 99
-        versionName = "0.32.0"
+        testInstrumentationRunner = providers.gradleProperty("mymoneyTestRunner")
+            .getOrElse("io.github.caozl9021.mymoney.HistoryInstrumentation")
+        versionCode = 105
+        versionName = "1.0.0"
     }
 
-    // 签名信息放在仓库之外（~/.autobook-keys/keystore.properties），不进版本库。
+    // 签名信息放在仓库之外（~/.mymoney-keys/keystore.properties），不进版本库。
     // 文件不存在时 release 就不签名，assembleRelease 会产出 -unsigned.apk。
-    val keystoreFile = File(System.getProperty("user.home"), ".autobook-keys/keystore.properties")
+    val keystoreFile = File(System.getProperty("user.home"), ".mymoney-keys/keystore.properties")
     val keystoreProps: Properties? = if (keystoreFile.exists()) {
         Properties().apply { keystoreFile.inputStream().use { stream -> load(stream) } }
     } else null

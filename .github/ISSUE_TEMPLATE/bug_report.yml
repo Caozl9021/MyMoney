@@ -1,0 +1,89 @@
+name: 问题报告
+description: 识别不到、弹卡异常、崩溃或界面问题
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。请尽量把下面填完整——缺少版本和采集模式时，问题基本无法定位。
+
+        ⚠️ **提交前请脱敏**：诊断样本和截图里可能有商户名、金额、订单号。请把它们替换成示例值。
+
+  - type: input
+    id: version
+    attributes:
+      label: App 版本
+      description: 设置 → 关于 里的版本号与 versionCode
+      placeholder: "1.0.0 / 105"
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: 机型与系统版本
+      placeholder: "小米 14 / Android 15"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: 采集模式
+      options:
+        - 通知监听
+        - 无障碍页面
+        - Root 通知
+        - LSPosed
+        - 不确定
+    validations:
+      required: true
+
+  - type: dropdown
+    id: channel
+    attributes:
+      label: 涉及的渠道
+      options:
+        - 微信
+        - 支付宝
+        - 两者都有
+        - 其他（与识别无关）
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 从打开 App 开始，一步一步写
+      placeholder: |
+        1. 打开微信，向好友转账 0.01 元
+        2. 支付成功后回到桌面
+        3. 没有出现确认卡
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望结果 vs 实际结果
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: 诊断信息（已脱敏）
+      description: 设置 → 自动记账 → 识别统计 → 导出样本。贴之前请把金额、订单号、商户名换成示例值
+      render: text
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: 确认
+      options:
+        - label: 我已确认贴出的内容不含真实商户名、金额或订单号
+          required: true
+        - label: 我搜索过已有 Issue，没有重复
+          required: true

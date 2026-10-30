@@ -1,1 +1,58 @@
-{"_removed":"upstream AutoRule 163-rule asset removed for licensing compliance; see NOTICE"}
+[
+  {
+    "id": 1,
+    "name": "餐饮",
+    "remoteId": "",
+    "book": 0,
+    "sort": 0,
+    "type": "Expend"
+  },
+  {
+    "id": 2,
+    "name": "交通",
+    "remoteId": "",
+    "book": 0,
+    "sort": 1,
+    "type": "Expend"
+  },
+  {
+    "id": 3,
+    "name": "购物",
+    "remoteId": "",
+    "book": 0,
+    "sort": 2,
+    "type": "Expend"
+  },
+  {
+    "id": 4,
+    "name": "医疗",
+    "remoteId": "",
+    "book": 0,
+    "sort": 3,
+    "type": "Expend"
+  },
+  {
+    "id": 5,
+    "name": "房租",
+    "remoteId": "",
+    "book": 0,
+    "sort": 4,
+    "type": "Expend"
+  },
+  {
+    "id": 6,
+    "name": "工资",
+    "remoteId": "",
+    "book": 0,
+    "sort": 5,
+    "type": "Income"
+  },
+  {
+    "id": 7,
+    "name": "奖金",
+    "remoteId": "",
+    "book": 0,
+    "sort": 6,
+    "type": "Income"
+  }
+]

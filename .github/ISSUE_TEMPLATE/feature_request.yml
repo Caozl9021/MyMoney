@@ -1,0 +1,48 @@
+name: 功能建议
+description: 新功能、改进现有行为，或新增一条识别规则
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        这个项目的范围很窄：**只把微信和支付宝的支付记下来**。请先确认建议没有偏离这条线——
+        增加其他 App 渠道、接入网络、自动点击支付按钮这类方向不会被接受。
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 你想解决什么问题
+      description: 描述场景，而不是直接给方案
+      placeholder: "我经常在便利店用支付宝付款，但分类每次都要手动改成餐饮……"
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 你希望的解决方式
+    validations:
+      required: true
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: 影响范围
+      options:
+        - 识别规则（billkit/rules）
+        - 确认卡与交互
+        - 账本与统计
+        - 资产与导入导出
+        - 外观与设置
+        - 其他
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: 确认
+      options:
+        - label: 这个建议不涉及新增网络请求、其他 App 渠道，或自动点击支付按钮
+          required: true

@@ -12,7 +12,8 @@ import java.security.MessageDigest
  */
 class AlipayExpenseNotificationTemplate : VerifiedExpenseNotificationTemplate {
     override val id = "alipay-trade-expense-v1"
-    override val evidenceReference = "截图/AutoBook-notification-1793002244077.json"
+    // 采样证据只保留在本地，不随仓库分发；这里记录样本标识而不是文件路径。
+    override val evidenceReference = "synthetic:alipay-expense-notification-v1"
     override val packageName = ALIPAY_PACKAGE
     // The raw channel ID was not exported. Empty legacy fields are not wildcard matches.
     override val channelId = ""

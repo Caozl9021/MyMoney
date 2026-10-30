@@ -14,6 +14,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "AutoBook"
+rootProject.name = "MyMoney"
 include(":app")
 include(":billkit")

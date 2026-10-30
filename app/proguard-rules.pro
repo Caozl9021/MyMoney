@@ -1,12 +1,12 @@
--keep class com.example.autobook.capture.** { *; }
--keep class com.example.autobook.root.** { *; }
+-keep class io.github.caozl9021.mymoney.capture.** { *; }
+-keep class io.github.caozl9021.mymoney.root.** { *; }
 
 # Xposed 模块相关
--keep class com.example.autobook.xposed.** { *; }
+-keep class io.github.caozl9021.mymoney.xposed.** { *; }
 -keep class de.robv.android.xposed.** { *; }
 -keepclasseswithmembers class * {
     public void handleLoadPackage(...);
 }
 
 # Shared target capture protocol and provider entry point.
--keep class com.example.autobook.lsp.** { *; }
+-keep class io.github.caozl9021.mymoney.lsp.** { *; }

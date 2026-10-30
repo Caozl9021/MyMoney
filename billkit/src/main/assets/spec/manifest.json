@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 1,
+  "version": "maimi-rules-4",
+  "files": {
+    "rules_all.json": "784aa16fd3fc151d2533a71e3c9402a01d79596d26edf0662890e248ed40c9af",
+    "js_common.js": "fa457e05031e14e44c696c29179cefd882560a779dee993056cc00f508cde919",
+    "js_category.js": "b5e40731bf06cd8968a3cebdb3ed30cc12a15e76bdcca08d80a33d6c2328e5e1",
+    "categories.json": "e244c251bf4072c659d3740fc60224106d7109887225ce25c8cb5981d40b7b0e",
+    "assets.json": "93818bc604a5021173e9ce408e36383baa1655703cfeaa5d62eb296bab74c09b"
+  },
+  "rules": [
+    {
+      "id": "maimi_wechat_redpackage_expense_v1",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "enabled": true,
+      "evidence": [],
+      "validationLevel": "synthetic-only"
+    },
+    {
+      "id": "maimi_wechat_redpackage_income_v1",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "enabled": true,
+      "evidence": [],
+      "validationLevel": "synthetic-only"
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "enabled": true,
+      "evidence": [
+        "local-device-20261027-app-data-39"
+      ],
+      "validationLevel": "captured-structure"
+    },
+    {
+      "id": "maimi_wechat_data_income_v1",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "enabled": true,
+      "evidence": [],
+      "validationLevel": "synthetic-only"
+    },
+    {
+      "id": "maimi_wechat_data_refund_v1",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "enabled": true,
+      "evidence": [],
+      "validationLevel": "synthetic-only"
+    },
+    {
+      "id": "maimi_alipay_data_expense_v1",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "DATA",
+      "enabled": true,
+      "evidence": [],
+      "validationLevel": "synthetic-only"
+    },
+    {
+      "id": "maimi_alipay_data_income_v1",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "DATA",
+      "enabled": true,
+      "evidence": [],
+      "validationLevel": "synthetic-only"
+    },
+    {
+      "id": "maimi_alipay_data_refund_v1",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "DATA",
+      "enabled": true,
+      "evidence": [],
+      "validationLevel": "synthetic-only"
+    },
+    {
+      "id": "maimi_wechat_notice_expense_v1",
+      "app": "com.tencent.mm",
+      "type": "NOTICE",
+      "enabled": true,
+      "evidence": [
+        "local-device-20261027-app-data-40"
+      ],
+      "validationLevel": "captured-structure"
+    },
+    {
+      "id": "maimi_wechat_notice_income_v1",
+      "app": "com.tencent.mm",
+      "type": "NOTICE",
+      "enabled": true,
+      "evidence": [],
+      "validationLevel": "synthetic-only"
+    },
+    {
+      "id": "maimi_alipay_notice_expense_v1",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "NOTICE",
+      "enabled": true,
+      "evidence": [],
+      "validationLevel": "synthetic-only"
+    },
+    {
+      "id": "maimi_alipay_notice_income_v1",
+      "app": "com.eg.android.AlipayGphone",
+      "type": "NOTICE",
+      "enabled": true,
+      "evidence": [],
+      "validationLevel": "synthetic-only"
+    },
+    {
+      "id": "maimi_wechat_transfer_expense_v1",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "enabled": true,
+      "evidence": [
+        "local-device-20261029-app-data-27-34"
+      ],
+      "validationLevel": "captured-structure"
+    },
+    {
+      "id": "maimi_wechat_transfer_income_v1",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "enabled": true,
+      "evidence": [],
+      "validationLevel": "synthetic-only"
+    }
+  ],
+  "enabledCount": 14
+}

@@ -1,0 +1,160 @@
+{
+  "version": "maimi-rules-4",
+  "enableDecision": "2026-10-30 user: self branch only WeChat and Alipay; all remaining 14 rules enabled",
+  "scenarios": [
+    {
+      "id": "maimi_wechat_data_expense_v1",
+      "name": "麦米·微信凭证付款",
+      "enabled": true,
+      "validation": "captured-structure+synthetic",
+      "evidence": [
+        "local-device-20261027-app-data-39"
+      ],
+      "positiveSamples": 3,
+      "negativeSamples": 5
+    },
+    {
+      "id": "maimi_wechat_data_income_v1",
+      "name": "麦米·微信凭证收款",
+      "enabled": true,
+      "validation": "synthetic-only",
+      "evidence": [],
+      "positiveSamples": 3,
+      "negativeSamples": 5
+    },
+    {
+      "id": "maimi_wechat_data_refund_v1",
+      "name": "麦米·微信凭证退款",
+      "enabled": true,
+      "validation": "synthetic-only",
+      "evidence": [],
+      "positiveSamples": 3,
+      "negativeSamples": 5
+    },
+    {
+      "id": "maimi_alipay_data_expense_v1",
+      "name": "麦米·支付宝凭证付款",
+      "enabled": true,
+      "validation": "synthetic-only",
+      "evidence": [],
+      "positiveSamples": 3,
+      "negativeSamples": 5
+    },
+    {
+      "id": "maimi_alipay_data_income_v1",
+      "name": "麦米·支付宝凭证收款",
+      "enabled": true,
+      "validation": "synthetic-only",
+      "evidence": [],
+      "positiveSamples": 3,
+      "negativeSamples": 5
+    },
+    {
+      "id": "maimi_alipay_data_refund_v1",
+      "name": "麦米·支付宝凭证退款",
+      "enabled": true,
+      "validation": "synthetic-only",
+      "evidence": [],
+      "positiveSamples": 3,
+      "negativeSamples": 5
+    },
+    {
+      "id": "maimi_wechat_notice_expense_v1",
+      "name": "麦米·微信通知付款",
+      "enabled": true,
+      "validation": "captured-structure+synthetic",
+      "evidence": [
+        "local-device-20261027-app-data-40"
+      ],
+      "positiveSamples": 3,
+      "negativeSamples": 5
+    },
+    {
+      "id": "maimi_wechat_notice_income_v1",
+      "name": "麦米·微信通知收款",
+      "enabled": true,
+      "validation": "synthetic-only",
+      "evidence": [],
+      "positiveSamples": 3,
+      "negativeSamples": 5
+    },
+    {
+      "id": "maimi_alipay_notice_expense_v1",
+      "name": "麦米·支付宝通知付款",
+      "enabled": true,
+      "validation": "synthetic-only",
+      "evidence": [],
+      "positiveSamples": 3,
+      "negativeSamples": 5
+    },
+    {
+      "id": "maimi_alipay_notice_income_v1",
+      "name": "麦米·支付宝通知收款",
+      "enabled": true,
+      "validation": "synthetic-only",
+      "evidence": [],
+      "positiveSamples": 3,
+      "negativeSamples": 5
+    },
+    {
+      "id": "maimi_wechat_transfer_expense_v1",
+      "name": "麦米·微信转账支出",
+      "enabled": true,
+      "validation": "captured-structure+synthetic",
+      "evidence": [
+        "local-device-20261029-app-data-27-34"
+      ],
+      "positiveSamples": 3,
+      "negativeSamples": 5
+    },
+    {
+      "id": "maimi_wechat_transfer_income_v1",
+      "name": "麦米·微信转账收入",
+      "enabled": true,
+      "validation": "synthetic-only",
+      "evidence": [],
+      "positiveSamples": 3,
+      "negativeSamples": 5
+    },
+    {
+      "id": "maimi_wechat_redpackage_expense_v1",
+      "name": "麦米·微信红包支出",
+      "enabled": true,
+      "validation": "captured-message-structure+synthetic-correlated-receipt",
+      "evidence": [
+        "local-device-20261029-app-data-47-no-amount",
+        "wx-8.0.79-3200-public-interface-contract"
+      ],
+      "positiveSamples": 6,
+      "negativeSamples": 5,
+      "limitations": "真实金额回执与同单弹卡待真机验证；不能以合成联合输入作为实机成功证据",
+      "extraCorrelatedNegativeSamples": 12
+    },
+    {
+      "id": "maimi_wechat_redpackage_income_v1",
+      "name": "麦米·微信红包收入",
+      "enabled": true,
+      "validation": "captured-message-structure+synthetic-correlated-receipt",
+      "evidence": [
+        "local-device-20261029-app-data-47-no-amount",
+        "wx-8.0.79-3200-public-interface-contract"
+      ],
+      "positiveSamples": 6,
+      "negativeSamples": 5,
+      "limitations": "真实金额回执与同单弹卡待真机验证；不能以合成联合输入作为实机成功证据",
+      "extraCorrelatedNegativeSamples": 12
+    }
+  ],
+  "notSupported": [
+    "groupCollection",
+    "withdrawal",
+    "recharge",
+    "repayment",
+    "other-bank-sms",
+    "other-app-notices",
+    "unknown-transfer-stage",
+    "redpackage-without-own-completion-and-amount",
+    "bank-sms",
+    "other-app-page-capture-in-self"
+  ]
+}

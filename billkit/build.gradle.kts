@@ -33,10 +33,16 @@ dependencies {
     api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
     implementation("androidx.core:core-ktx:1.13.1")
 
-    // 规则引擎：163 条规则 JS 是 Babel 降级的纯 ES5（仅用到 Array.includes），
-    // Rhino 解释模式可直接执行，无需原生 .so（对比 SPEC §6.7 推荐的 QuickJS）。
+    // 原创本地规则使用 Rhino 解释执行，无需原生 .so。
     implementation("org.mozilla:rhino:1.7.15")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlin:kotlin-test")
 }
+
+// 源脚本与最终资产必须一致，避免只改可读源却忘记更新随包文件。
+val verifyOriginalRules by tasks.registering(Exec::class) {
+    workingDir(rootProject.projectDir)
+    commandLine("python3", layout.projectDirectory.file("rules/generate.py").asFile.absolutePath, "--check")
+}
+tasks.named("preBuild") { dependsOn(verifyOriginalRules) }
