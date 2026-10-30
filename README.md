@@ -10,7 +10,7 @@
 
 <sub>My Money — a local-first auto bookkeeping app for WeChat Pay &amp; Alipay</sub>
 
-[![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
 [![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)](#构建)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?logo=kotlin&logoColor=white)](#项目结构)
 [![Compose](https://img.shields.io/badge/Jetpack-Compose-4285F4?logo=jetpackcompose&logoColor=white)](#项目结构)
@@ -182,7 +182,7 @@ echo "sdk.dir=$HOME/Android/Sdk" > local.properties
 <details>
 <summary><b>第三方组件与许可</b>（点开）</summary>
 
-本项目以 [Apache-2.0](LICENSE) 发布。完整声明见 [NOTICE](NOTICE)。
+本项目以 [GPL-3.0](LICENSE) 发布。完整声明见 [NOTICE](NOTICE)。
 
 | 组件 | 许可 | 用途 |
 | --- | --- | --- |
