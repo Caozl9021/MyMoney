@@ -64,7 +64,7 @@ internal object TargetHookProbe {
         try {
             val context = candidate.applicationContext ?: candidate
             if (context.packageName != registration.app) return
-            val thread = HandlerThread("AutoBook-TargetProbe").apply { start() }
+            val thread = HandlerThread("MyMoney-TargetProbe").apply { start() }
             worker = thread
             val handler = Handler(thread.looper)
             // Read the loaded archive once, before a later APK replacement removes its path.
@@ -89,7 +89,7 @@ internal object TargetHookProbe {
                 }
             }
             val filter = IntentFilter(HookProtocol.PROBE_ACTION)
-            // The receiver is exported only for the signature-authorized AutoBook sender.
+            // The receiver is exported only for the signature-authorized MyMoney sender.
             if (Build.VERSION.SDK_INT >= 33) context.registerReceiver(receiver, filter,
                 HookProtocol.PERMISSION, handler, Context.RECEIVER_EXPORTED)
             else context.registerReceiver(receiver, filter, HookProtocol.PERMISSION, handler)

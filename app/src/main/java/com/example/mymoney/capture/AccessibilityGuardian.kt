@@ -44,7 +44,7 @@ class AccessibilityGuardian : Service() {
         /** 与 root 服务错开，避免任何潜在的 id 冲突 */
         const val NOTIFICATION_ID = 1002
         const val ALERT_NOTIFICATION_ID = 9001
-        const val CHANNEL_ID = "autobook_guardian"
+        const val CHANNEL_ID = "mymoney_guardian"
 
         /** 30 秒检查一次：足够快，又不会明显耗电 */
         const val CHECK_INTERVAL_MS = 30_000L

@@ -77,7 +77,7 @@ class SpecRuleEngine {
                 cx.optimizationLevel = -1
                 cx.languageVersion = Context.VERSION_ES6
                 val newScope = cx.initStandardObjects(null, false)
-                cx.evaluateString(newScope, bundle, "autobook-rules", 1, null)
+                cx.evaluateString(newScope, bundle, "mymoney-rules", 1, null)
                 val newDispatch = ScriptableObject.getProperty(newScope, "__dispatch") as? Function
                     ?: error("规则分发器缺失")
                 val registry = ScriptableObject.getProperty(newScope, "__REG") as? Scriptable

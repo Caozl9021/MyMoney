@@ -28,7 +28,7 @@ import java.util.concurrent.Executors
 class BillAccessibilityService : AccessibilityService() {
 
     companion object {
-        private const val TAG = "AutoBook"
+        private const val TAG = "MyMoney"
         private val mutableBound = MutableStateFlow(false)
         val bound = mutableBound.asStateFlow()
         @Volatile
@@ -39,7 +39,7 @@ class BillAccessibilityService : AccessibilityService() {
     private val handler = Handler(Looper.getMainLooper())
     private val collector = TextCollector()
     private val worker = Executors.newSingleThreadExecutor { r ->
-        Thread(r, "autobook-capture").apply { isDaemon = true }
+        Thread(r, "mymoney-capture").apply { isDaemon = true }
     }
 
     private lateinit var settings: Settings

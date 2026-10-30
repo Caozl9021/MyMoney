@@ -27,10 +27,10 @@ if [ ! -f "gradlew" ]; then
 fi
 
 # 加载环境变量
-if [ -f "$HOME/opt/autobook-env.sh" ]; then
+if [ -f "$HOME/opt/mymoney-env.sh" ]; then
     echo "📦 加载环境变量..."
     # shellcheck disable=SC1091
-    source "$HOME/opt/autobook-env.sh"
+    source "$HOME/opt/mymoney-env.sh"
 fi
 
 # ~/.gradle 在只读文件系统上时，退到可写的临时 GRADLE_USER_HOME

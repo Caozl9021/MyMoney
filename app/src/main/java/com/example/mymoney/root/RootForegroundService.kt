@@ -41,7 +41,7 @@ class RootForegroundService : Service() {
         val activeState = mutableActive.asStateFlow()
         val active: Boolean get() = mutableActive.value
 
-        const val CHANNEL_ID = "autobook_root"
+        const val CHANNEL_ID = "mymoney_root"
         private const val NOTIFICATION_ID = 1001
 
         /** 开关落在这里，进程重建后 [android.app.Application] 才知道要不要自动拉起服务 */

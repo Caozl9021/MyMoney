@@ -63,6 +63,6 @@ internal object AlipayHook {
             context.contentResolver.call(
                 Uri.parse("content://${HookProtocol.AUTHORITY}"),
                 HookProtocol.METHOD, null, HookProtocol.bundle(app, payload))
-        }.onFailure { XposedBridge.log("[AutoBook-Xposed] 支付宝投递失败：${it.javaClass.simpleName}") }
+        }.onFailure { XposedBridge.log("[MyMoney-Xposed] 支付宝投递失败：${it.javaClass.simpleName}") }
     }
 }

@@ -19,7 +19,7 @@ internal object WechatRedpacketHook {
     private data class Cached(val request: Receipt.Request, val time: Long)
     private val requests = WeakHashMap<Any, Cached>()
     private val worker = ThreadPoolExecutor(1, 1, 30, TimeUnit.SECONDS, ArrayBlockingQueue(32),
-        { task -> Thread(task, "AutoBook-Redpacket").apply { isDaemon = true } },
+        { task -> Thread(task, "MyMoney-Redpacket").apply { isDaemon = true } },
         ThreadPoolExecutor.DiscardPolicy()).apply { allowCoreThreadTimeOut(true) }
     @Volatile private var compatible: Boolean? = null
 

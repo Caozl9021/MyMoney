@@ -61,7 +61,7 @@ internal object WechatHook {
                             // 只在真正关心的表上打日志：message 表消息量极大，
                             // 全量日志会淹没 LSPosed 日志并拖慢微信。
                             if (table == "message" || table == "AppMessage") {
-                                XposedBridge.log("[AutoBook-Xposed] 微信写库 table=$table type=${values.getAsInteger("type")}")
+                                XposedBridge.log("[MyMoney-Xposed] 微信写库 table=$table type=${values.getAsInteger("type")}")
                             }
                             collector.onInsert(table, flatten(values))
                         }.onFailure { log("微信采集回调异常：${it.javaClass.simpleName}") }.let { }
@@ -93,6 +93,6 @@ internal object WechatHook {
             context.contentResolver.call(
                 Uri.parse("content://${HookProtocol.AUTHORITY}"),
                 HookProtocol.METHOD, null, HookProtocol.bundle(app, payload))
-        }.onFailure { XposedBridge.log("[AutoBook-Xposed] 微信投递失败：${it.javaClass.simpleName}") }
+        }.onFailure { XposedBridge.log("[MyMoney-Xposed] 微信投递失败：${it.javaClass.simpleName}") }
     }
 }

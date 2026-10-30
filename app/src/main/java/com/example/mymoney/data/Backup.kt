@@ -16,7 +16,7 @@ package com.example.mymoney.data
 object Backup {
 
     const val FORMAT = 8
-    const val KIND = "AutoBookBackup"
+    const val KIND = "MyMoneyBackup"
 
     data class Bill(
         val priceCents: Long,

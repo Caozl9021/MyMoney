@@ -39,7 +39,7 @@ class BillResultActivity : ComponentActivity() {
         val id = intent.getLongExtra(EXTRA_ID, 0)
         if (id <= 0) { finish(); return }
         setContent {
-            AutoBookTheme {
+            MyMoneyTheme {
                 Surface(color = LocalAbPalette.current.pageBg, modifier = Modifier.fillMaxSize()) {
                     Box(Modifier.fillMaxSize()) {
                         BillActionsHost(billId = id, onClose = { finish() })

@@ -39,7 +39,7 @@ import java.util.Locale
  */
 object ConfirmDelivery {
 
-    const val CHANNEL_ID = "autobook_confirm"
+    const val CHANNEL_ID = "mymoney_confirm"
 
     /** 等待确认页回执的时长：够一次冷启动 onCreate，又不至于长时间卡住采集 */
     private const val LAUNCH_TIMEOUT_MS = 1_500L
@@ -96,7 +96,7 @@ object ConfirmDelivery {
         ConfirmLaunch.begin(draft.historyId ?: draft.fingerprint)
         val started = try {
             if (!allowed()) return false
-            context.startActivity(ConfirmIntents.intent(context, draft).putExtra("autobook_auto_capture_token", presentationToken))
+            context.startActivity(ConfirmIntents.intent(context, draft).putExtra("mymoney_auto_capture_token", presentationToken))
             true
         } catch (e: Exception) {
             false

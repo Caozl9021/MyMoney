@@ -23,7 +23,7 @@ import java.io.File
  */
 object CostShare {
 
-    private const val TAG = "AutoBook"
+    private const val TAG = "MyMoney"
 
     fun isTargetInstalled(context: Context): Boolean = try {
         context.packageManager.getPackageInfo(CostCsv.TARGET_PACKAGE, 0)

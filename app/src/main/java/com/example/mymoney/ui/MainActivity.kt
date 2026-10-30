@@ -144,7 +144,7 @@ class MainActivity : ComponentActivity() {
             setViewCompositionStrategy(
                 ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed,
             )
-            setContent { AutoBookTheme { AppContent(tabState = tabState, requestAdd = requestAdd.intValue, onEditorVisibilityChanged = { editorVisible.value = it }) } }
+            setContent { MyMoneyTheme { AppContent(tabState = tabState, requestAdd = requestAdd.intValue, onEditorVisibilityChanged = { editorVisible.value = it }) } }
         }
         root.addView(
             contentView,
@@ -181,7 +181,7 @@ class MainActivity : ComponentActivity() {
                     ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed,
                 )
                 setContent {
-                    AutoBookTheme {
+                    MyMoneyTheme {
                         val adaptiveHeight = com.example.mymoney.ui.design.dockHeight()
                         val host = this@apply
                         androidx.compose.runtime.SideEffect {

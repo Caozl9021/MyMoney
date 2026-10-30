@@ -35,7 +35,7 @@ import com.example.mymoney.data.BillWriter
 import com.example.mymoney.data.RecognitionStore
 import kotlinx.coroutines.*
 import com.example.mymoney.export.CostShare
-import com.example.mymoney.ui.AutoBookTheme
+import com.example.mymoney.ui.MyMoneyTheme
 import com.example.mymoney.ui.ConfirmResultSheet
 import com.example.mymoney.ui.BillResultActivity
 import com.example.mymoney.ui.ConfirmSheet
@@ -62,7 +62,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 object ConfirmOverlay {
 
-    private const val TAG = "AutoBook"
+    private const val TAG = "MyMoney"
 
     /** 等主线程把窗口挂上的上限（调用方一般在后台采集线程） */
     private const val SHOW_TIMEOUT_MS = 800L
@@ -226,7 +226,7 @@ object ConfirmOverlay {
 
     @Composable
     private fun SheetContent(app: Context, card: Session) {
-        AutoBookTheme {
+        MyMoneyTheme {
             val result = card.result
             if (result != null) {
                 ConfirmResultSheet(

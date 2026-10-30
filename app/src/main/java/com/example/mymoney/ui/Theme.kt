@@ -28,7 +28,7 @@ import com.example.mymoney.ui.design.LocalReduceTransparency
  * @param reduceTransparency 强制关闭玻璃（null = 跟随系统无障碍偏好）
  */
 @Composable
-fun AutoBookTheme(
+fun MyMoneyTheme(
     darkTheme: Boolean? = null,
     reduceTransparency: Boolean? = null,
     content: @Composable () -> Unit,

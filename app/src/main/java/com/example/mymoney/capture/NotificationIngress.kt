@@ -236,7 +236,7 @@ object NotificationIngress {
         val old = entry.observation
         if (!allowed(context, old)) { refreshSamples(context); return null }
         return old.let { o -> MiniJson.encode(linkedMapOf(
-        "schema" to "AutoBookNotificationSample-v2", "realSourceTemplateVerified" to false,
+        "schema" to "MyMoneyNotificationSample-v2", "realSourceTemplateVerified" to false,
         "diagnosticOnly" to entry.diagnosticOnly, "outcome" to entry.outcome, "postTime" to o.postTime,
         "package" to o.packageName, "receivedAt" to o.receivedAt,
         "observationKeyHash" to CaptureMergePolicy.digest(o.observationKey),

@@ -22,14 +22,14 @@ if [ "$(adb get-state 2>/dev/null)" != "device" ]; then
 fi
 
 echo "1. Xposed / LSPosed 系统属性："
-adb shell getprop 2>/dev/null | grep -E "(xposed|lsposed|autobook)" || echo "   未找到相关属性"
+adb shell getprop 2>/dev/null | grep -E "(xposed|lsposed|mymoney)" || echo "   未找到相关属性"
 echo ""
 
 echo "2. 模块是否被 LSPosed 加载（看有没有我们的 TAG）："
-if adb logcat -d 2>/dev/null | grep "AutoBook-Xposed" | tail -20; then
+if adb logcat -d 2>/dev/null | grep "MyMoney-Xposed" | tail -20; then
     :
 else
-    echo "   未找到 AutoBook-Xposed 日志（模块可能未启用，或日志已被轮转）"
+    echo "   未找到 MyMoney-Xposed 日志（模块可能未启用，或日志已被轮转）"
 fi
 echo ""
 

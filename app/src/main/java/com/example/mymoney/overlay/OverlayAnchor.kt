@@ -28,7 +28,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 object OverlayAnchor {
 
-    private const val TAG = "AutoBook"
+    private const val TAG = "MyMoney"
 
     /** 锚点保留时长：足够让 startActivity 过检即可，别久留 */
     private const val HOLD_MS = 3_000L

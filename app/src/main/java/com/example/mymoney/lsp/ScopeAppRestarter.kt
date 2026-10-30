@@ -73,7 +73,7 @@ internal object ScopeAppRestarter {
                     }
                 }
                 if (report.items.any { it.outcome == ScopeRestartOutcome.RESTARTED }) {
-                    // Bring the existing AutoBook task back without clearing the settings route.
+                    // Bring the existing MyMoney task back without clearing the settings route.
                     val returned = withContext(Dispatchers.IO) {
                         val result = RootShell.exec("am start-activity --user $userId -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -f 0x10200000 -n com.example.mymoney/.ui.MainActivity", timeoutMs = 6_000)
                         ManagerLaunchPolicy.acceptedShellStart(result.code, result.output)

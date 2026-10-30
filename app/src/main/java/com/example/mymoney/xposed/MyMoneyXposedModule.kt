@@ -7,7 +7,7 @@ import de.robv.android.xposed.XposedBridge
 import de.robv.android.xposed.callbacks.XC_LoadPackage
 
 /** Captures transaction receipts only in the two selected target applications. */
-class AutoBookXposedModule : IXposedHookLoadPackage, IXposedHookZygoteInit {
+class MyMoneyXposedModule : IXposedHookLoadPackage, IXposedHookZygoteInit {
     private var modulePath: String? = null
 
     override fun initZygote(startupParam: IXposedHookZygoteInit.StartupParam) {
@@ -48,5 +48,5 @@ class AutoBookXposedModule : IXposedHookLoadPackage, IXposedHookZygoteInit {
         }
     }
 
-    private fun log(message: String) = XposedBridge.log("[AutoBook-Xposed] $message")
+    private fun log(message: String) = XposedBridge.log("[MyMoney-Xposed] $message")
 }

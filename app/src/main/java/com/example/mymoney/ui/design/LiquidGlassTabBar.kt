@@ -25,7 +25,7 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.example.mymoney.R
-import com.example.mymoney.ui.AutoBookTheme
+import com.example.mymoney.ui.MyMoneyTheme
 import com.qmdeve.liquidglass.widget.LiquidGlassView
 
 /**
@@ -118,7 +118,7 @@ class LiquidGlassTabBar(
             ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed,
         )
         overlay.setContent {
-            AutoBookTheme {
+            MyMoneyTheme {
                 // 浅深主题均只覆薄层中性色，保留背景透光与文字可读性。
                 val dark = LocalAbPalette.current == DarkPalette || LocalAbPalette.current.pageBg == DarkPalette.pageBg
                 val tint = LocalAbPalette.current.cardBg

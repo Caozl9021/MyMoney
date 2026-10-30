@@ -125,7 +125,7 @@ flowchart TB
 ## 快速开始
 
 ```bash
-source ~/opt/autobook-env.sh                    # JDK 17 + Android SDK
+source ~/opt/mymoney-env.sh                    # JDK 17 + Android SDK
 ./gradlew :billkit:testDebugUnitTest :app:testDebugUnitTest
 ./gradlew :app:assembleDebug :app:assembleRelease
 ```
@@ -136,7 +136,7 @@ adb -s <设备序列号> install -r dist/MyMoney-0.34.0-self-release.apk
 ```
 
 - 依赖缓存完整时才加 `--offline`；`local.properties` 的 `sdk.dir` 随机器调整。
-- release 签名从仓库外的 `~/.autobook-keys/keystore.properties` 读取；缺失时产物为 unsigned，不可当正式包交付。
+- release 签名从仓库外的 `~/.mymoney-keys/keystore.properties` 读取；缺失时产物为 unsigned，不可当正式包交付。
 - debug 与 release 签名不同，不能互相覆盖；覆盖升级请勿卸载，避免丢数据。
 
 ---
@@ -167,7 +167,8 @@ adb -s <设备序列号> install -r dist/MyMoney-0.34.0-self-release.apk
 
 `dist/MyMoney-<版本>-<分支>-<debug|release>.apk`，分支标签由 `build-all.sh` 自动写入，`self` 与 `master` 同版本号不会互相覆盖。安装包不入库。
 
-> **0.34.0 起包名改为 `com.example.mymoney`。** 系统会把它当成一个新 App：旧的 `com.example.autobook` 可以继续共存，但两边的账单、账户与配置互不相通，需先用旧版导出 JSON 备份、再在新版里恢复；LSPosed 里也要重新给新包名勾选作用域。
+> **0.34.0 起全面改名：包名 `com.example.mymoney`，数据库 `mymoney.db`，偏好文件 `mymoney`，备份 `kind=MyMoneyBackup`，通知渠道 `mymoney_*`，深链 `mymoney://`，签名配置 `~/.mymoney-keys/keystore.properties`。**
+> 系统会把它当成一个新 App：旧包可以继续共存，但两边的账单、账户与配置互不相通。设备侧还需要重新给新包名勾选 LSPosed 作用域、重建 Root 授权。
 
 </details>
 

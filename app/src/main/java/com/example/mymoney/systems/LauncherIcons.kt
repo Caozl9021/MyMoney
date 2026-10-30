@@ -66,7 +66,7 @@ object LauncherIcons {
             mutableSelection.value = it
         }.onFailure {
             mutableSelection.value = runCatching { backend.enabled().singleOrNull() }.getOrNull()
-            android.util.Log.e("AutoBookIcons", "桌面图标状态核对失败", it)
+            android.util.Log.e("MyMoneyIcons", "桌面图标状态核对失败", it)
         }
     }
 
@@ -76,7 +76,7 @@ object LauncherIcons {
             .select(choice, Appearance.prefs(context).all[KEY] as? String)
         mutableSelection.value = result.selection
         if (result.success) result.selection?.let { remember(context, it) }
-        else android.util.Log.e("AutoBookIcons", "桌面图标切换失败", result.error)
+        else android.util.Log.e("MyMoneyIcons", "桌面图标切换失败", result.error)
         return result
     }
 
@@ -84,8 +84,8 @@ object LauncherIcons {
         runCatching {
             val prefs = Appearance.prefs(context)
             if (prefs.all[KEY] != choice.id && !prefs.edit().putString(KEY, choice.id).commit()) {
-                android.util.Log.w("AutoBookIcons", "图标偏好缓存写入失败，保留系统实际选择")
+                android.util.Log.w("MyMoneyIcons", "图标偏好缓存写入失败，保留系统实际选择")
             }
-        }.onFailure { android.util.Log.w("AutoBookIcons", "保留系统实际图标，偏好缓存不可用", it) }
+        }.onFailure { android.util.Log.w("MyMoneyIcons", "保留系统实际图标，偏好缓存不可用", it) }
     }
 }

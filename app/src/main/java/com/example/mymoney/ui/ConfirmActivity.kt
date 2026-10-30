@@ -76,7 +76,7 @@ class ConfirmActivity : ComponentActivity() {
     private var bindingGeneration = 0
 
     private fun automaticPresentationAllowed(incoming: Intent): Boolean {
-        val token = incoming.getStringExtra("autobook_auto_capture_token") ?: return true
+        val token = incoming.getStringExtra("mymoney_auto_capture_token") ?: return true
         val settings = com.example.mymoney.data.Settings(this)
         return settings.enabled && settings.autoConfirm &&
             token == com.example.mymoney.capture.NotificationIngress.configurationToken(this) &&
@@ -90,7 +90,7 @@ class ConfirmActivity : ComponentActivity() {
         savedInstanceState?.getString(EXTRA_HISTORY_ID)?.let { intent.putExtra(EXTRA_HISTORY_ID, it) }
         bindIntent()
         setContent {
-            AutoBookTheme {
+            MyMoneyTheme {
                 val draft = boundDraft
                 if (draft != null) key(draft.historyId) {
                     LaunchedEffect(draft.historyId) {

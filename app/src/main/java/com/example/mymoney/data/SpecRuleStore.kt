@@ -110,7 +110,7 @@ object SpecRuleStore {
         beforeInsert: (() -> Unit)? = null,
     ): SpecRuleEngine {
         require(bundle.rules.all { CaptureScope.supports(it.app) }) { "self规则包只能包含微信和支付宝" }
-        val prefs = context.getSharedPreferences("autobook", Context.MODE_PRIVATE)
+        val prefs = context.getSharedPreferences("mymoney", Context.MODE_PRIVATE)
         val candidate = SpecRuleEngine()
         db.withTransaction {
             val previous = db.rules().allRules()

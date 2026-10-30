@@ -22,9 +22,9 @@ android {
         versionName = "0.34.0"
     }
 
-    // 签名信息放在仓库之外（~/.autobook-keys/keystore.properties），不进版本库。
+    // 签名信息放在仓库之外（~/.mymoney-keys/keystore.properties），不进版本库。
     // 文件不存在时 release 就不签名，assembleRelease 会产出 -unsigned.apk。
-    val keystoreFile = File(System.getProperty("user.home"), ".autobook-keys/keystore.properties")
+    val keystoreFile = File(System.getProperty("user.home"), ".mymoney-keys/keystore.properties")
     val keystoreProps: Properties? = if (keystoreFile.exists()) {
         Properties().apply { keystoreFile.inputStream().use { stream -> load(stream) } }
     } else null

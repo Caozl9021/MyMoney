@@ -26,7 +26,7 @@ internal fun CaptureModeSwitch(
         Column(Modifier.fillMaxWidth().padding(AbSpacing.l), verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
             Segmented(listOf("普通模式", "Root 模式"), if (mode == CaptureMode.ROOT) 1 else 0,
                 onSelect = { index ->
-                    android.util.Log.i("AutoBookMode", "使用方式选择: $index")
+                    android.util.Log.i("MyMoneyMode", "使用方式选择: $index")
                     if (index == 0) onSelect(CaptureMode.ACCESSIBILITY)
                     else if (gate == ModeGate.READY) onSelect(CaptureMode.ROOT) else onRootBlocked()
                 })

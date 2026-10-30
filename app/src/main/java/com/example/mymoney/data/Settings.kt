@@ -8,7 +8,7 @@ import com.example.billkit.BillKitConfig
 class Settings(context: Context) {
 
     private val prefs = context.applicationContext
-        .getSharedPreferences("autobook", Context.MODE_PRIVATE)
+        .getSharedPreferences("mymoney", Context.MODE_PRIVATE)
 
     /** Every capture-affecting mutation invalidates work queued under the old configuration. */
     val captureRevision: Long get() = prefs.getLong(KEY_CAPTURE_REVISION, 0L)
@@ -197,7 +197,7 @@ class Settings(context: Context) {
          * 而这个键值本身（true/false）语义没变，只是属性名从 pageFallbackEnabled 改成了 pageEnabled。
          */
         const val KEY_PAGE_FALLBACK_ENABLED = "page_fallback_enabled"
-        const val PREFS_NAME = "autobook"
+        const val PREFS_NAME = "mymoney"
         const val KEY_CAPTURE_MODE = "capture_mode"
         const val KEY_ENABLED = "enabled"
         const val KEY_AUTO_CONFIRM = "auto_confirm"

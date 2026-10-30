@@ -40,7 +40,7 @@ class App : Application() {
         scope.launch { com.example.mymoney.systems.LauncherIcons.reconcile(this@App) }
         scope.launch {
             runCatching { com.example.mymoney.data.BackupStore.completePendingConfiguration(this@App) }
-                .onFailure { android.util.Log.e("AutoBook", "恢复配置尚未完成", it) }
+                .onFailure { android.util.Log.e("MyMoney", "恢复配置尚未完成", it) }
         }
         // 原创规则包经完整校验后载入；失败只影响规则通道，不阻塞其它采集路径。
         scope.launch { com.example.mymoney.data.SpecRuleStore.init(this@App) }
@@ -81,7 +81,7 @@ class App : Application() {
                 } catch (error: Exception) {
                     BillKit.retryFailedDraft(draft)
                     if (DebugBus.state.value == diagnostic) DebugBus.annotateOutcome(" → history-failed:可重试")
-                    android.util.Log.e("AutoBook", "识别历史或确认投递失败，可重试", error)
+                    android.util.Log.e("MyMoney", "识别历史或确认投递失败，可重试", error)
                 }
             }
         }

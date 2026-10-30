@@ -1,5 +1,5 @@
 #!/bin/bash
-# AutoBook 构建脚本（LSP 增强已内置进主 App，不再有独立的 xposed-module）
+# MyMoney 构建脚本（LSP 增强已内置进主 App，不再有独立的 xposed-module）
 #
 # 历史上这里是"构建独立的 LSP 增强模块 APK"，0.6.2 起模块代码已内置进 app 模块，
 # settings.gradle.kts 里只有 :app 和 :billkit —— 所以 `:xposed-module:assembleRelease`
@@ -10,7 +10,7 @@
 set -e
 
 echo "=========================================="
-echo "AutoBook 构建（LSP 增强已内置）"
+echo "MyMoney 构建（LSP 增强已内置）"
 echo "=========================================="
 
 if [ ! -f "gradlew" ]; then
@@ -18,10 +18,10 @@ if [ ! -f "gradlew" ]; then
     exit 1
 fi
 
-if [ -f "$HOME/opt/autobook-env.sh" ]; then
+if [ -f "$HOME/opt/mymoney-env.sh" ]; then
     echo "📦 加载环境变量..."
     # shellcheck disable=SC1091
-    source "$HOME/opt/autobook-env.sh"
+    source "$HOME/opt/mymoney-env.sh"
 fi
 
 echo ""
@@ -61,8 +61,8 @@ echo "=========================================="
 echo "1. 安装唯一的 APK（LSP 功能已内置，不需要第二个模块 APK）："
 echo "   adb install -r $APP_APK"
 echo ""
-echo "2. 如需 LSP 增强：在 LSPosed 管理器里启用「AutoBook」，"
-echo "   作用域只勾「系统框架 (android)」—— 勾 AutoBook 自己不会有任何效果。"
+echo "2. 如需 LSP 增强：在 LSPosed 管理器里启用「MyMoney」，"
+echo "   作用域只勾「系统框架 (android)」—— 勾 MyMoney 自己不会有任何效果。"
 echo ""
 echo "3. 验证：设置 → 权限 → LSP 增强模块；"
 echo "   真正生效的判据是 LSPosed 日志里出现「阻止系统解绑无障碍服务」。"

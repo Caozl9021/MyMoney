@@ -53,7 +53,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/Theme.AutoBook">
+        android:theme="@style/Theme.MyMoney">
 
         <provider
             android:name=".lsp.LspStatusProvider"
@@ -160,7 +160,7 @@
             android:launchMode="singleTop"
             android:excludeFromRecents="true"
             android:noHistory="true"
-            android:theme="@style/Theme.AutoBook.Translucent" />
+            android:theme="@style/Theme.MyMoney.Translucent" />
 
         <!-- root 轮询常驻服务（用户手动开启后才启动） -->
         <service

@@ -253,7 +253,7 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
     fun selectMode(next: CaptureMode) {
         // Callable references can outlive the composition that created them; read the live mode.
         val currentMode = CaptureModeManager.state.value.mode
-        android.util.Log.i("AutoBookMode", "切换方式: $currentMode -> $next")
+        android.util.Log.i("MyMoneyMode", "切换方式: $currentMode -> $next")
         if (next == CaptureMode.ACCESSIBILITY) {
             rootRequest++
             checkingRoot = false
@@ -577,7 +577,7 @@ private fun PermissionsPage(
             if (!backgroundOnly) {
             GroupHeader("识别权限")
             InsetGroup {
-                // 通知使用权只在无障碍模式需要。root 模式下通知由 AutoBook 自己读通知栏，
+                // 通知使用权只在无障碍模式需要。root 模式下通知由 MyMoney 自己读通知栏，
                 // 这一行根本不该出现——否则用户会去系统里开一个用不上的授权。
                 if (mode != CaptureMode.ROOT) {
                     ListRow(title = "读取其他应用通知", subtitle = when {
