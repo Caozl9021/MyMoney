@@ -95,6 +95,8 @@ object CaptureMergePolicy {
         val category = missing(row.category, incoming.category, CaptureFields.CATEGORY)
         val subCategory = if (category == incoming.category) missing(row.subCategory, incoming.subCategory, CaptureFields.SUBCATEGORY)
             else row.subCategory
+        val upgradeNote = NoteFillPolicy.mayUpgrade(row, incoming)
+        val preserveNote = row.noteOrigin in setOf(NoteTemplate.USER, NoteTemplate.SUGGESTION, NoteFillPolicy.FIXED, NoteFillPolicy.DISABLED)
         return row.copy(
             merchant = missing(row.merchant, incoming.merchant, CaptureFields.MERCHANT),
             method = missing(row.method, incoming.method, CaptureFields.METHOD),
@@ -102,7 +104,9 @@ object CaptureMergePolicy {
             subCategory = subCategory,
             account = missing(row.account, incoming.account, CaptureFields.ACCOUNT),
             transferAccountId = missing(row.transferAccountId, incoming.transferAccountId, CaptureFields.ACCOUNT),
-            note = if (row.noteOrigin == NoteTemplate.USER || row.noteOrigin == NoteTemplate.SUGGESTION) row.note else missing(row.note, incoming.note, CaptureFields.NOTE),
+            note = if (preserveNote) row.note else if (upgradeNote) incoming.note else missing(row.note, incoming.note, CaptureFields.NOTE),
+            noteOrigin = if (!preserveNote && (upgradeNote || row.note.isNullOrBlank() && row.protectedFields and CaptureFields.NOTE == 0L)) incoming.noteOrigin ?: row.noteOrigin else row.noteOrigin,
+            noteTemplateSnapshot = if (upgradeNote) incoming.noteTemplateSnapshot else row.noteTemplateSnapshot,
             productName = row.productName ?: incoming.productName,
             productSource = if (row.productName == null) incoming.productSource else row.productSource,
             transactionKey = row.transactionKey ?: incoming.transactionKey,

@@ -18,8 +18,8 @@ android {
         targetSdk = 35
         testInstrumentationRunner = providers.gradleProperty("mymoneyTestRunner")
             .getOrElse("io.github.mymoney.HistoryInstrumentation")
-        versionCode = 110
-        versionName = "1.0.1"
+        versionCode = 115
+        versionName = "1.3.1"
     }
 
     // 签名信息放在仓库之外（~/.mymoney-keys/keystore.properties），不进版本库。
@@ -101,3 +101,11 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlin:kotlin-test")
 }
+
+// Display the same release metadata used by the independent rule packager.
+val ruleReleaseAssets = tasks.register<Copy>("prepareRuleReleaseAssets") {
+    from(rootProject.file("billkit/rules/package.json")) { rename { "official-rule-release.json" } }
+    into(layout.buildDirectory.dir("generated/ruleReleaseAssets"))
+}
+android.sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/ruleReleaseAssets"))
+tasks.named("preBuild").configure { dependsOn(ruleReleaseAssets) }

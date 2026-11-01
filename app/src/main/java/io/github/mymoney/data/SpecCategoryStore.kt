@@ -23,6 +23,7 @@ object SpecCategoryStore {
     private val lock = Mutex()
 
     @Volatile private var initialized = false
+    @Volatile private var sourceDigest = ""
 
     fun isReady(): Boolean = initialized && engine.isReady()
 
@@ -33,15 +34,17 @@ object SpecCategoryStore {
     }
 
     suspend fun ensureReady(context: Context) {
-        if (initialized && engine.isReady()) return
+        if (initialized && engine.isReady() && SpecRuleStore.isReady() && sourceDigest == SpecRuleStore.status.value.digest) return
         lock.withLock {
-            if (initialized && engine.isReady()) return
+            if (initialized && engine.isReady() && SpecRuleStore.isReady() && sourceDigest == SpecRuleStore.status.value.digest) return
             withContext(Dispatchers.IO) {
                 val app = context.applicationContext
-                val common = app.assets.open(SpecAssets.COMMON_JS).use { it.readBytes().toString(Charsets.UTF_8) }
-                val category = app.assets.open(SpecAssets.CATEGORY_JS).use { it.readBytes().toString(Charsets.UTF_8) }
+                val source = SpecRuleStore.categorySource(app)
+                val common = source.first
+                val category = source.second
                 engine.rebuild(common, category)
                 initialized = engine.isReady()
+                sourceDigest = source.third
             }
         }
     }

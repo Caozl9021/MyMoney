@@ -1,5 +1,8 @@
 package io.github.mymoney.data
 
+import com.example.billkit.notification.NotificationTemplateConfig
+import com.example.billkit.notification.NotificationTemplateRegistry
+import com.example.billkit.notification.PortableExpenseTemplate
 import android.content.Context
 import android.util.Log
 import com.example.billkit.BillDraft
@@ -9,6 +12,13 @@ import com.example.billkit.spec.SpecRuleModel
 import com.example.billkit.spec.SpecRuleBundle
 import com.example.billkit.spec.SpecDraftAdapter
 import androidx.room.withTransaction
+import com.example.billkit.spec.PortableRulePackage
+import com.example.billkit.spec.RulePackageFiles
+import com.example.billkit.spec.PersonalRule
+import com.example.billkit.spec.PersonalRuleCodec
+import com.example.billkit.spec.PersonalRuleEngine
+import com.example.billkit.spec.PersonalPageRules
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,6 +50,8 @@ object SpecRuleStore {
         val available: Int = 0,
         val experimental: Int = 0,
         val capabilities: Set<String> = emptySet(),
+        val source: String = "内置", val digest: String = "", val publishedAt: String? = null,
+        val entries: List<SpecRuleModel> = emptyList(), val personalRules: List<PersonalRule> = emptyList(), val canRollback: Boolean = false, val manualActivation: Boolean = false,
     )
 
     @Volatile private var engine = SpecRuleEngine()
@@ -65,7 +77,11 @@ object SpecRuleStore {
     suspend fun init(context: Context) {
         runCatching { ensureReady(context) }.onFailure {
             Log.w(TAG, "规则通道初始化失败：${it.message}")
-            mutableStatus.value = mutableStatus.value.copy(ready = false, error = it.message)
+            val stored = runCatching { packageFiles(context).state() }.getOrNull()
+            mutableStatus.value = mutableStatus.value.copy(ready = false, error = it.message,
+                source = if (stored?.active != null) "导入" else "内置",
+                version = stored?.versions?.entries?.firstOrNull { row -> row.value == stored.active }?.key.orEmpty(),
+                digest = stored?.active.orEmpty(), canRollback = stored?.canRollback == true)
         }
     }
 
@@ -75,29 +91,18 @@ object SpecRuleStore {
             if (initialized && engine.isReady()) return
             withContext(Dispatchers.IO) {
                 val app = context.applicationContext
-                val common = readAsset(app, SpecAssets.COMMON_JS)
-                val bundle = SpecRuleBundle.load { readAsset(app, it) }
-                // 包内禁用的实验脚本也必须能构建；不能把坏脚本藏在enabled=false后面。
-                SpecRuleEngine().apply {
-                    rebuild(common, bundle.rules.map { it.copy(enabled = true) })
-                    close()
+                val store = packageFiles(app)
+                var state = store.state()
+                if (!File(app.filesDir, "rule-packages/state.json").exists()) {
+                    val old = AppDb.get(app).rules().allRules().filter { it.creator == "maimi" && !it.enabled && it.struct != "maimi:experimental" }
+                    state = state.copy(enabled = old.associate { it.systemRuleName to false })
+                    store.commit(state)
                 }
-                com.example.billkit.spec.SpecCategoryEngine().apply {
-                    rebuild(common, readAsset(app, SpecAssets.CATEGORY_JS))
-                    close()
-                }
-                val db = AppDb.get(app)
-                val candidate = installBundle(app, db, bundle, common)
-                engine = candidate
-                covered = bundle.rules.filter { it.enabled }.map { it.app + "|" + it.type }.toSet()
-                    .intersect(db.rules().enabledRules().filter { it.creator == "maimi" }
-                        .map { it.app + "|" + it.type }.toSet())
-                initialized = candidate.isReady()
-                mutableStatus.value = Status(
-                    ready = initialized, rules = candidate.registeredRules(), buildMillis = candidate.lastBuildMillis,
-                    version = bundle.version, available = bundle.rules.size,
-                    experimental = bundle.rules.count { !it.enabled }, capabilities = covered,
-                )
+                activate(app, state, validate = true)
+                PersonalPageRules.install(state.personalRules)
+                NotificationTemplateRegistry.install(pendingNotificationTemplates)
+                initialized = true
+
             }
         }
     }
@@ -108,9 +113,10 @@ object SpecRuleStore {
         db: AppDb,
         bundle: SpecRuleBundle,
         common: String,
+        explicitEnabled: Map<String, Boolean>? = null,
         beforeInsert: (() -> Unit)? = null,
     ): SpecRuleEngine {
-        require(bundle.rules.all { CaptureScope.supports(it.app) }) { "self规则包只能包含微信和支付宝" }
+        require(bundle.rules.all { CaptureScope.supports(it.app) }) { "规则包只能包含微信和支付宝" }
         val prefs = context.getSharedPreferences("mymoney", Context.MODE_PRIVATE)
         val candidate = SpecRuleEngine()
         db.withTransaction {
@@ -123,7 +129,8 @@ object SpecRuleStore {
                     app = rule.app, type = rule.type, js = rule.js, name = rule.name,
                     systemRuleName = rule.systemRuleName, creator = "maimi", autoRecord = false,
                     struct = if (rule.enabled) "maimi:admitted" else "maimi:experimental",
-                    enabled = rule.enabled && !(old?.enabled == false && old.struct != "maimi:experimental"),
+                    enabled = if (explicitEnabled != null) explicitEnabled[rule.systemRuleName] ?: rule.enabled
+                        else rule.enabled && !(old?.enabled == false && old.struct != "maimi:experimental"),
                     updateAt = old?.updateAt ?: System.currentTimeMillis(),
                 )
             }
@@ -178,7 +185,9 @@ object SpecRuleStore {
             return ParseResult(null, SpecRuleEngine.Outcome.ERROR, pending = true)
         }
         val db = AppDb.get(context.applicationContext)
-        return parseStored(db, engine, app, type, raw, mutableStatus.value.version, System.currentTimeMillis())
+        return lock.withLock {
+            parseStored(db, engine, app, type, raw, mutableStatus.value.version + "@" + mutableStatus.value.digest.take(16) + ";personal@" + activePersonalDigest, System.currentTimeMillis(), activePersonalRules)
+        }
     }
 
     /**
@@ -238,7 +247,7 @@ object SpecRuleStore {
     /** 可由隔离Room runner验证“落盘失败禁止求值”，不替换全局数据库。 */
     internal suspend fun parseStored(
         db: AppDb, activeEngine: SpecRuleEngine, app: String, type: String, raw: String,
-        version: String, now: Long,
+        version: String, now: Long, personalRules: List<PersonalRule> = emptyList(),
     ): ParseResult {
         fun finish(hit: Hit?, outcome: SpecRuleEngine.Outcome): ParseResult {
             latestOutcome = outcome
@@ -260,7 +269,9 @@ object SpecRuleStore {
         // 只有宿主用已经落盘的两个原始行验证后，才可把联合凭证交给原红包规则。
         // Waiting仍可走原完成凭证规则；无金额邀请和孤立准备回执本身不会命中。
         val parsingRaw = (linked as? RedpacketCorrelationStore.Result.Linked)?.raw ?: raw
-        val parsed = activeEngine.parseDetailed(app, type, parsingRaw)
+        val personal = PersonalRuleEngine.match(personalRules, app, type, parsingRaw)
+        val parsed = if (personal != null) SpecRuleEngine.ParseResult(personal, SpecRuleEngine.Outcome.MATCHED)
+            else activeEngine.parseDetailed(app, type, parsingRaw)
         val result = parsed.result
         if (result == null) {
             if (parsed.outcome == SpecRuleEngine.Outcome.ERROR) runCatching { db.rules().markIssue(rowId) }
@@ -283,14 +294,171 @@ object SpecRuleStore {
     suspend fun recentData(context: Context, limit: Int = 20): List<AppDataEntity> =
         withContext(Dispatchers.IO) { AppDb.get(context.applicationContext).rules().recentData(limit) }
 
+    suspend fun recentRuleSamples(context: Context): List<AppDataEntity> {
+        val rows = recentData(context, 20)
+        val page = com.example.billkit.DebugBus.state.value ?: return rows
+        if (!CaptureScope.supports(page.packageName) || page.text.isBlank() || page.text.length >= 2000 || page.outcome.contains("[截断]")) return rows
+        val snapshot = com.example.billkit.UiSnapshot(page.packageName, page.activityClass, page.text.lines())
+        return listOf(AppDataEntity(id = -1, data = PersonalRuleEngine.pageRaw(snapshot, page.atMillis), type = "PAGE",
+            app = page.packageName, time = page.atMillis, match = page.outcome.startsWith("draft:"))) + rows
+    }
+
+    private var pendingNotificationTemplates: List<PortableExpenseTemplate> = emptyList()
+    @Volatile private var activePersonalDigest = ""
+    @Volatile private var activePersonalRules: List<PersonalRule> = emptyList()
+    @Volatile private var activeFiles: Map<String, String>? = null
+    fun activeAsset(context: Context, path: String): String = activeFiles?.get(path.removePrefix("spec/")) ?: readAsset(context, path)
+    suspend fun categorySource(context: Context): Triple<String, String, String> {
+        ensureReady(context)
+        return lock.withLock { Triple(activeAsset(context, SpecAssets.COMMON_JS), activeAsset(context, SpecAssets.CATEGORY_JS), status.value.digest) }
+    }
+    private fun packageFiles(context: Context) = RulePackageFiles(File(context.filesDir, "rule-packages"))
+
+    private suspend fun activate(context: Context, state: RulePackageFiles.State, validate: Boolean, manual: Boolean = false) {
+        val pack = state.active?.let { packageFiles(context).load(it) }
+        if (validate) pack?.validate()
+        val bundle = pack?.bundle ?: SpecRuleBundle.load { readAsset(context, it) }
+        val notifications = pack?.notificationConfig ?: NotificationTemplateConfig.decode(readAsset(context, "spec/"+NotificationTemplateConfig.FILE))
+        if (validate) notifications.validateSamples()
+        val releaseMetadata = if(pack == null) (MiniJson.decode(readAsset(context,"official-rule-release.json")) as Map<*, *>) else null
+        val common = pack?.read(SpecAssets.COMMON_JS) ?: readAsset(context, SpecAssets.COMMON_JS)
+        val category = pack?.read(SpecAssets.CATEGORY_JS) ?: readAsset(context, SpecAssets.CATEGORY_JS)
+        // Validate every script, including a locally disabled one, before any database mutation.
+        SpecRuleEngine().apply { try { rebuild(common, bundle.rules.map { it.copy(enabled = true) }) } finally { close() } }
+        com.example.billkit.spec.SpecCategoryEngine().apply { try { rebuild(common, category) } finally { close() } }
+        val candidate = installBundle(context, AppDb.get(context), bundle, common, explicitEnabled = state.enabled)
+        val oldEngine = engine
+        engine = candidate
+        oldEngine.close()
+        activeFiles = pack?.files
+        activePersonalRules = state.personalRules
+        activePersonalDigest = PortableRulePackage.hash(PersonalRuleCodec.export(state.personalRules).toByteArray()).take(16)
+        covered = bundle.rules.filter { state.enabled[it.systemRuleName] ?: it.enabled }.map { it.app + "|" + it.type }.toSet() + state.personalRules.filter { it.enabled }.map { it.app + "|" + it.inputType }
+        pendingNotificationTemplates = notifications.templates.filter { t -> state.enabled[t.ruleId] ?: bundle.rules.first { it.systemRuleName==t.ruleId }.enabled }
+        mutableStatus.value = Status(ready = true, rules = candidate.registeredRules(), buildMillis = candidate.lastBuildMillis,
+            version = pack?.version ?: (releaseMetadata?.get("packageVersion") as? String ?: bundle.version), available = bundle.rules.size, capabilities = covered,
+            source = if (pack == null) "内置" else "导入", digest = pack?.digest ?: bundle.digest,
+            publishedAt = pack?.publishedAt ?: releaseMetadata?.get("publishedAt") as? String,
+            personalRules = state.personalRules, entries = bundle.rules.map { it.copy(enabled = state.enabled[it.systemRuleName] ?: it.enabled) }, canRollback = state.canRollback, manualActivation = manual)
+    }
+
+    suspend fun preparePackage(context: Context, bytes: ByteArray): PortableRulePackage = withContext(Dispatchers.IO) {
+        val pack = PortableRulePackage.load(bytes)
+        pack.validate()
+        val state = packageFiles(context).state()
+        require(state.versions[pack.version]?.let { it == pack.digest } != false) { "同版本内容不同，请发布新的规则版本" }
+        pack
+    }
+
+    fun describePackage(pack: PortableRulePackage): String {
+        val current = status.value
+        val old = current.entries.associateBy { it.systemRuleName }
+        val fresh = pack.bundle.rules.associateBy { it.systemRuleName }
+        val added = fresh.keys - old.keys
+        val removed = old.keys - fresh.keys
+        val updated = fresh.keys.intersect(old.keys).filter { fresh[it]?.copy(enabled = true) != old[it]?.copy(enabled = true) ||
+            fresh.keys.indexOf(it) != old.keys.indexOf(it) }
+        val downgrade = current.source == "导入" && PortableRulePackage.compareVersions(pack.version, current.version) < 0
+        return "${current.source} ${current.version} → 导入 ${pack.version}" +
+            (if (downgrade) "\n这是降级操作" else "") +
+            "\n新增 ${added.size} · 更新 ${updated.size} · 移除 ${removed.size}" +
+            (added.map { "新增：" + fresh.getValue(it).name.removePrefix("麦米·") } +
+                updated.map { "更新：" + fresh.getValue(it).name.removePrefix("麦米·") } +
+                removed.map { "移除：" + old.getValue(it).name.removePrefix("麦米·") }).joinToString("\n", prefix = "\n") + "\n" + pack.notes +
+            "\n通知模板：${pack.notificationConfig?.templates?.size?.toString() ?: "沿用应用内置"}；付款通知开关同时控制这些模板。\n整包同时更新公共脚本、分类与账户建议。保留用户已有配置。\n导入后用于后续识别，不重新处理历史交易。"
+    }
+
+    private suspend fun change(context: Context, target: RulePackageFiles.State) {
+        val store = packageFiles(context)
+        val previous = store.state()
+        try {
+            activate(context, target, validate = true, manual = true)
+            store.commit(target)
+            PersonalPageRules.install(target.personalRules) // publish only after durable commit
+            NotificationTemplateRegistry.install(pendingNotificationTemplates)
+            // commit point; if killed before this, startup rebuilds the previous projection.
+        } catch (t: Throwable) {
+            runCatching { activate(context, previous, validate = true, manual = true) }.onFailure {
+                initialized = false
+                mutableStatus.value = status.value.copy(ready = false, error = "规则恢复失败，请回退或恢复内置")
+            }
+            throw t
+        }
+        store.prune(target)
+    }
+
+    suspend fun importPackage(context: Context, bytes: ByteArray) = withContext(Dispatchers.IO) {
+        val pack = preparePackage(context, bytes)
+        lock.withLock {
+            val store = packageFiles(context); val state = store.state()
+            require(state.versions[pack.version]?.let { it == pack.digest } != false) { "同版本内容不同" }
+            if (state.active == pack.digest) return@withLock
+            store.stage(bytes, pack)
+            change(context, state.copy(active = pack.digest, previous = state.active, canRollback = true,
+                versions = state.versions + (pack.version to pack.digest)))
+        }
+    }
+    suspend fun rollbackPackage(context: Context) = withContext(Dispatchers.IO) { lock.withLock {
+        val state = packageFiles(context).state(); require(state.canRollback) { "没有可回退的规则包" }
+        change(context, state.copy(active = state.previous, previous = state.active))
+    } }
+    suspend fun restoreBuiltin(context: Context) = withContext(Dispatchers.IO) { lock.withLock {
+        val state = packageFiles(context).state()
+        if (state.active != null) change(context, state.copy(active = null, previous = state.active, canRollback = true))
+        else if (!isReady()) change(context, state.copy(active = null))
+    } }
+    suspend fun setRuleEnabled(context: Context, id: String, enabled: Boolean) = withContext(Dispatchers.IO) { lock.withLock {
+        require(status.value.entries.any { it.systemRuleName == id }) { "规则ID不存在" }
+        val state = packageFiles(context).state()
+        change(context, state.copy(enabled = state.enabled + (id to enabled)))
+    } }
+
+    suspend fun savePersonalRule(context: Context, rule: PersonalRule) = withContext(Dispatchers.IO) { lock.withLock {
+        rule.validate()
+        val state = packageFiles(context).state()
+        val old = state.personalRules.firstOrNull { it.id == rule.id }
+        val saved = if(old != null && old.copy(enabled=rule.enabled,updatedAt=null)==rule.copy(updatedAt=null)) rule.copy(updatedAt=old.updatedAt) else rule.copy(updatedAt=System.currentTimeMillis())
+        val rules = listOf(saved) + state.personalRules.filterNot { it.id == rule.id }
+        require(rules.size <= 100) { "个人规则最多100条" }
+        change(context, state.copy(personalRules = rules))
+    } }
+    suspend fun deletePersonalRule(context: Context, id: String) = withContext(Dispatchers.IO) { lock.withLock {
+        val state = packageFiles(context).state()
+        change(context, state.copy(personalRules = state.personalRules.filterNot { it.id == id }))
+    } }
+    suspend fun importPersonalRules(context: Context, text: String) = withContext(Dispatchers.IO) { lock.withLock {
+        val incoming = PersonalRuleCodec.decode(text)
+        val state = packageFiles(context).state()
+        val rules = incoming + state.personalRules.filterNot { old -> incoming.any { it.id == old.id } }
+        require(rules.size <= 100) { "合并后个人规则超过100条" }
+        change(context, state.copy(personalRules = rules))
+    } }
+    suspend fun exportPersonalRules(context: Context): String = withContext(Dispatchers.IO) { lock.withLock {
+        PersonalRuleCodec.export(packageFiles(context).state().personalRules)
+    } }
+
+    /** Pure preview: no raw persistence, correlation write, learning, dedup or delivery. */
+    suspend fun preview(context: Context, row: AppDataEntity): String = withContext(Dispatchers.IO) {
+        ensureReady(context)
+        lock.withLock {
+            val personal = PersonalRuleEngine.match(activePersonalRules, row.app, row.type, row.data)
+            val parsed = if (personal != null) SpecRuleEngine.ParseResult(personal, SpecRuleEngine.Outcome.MATCHED) else engine.parseDetailed(row.app, row.type, row.data)
+            val hit = parsed.result
+            if (hit == null) "没有匹配到规则" else
+                "${hit.ruleName.removePrefix("麦米·")}\n" +
+                    "${when(hit.bill.type) { "Income" -> "收入"; "Refund" -> "退款"; else -> "支出" }} ¥${String.format(java.util.Locale.US, "%.2f", hit.bill.priceCents / 100.0)}\n" +
+                    "商户：${hit.bill.shopName.ifBlank { "未提供" }}\n支付方式：${hit.bill.accountNameFrom.ifBlank { "未提供" }}\n仅预览，不生成账单或确认卡"
+        }
+    }
+
     /** assets 里 `spec/` 下的文件；库模块的 assets 会被合进主 APK，路径不变。 */
     private fun readAsset(context: Context, name: String): String =
         context.assets.open(name).use { it.readBytes().toString(Charsets.UTF_8) }
 
     /** 分类表与资产表（阶段 5/6 用），同样来自 assets。 */
     fun readCategories(context: Context): List<com.example.billkit.spec.SpecCategory> =
-        com.example.billkit.spec.SpecCategory.parseAll(readAsset(context, SpecAssets.CATEGORIES))
+        com.example.billkit.spec.SpecCategory.parseAll(activeAsset(context, SpecAssets.CATEGORIES))
 
     fun readAssets(context: Context): List<com.example.billkit.spec.SpecAsset> =
-        com.example.billkit.spec.SpecAsset.parseAll(readAsset(context, SpecAssets.ASSETS))
+        com.example.billkit.spec.SpecAsset.parseAll(activeAsset(context, SpecAssets.ASSETS))
 }

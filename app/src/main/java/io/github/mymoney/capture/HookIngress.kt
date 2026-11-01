@@ -71,6 +71,10 @@ object HookIngress {
         val app = context.applicationContext
         scope.launch {
             SpecRuleStore.status.collect { s ->
+                if (s.manualActivation) {
+                    wasReady = s.ready
+                    return@collect // importing or rolling back rules never replays historical input
+                }
                 if (!s.ready) {
                     wasReady = false
                     return@collect
@@ -171,7 +175,7 @@ object HookIngress {
             account = suggestion.account ?: hit.draft.account)
         // SPEC §8 阶段 6：账户原文（`招商银行信用卡(1234)`）留在 method，account 换成账本账户。
         val accounted = SpecAccountStore.fill(event.context, named, preferred = suggestion.account)
-        val enriched = accounted.copy(note = NoteTemplate.render(accounted).ifBlank { null })
+        val enriched = NoteFillStore.prepare(accounted)
         val accepted = CaptureCoordinator.accept(event.context,
             CaptureCoordinator.Input(enriched, "HOOK", observationKey, eventId, event.t), allowed = {
                 val s = Settings(event.context)

@@ -36,6 +36,7 @@ object SpecDraftAdapter {
             merchant = merchant, method = method, account = method,
             orderTail = order?.takeLast(6), sourcePkg = app, strategy = "spec:$ruleId",
             note = bill.shopItem.trim().ifEmpty { null },
+            noteOrigin = bill.shopItem.trim().takeIf { it.isNotEmpty() }?.let { "PRODUCT" },
             transactionKey = order?.let { TransactionIdentity.key(app, type, it) },
             hasExplicitTime = explicit,
             productName = bill.shopItem.trim().ifEmpty { null },

@@ -1,0 +1,38 @@
+name: rule-package
+on:
+  workflow_dispatch:
+  push:
+    tags: ['rules-v*']
+  pull_request:
+    paths: ['billkit/rules/**', 'billkit/src/main/java/com/example/billkit/spec/**', 'billkit/src/main/java/com/example/billkit/notification/**', 'billkit/src/main/assets/spec/**', 'billkit/src/test/**', '.github/workflows/rule-package.yml']
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build deterministic rule snapshot
+        run: python3 billkit/rules/package.py --output-dir dist/rules
+      - name: Verify release tag matches package
+        if: startsWith(github.ref, 'refs/tags/rules-v')
+        run: |
+          python3 - <<'PY'
+          import json, os
+          version = json.load(open('billkit/rules/package.json'))['packageVersion']
+          assert os.environ['GITHUB_REF_NAME'] == 'rules-v' + version, 'tag/package version mismatch'
+          PY
+      - name: Production engine verification and tests (no APK)
+        run: |
+          ./gradlew :billkit:testDebugUnitTest :billkit:validateRulePackage -PrulePackage="$(find "$PWD/dist/rules" -name '*.zip' -print -quit)" --console=plain
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mymoney-rule-package
+          path: dist/rules/*
+          retention-days: 30

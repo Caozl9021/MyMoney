@@ -38,7 +38,7 @@ sealed interface NotificationParseResult {
 }
 
 /** Pure parser: envelope guards apply to all templates; structured expense semantics are sample-bound. */
-class NotificationParser(private val templates: List<VerifiedExpenseNotificationTemplate> = PRODUCTION_TEMPLATES) {
+class NotificationParser(private val templates: List<VerifiedExpenseNotificationTemplate>? = null) {
     fun parse(input: NotificationObservation): NotificationParseResult {
         NotificationEnvelopeGuard.rejection(input)?.let { reason ->
             return if (reason in setOf("truncated-content", "missing-observation-time", "empty-or-hidden-content")) {
@@ -48,7 +48,7 @@ class NotificationParser(private val templates: List<VerifiedExpenseNotification
         val body = input.bigText?.takeIf { it.isNotBlank() } ?: input.text.orEmpty()
         val content = listOfNotNull(input.title, body).joinToString("\n")
         if (content.isBlank()) return NotificationParseResult.NeedsEvidence("empty-or-hidden-content")
-        val eligible = templates.filter { it.evidenceReference.isNotBlank() && it.id.isNotBlank() &&
+        val eligible = (templates ?: NotificationTemplateRegistry.snapshot()).filter { it.evidenceReference.isNotBlank() && it.id.isNotBlank() &&
             it.packageName == input.packageName && it.matchesMetadata(input) && it.matches(input) }
         val structured = eligible.filter { it.structuredExpense }
         // A reviewed structured sentence identifies the transaction amount before any reward suffix.

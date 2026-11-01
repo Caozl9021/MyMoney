@@ -106,7 +106,9 @@ internal fun AutomationPage(
             }
             item {
                 InsetGroup {
-                    ListRow(title = "更多设置", leading = { SettingsIconBadge("更多设置", AbIcons.Settings) },
+                    ListRow(title = "识别规则", subtitle = "查看已有规则、添加或导入", leading = { SettingsIconBadge("识别规则", AbIcons.Layers) },
+                        chevron = true, onClick = { onNavigate(Route.RULE_FILES) })
+                    ListRow(title = "更多设置", dividerAbove = true, leading = { SettingsIconBadge("更多设置", AbIcons.Settings) },
                         chevron = true, onClick = { onNavigate(Route.MORE) })
                 }
             }

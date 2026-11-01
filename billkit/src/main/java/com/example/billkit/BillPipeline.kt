@@ -23,6 +23,7 @@ class BillPipeline(
     }
 
     private fun processNormalized(snapshot: UiSnapshot, now: Long): Outcome {
+        com.example.billkit.spec.PersonalPageRules.match(snapshot, now)?.let { return it }
         val match = classifier.classify(snapshot)
             ?: return Outcome.Skipped("not-a-bill-page")
 

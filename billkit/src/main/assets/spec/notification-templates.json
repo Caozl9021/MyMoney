@@ -1,0 +1,233 @@
+{
+  "schemaVersion": 1,
+  "templates": [
+    {
+      "id": "alipay-trade-expense-v1",
+      "ruleId": "maimi_alipay_notice_expense_v1",
+      "evidence": "20261101-122050-alipay-expense-redacted;legacy-channel-v1",
+      "channelHashes": [
+        "be22bef6e8da604af0e7e083445124f53a894c5480b078fce74861a69f2c7907",
+        "54df58eaacb4ea10c3e594b763f542362def9443ab946e91a282d65441a66342"
+      ],
+      "category": null,
+      "platformTemplate": null,
+      "title": "交易提醒",
+      "bodyPattern": "你有一笔{amount}元的支出",
+      "rewardPatterns": [
+        "",
+        "，点击领{rewardAmount}元水燃费红包。",
+        "，点击领取{rewardAmount}个支付宝积分。",
+        "，点击领{rewardAmount}元小荷包支付红包。"
+      ]
+    }
+  ],
+  "samples": [
+    {
+      "id": "captured-expense-reward",
+      "templateId": "alipay-trade-expense-v1",
+      "provenance": "captured-redacted",
+      "evidence": "20261101-122050-alipay-expense-redacted",
+      "observation": {
+        "title": "交易提醒",
+        "text": "你有一笔17.53元的支出，点击领2元水燃费红包。",
+        "channelId": "mipush|com.eg.android.AlipayGphone|100060"
+      },
+      "expectCents": 1753
+    },
+    {
+      "id": "variable-amount",
+      "templateId": "alipay-trade-expense-v1",
+      "provenance": "synthetic",
+      "evidence": "host-safety-regression-v1",
+      "observation": {
+        "title": "交易提醒",
+        "text": "你有一笔19.99元的支出，点击领3元水燃费红包。",
+        "channelId": "mipush|com.eg.android.AlipayGphone|100060"
+      },
+      "expectCents": 1999
+    },
+    {
+      "id": "no-reward",
+      "templateId": "alipay-trade-expense-v1",
+      "provenance": "synthetic",
+      "evidence": "host-safety-regression-v1",
+      "observation": {
+        "title": "交易提醒",
+        "text": "你有一笔17.53元的支出",
+        "channelId": "mipush|com.eg.android.AlipayGphone|100060"
+      },
+      "expectCents": 1753
+    },
+    {
+      "id": "points-reward",
+      "templateId": "alipay-trade-expense-v1",
+      "provenance": "synthetic",
+      "evidence": "host-safety-regression-v1",
+      "observation": {
+        "title": "交易提醒",
+        "text": "你有一笔28.72元的支出，点击领取6个支付宝积分。",
+        "channelId": "mipush|com.eg.android.AlipayGphone|100060"
+      },
+      "expectCents": 2872
+    },
+    {
+      "id": "unknown-channel",
+      "templateId": "alipay-trade-expense-v1",
+      "provenance": "synthetic",
+      "evidence": "host-safety-regression-v1",
+      "observation": {
+        "title": "交易提醒",
+        "text": "你有一笔17.53元的支出，点击领2元水燃费红包。",
+        "channelId": "untrusted"
+      },
+      "expectCents": null
+    },
+    {
+      "id": "failure",
+      "templateId": "alipay-trade-expense-v1",
+      "provenance": "synthetic",
+      "evidence": "host-safety-regression-v1",
+      "observation": {
+        "title": "交易提醒",
+        "text": "付款失败，你有一笔17.53元的支出",
+        "channelId": "mipush|com.eg.android.AlipayGphone|100060"
+      },
+      "expectCents": null
+    },
+    {
+      "id": "refund",
+      "templateId": "alipay-trade-expense-v1",
+      "provenance": "synthetic",
+      "evidence": "host-safety-regression-v1",
+      "observation": {
+        "title": "交易提醒",
+        "text": "你有一笔17.53元的退款，点击领2元水燃费红包。",
+        "channelId": "mipush|com.eg.android.AlipayGphone|100060"
+      },
+      "expectCents": null
+    },
+    {
+      "id": "transfer",
+      "templateId": "alipay-trade-expense-v1",
+      "provenance": "synthetic",
+      "evidence": "host-safety-regression-v1",
+      "observation": {
+        "title": "交易提醒",
+        "text": "你有一笔17.53元的支出，转账成功",
+        "channelId": "mipush|com.eg.android.AlipayGphone|100060"
+      },
+      "expectCents": null
+    },
+    {
+      "id": "two-expenses",
+      "templateId": "alipay-trade-expense-v1",
+      "provenance": "synthetic",
+      "evidence": "host-safety-regression-v1",
+      "observation": {
+        "title": "交易提醒",
+        "text": "你有一笔17.53元的支出，点击领2元水燃费红包。你有一笔2元的支出",
+        "channelId": "mipush|com.eg.android.AlipayGphone|100060"
+      },
+      "expectCents": null
+    },
+    {
+      "id": "zero",
+      "templateId": "alipay-trade-expense-v1",
+      "provenance": "synthetic",
+      "evidence": "host-safety-regression-v1",
+      "observation": {
+        "title": "交易提醒",
+        "text": "你有一笔0元的支出",
+        "channelId": "mipush|com.eg.android.AlipayGphone|100060"
+      },
+      "expectCents": null
+    },
+    {
+      "id": "three-decimals",
+      "templateId": "alipay-trade-expense-v1",
+      "provenance": "synthetic",
+      "evidence": "host-safety-regression-v1",
+      "observation": {
+        "title": "交易提醒",
+        "text": "你有一笔17.531元的支出",
+        "channelId": "mipush|com.eg.android.AlipayGphone|100060"
+      },
+      "expectCents": null
+    },
+    {
+      "id": "chat",
+      "templateId": "alipay-trade-expense-v1",
+      "provenance": "synthetic",
+      "evidence": "host-safety-regression-v1",
+      "observation": {
+        "title": "交易提醒",
+        "text": "你有一笔17.53元的支出，点击领2元水燃费红包。",
+        "channelId": "mipush|com.eg.android.AlipayGphone|100060",
+        "isMessagingStyle": true
+      },
+      "expectCents": null
+    },
+    {
+      "id": "summary",
+      "templateId": "alipay-trade-expense-v1",
+      "provenance": "synthetic",
+      "evidence": "host-safety-regression-v1",
+      "observation": {
+        "title": "交易提醒",
+        "text": "你有一笔17.53元的支出，点击领2元水燃费红包。",
+        "channelId": "mipush|com.eg.android.AlipayGphone|100060",
+        "isGroupSummary": true
+      },
+      "expectCents": null
+    },
+    {
+      "id": "baseline",
+      "templateId": "alipay-trade-expense-v1",
+      "provenance": "synthetic",
+      "evidence": "host-safety-regression-v1",
+      "observation": {
+        "title": "交易提醒",
+        "text": "你有一笔17.53元的支出，点击领2元水燃费红包。",
+        "channelId": "mipush|com.eg.android.AlipayGphone|100060",
+        "isReconnectBaseline": true
+      },
+      "expectCents": null
+    },
+    {
+      "id": "foreign",
+      "templateId": "alipay-trade-expense-v1",
+      "provenance": "synthetic",
+      "evidence": "host-safety-regression-v1",
+      "observation": {
+        "title": "交易提醒",
+        "text": "你有一笔17.53元的支出USD",
+        "channelId": "mipush|com.eg.android.AlipayGphone|100060"
+      },
+      "expectCents": null
+    },
+    {
+      "id": "unknown-reward",
+      "templateId": "alipay-trade-expense-v1",
+      "provenance": "synthetic",
+      "evidence": "host-safety-regression-v1",
+      "observation": {
+        "title": "交易提醒",
+        "text": "你有一笔17.53元的支出，领取100元返现。",
+        "channelId": "mipush|com.eg.android.AlipayGphone|100060"
+      },
+      "expectCents": null
+    },
+    {
+      "id": "legacy-reward-label",
+      "templateId": "alipay-trade-expense-v1",
+      "provenance": "synthetic",
+      "evidence": "legacy-format-comment-regression",
+      "observation": {
+        "title": "交易提醒",
+        "text": "你有一笔17.53元的支出，点击领2元小荷包支付红包。",
+        "channelId": "mipush|com.eg.android.AlipayGphone|100060"
+      },
+      "expectCents": 1753
+    }
+  ]
+}

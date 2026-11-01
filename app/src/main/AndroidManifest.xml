@@ -4,7 +4,8 @@
     <permission android:name="io.github.mymoney.permission.LSP_PROBE" android:protectionLevel="signature" />
     <uses-permission android:name="io.github.mymoney.permission.LSP_PROBE" />
 
-    <!-- 记录类 App 不需要联网；如果以后要同步，再加 INTERNET -->
+    <!-- 仅用户主动检查/下载公开GitHub规则包；采集和账本不联网。 -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <!-- 悬浮确认卡片（root 路径下唯一不受后台启动限制的弹窗方式） -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />

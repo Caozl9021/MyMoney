@@ -206,6 +206,7 @@ object RootNotificationIngress {
         val pkg = notification.packageName
         val receivedAt = System.currentTimeMillis()
         val observation = notification.observation(receivedAt)
+        SpecRuleStore.ensureReady(context)
         val result = observation?.let(parser::parse)
         val eventId = "root-notification:" + CaptureMergePolicy.digest(
             "$pkg|${notification.slot}|${notification.postTime}|${notification.title}|${notification.text}")
@@ -257,7 +258,7 @@ object RootNotificationIngress {
         val named = draft.copy(category = suggestion.category, subCategory = suggestion.subCategory,
             account = suggestion.account ?: draft.account)
         val accounted = SpecAccountStore.fill(context, named, preferred = suggestion.account)
-        val enriched = accounted.copy(note = NoteTemplate.render(accounted).ifBlank { null })
+        val enriched = NoteFillStore.prepare(accounted)
         val accepted = CaptureCoordinator.accept(
             context,
             CaptureCoordinator.Input(enriched, SOURCE, observationKey, eventId, System.currentTimeMillis()),

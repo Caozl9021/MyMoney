@@ -1,0 +1,28 @@
+{
+  "packageVersion": "1.1.0",
+  "publishedAt": "2026-11-01T12:30:00+08:00",
+  "notes": "需App1.2.1/113或更新版本：支付宝小米推送支出渠道与声明式通知模板，支持17.53元付款附2元奖励尾句，保留个人规则及严格拒绝条件。",
+  "engineApiVersion": 1,
+  "requiredCapabilities": [
+    "wechat-data-v1",
+    "alipay-data-v1",
+    "notice-v1",
+    "notification-template-v1"
+  ],
+  "ruleRevisions": {
+    "maimi_wechat_redpackage_expense_v1": 1,
+    "maimi_wechat_redpackage_income_v1": 1,
+    "maimi_wechat_data_expense_v1": 1,
+    "maimi_wechat_data_income_v1": 1,
+    "maimi_wechat_data_refund_v1": 1,
+    "maimi_alipay_data_expense_v1": 1,
+    "maimi_alipay_data_income_v1": 1,
+    "maimi_alipay_data_refund_v1": 1,
+    "maimi_wechat_notice_expense_v1": 1,
+    "maimi_wechat_notice_income_v1": 1,
+    "maimi_alipay_notice_expense_v1": 1,
+    "maimi_alipay_notice_income_v1": 1,
+    "maimi_wechat_transfer_expense_v1": 1,
+    "maimi_wechat_transfer_income_v1": 1
+  }
+}

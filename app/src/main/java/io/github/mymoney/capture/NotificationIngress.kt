@@ -64,6 +64,7 @@ object NotificationIngress {
     /** User gesture only. Historical active notifications are NEVER offered to the transaction pipeline. */
     suspend fun captureCurrentDiagnostics(context: Context): Int = withContext(Dispatchers.IO) {
         val app = context.applicationContext
+        SpecRuleStore.ensureReady(app)
         val observations = PaymentNotificationListener.currentDiagnosticSamples(app)
         val db = AppDb.get(app)
         for (o in observations.asReversed()) {
@@ -111,6 +112,7 @@ object NotificationIngress {
     }
     private suspend fun process(context: Context, observation: NotificationObservation) {
         if (!allowed(context, observation)) return
+        SpecRuleStore.ensureReady(context)
         val result = parser.parse(observation)
         val reason = when (result) {
             is NotificationParseResult.Candidate -> "candidate:${result.templateId}"
@@ -145,7 +147,7 @@ object NotificationIngress {
             // SPEC §8 阶段 6：把规则原文的账户名换成账本里真实存在的账户。
             // method 保留原文（规则写的是什么就存什么），account 只放映射结果。
             val accounted = SpecAccountStore.fill(context, named, preferred = suggestion.account)
-            val enriched = accounted.copy(note = NoteTemplate.render(accounted).ifBlank { null })
+            val enriched = NoteFillStore.prepare(accounted)
             val accepted = CaptureCoordinator.accept(context, CaptureCoordinator.Input(enriched, "NOTIFICATION",
                 observation.observationKey, eventId, observation.receivedAt, observation.reviewSlotKey), allowed = { allowed(context, observation) }) ?: return
             // Say why a real notification produced no card: the review gate is invisible otherwise.

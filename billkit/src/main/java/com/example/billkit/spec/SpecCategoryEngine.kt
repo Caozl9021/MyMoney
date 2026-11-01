@@ -26,11 +26,11 @@ class SpecCategoryEngine {
     fun rebuild(commonJs: String, categoryJs: String) {
         synchronized(lock) {
             val started = System.currentTimeMillis()
-            val cx = Context.enter()
+            val cx = RuleSandbox.enter()
             try {
                 cx.optimizationLevel = -1
                 cx.languageVersion = Context.VERSION_ES6
-                val s = cx.initStandardObjects(null, false)
+                val s = cx.initSafeStandardObjects(null, false)
                 cx.evaluateString(s, commonJs, "js_common.js", 1, null)
                 cx.evaluateString(s, categoryJs, "js_category.js", 1, null)
                 val obj = ScriptableObject.getProperty(s, "category")
@@ -39,8 +39,10 @@ class SpecCategoryEngine {
                 if (fn !is org.mozilla.javascript.Function) throw IllegalStateException("category.get 不是函数")
                 scope = s
                 getter = fn
+            } catch (t: RuleSandbox.BudgetExceeded) {
+                throw IllegalArgumentException("规则构建超过执行预算")
             } finally {
-                Context.exit()
+                RuleSandbox.exit()
             }
             lastBuildMillis = System.currentTimeMillis() - started
         }
@@ -59,7 +61,7 @@ class SpecCategoryEngine {
         item: String = "",
         timeHhMm: String = "12:00",
         extra: String = "",
-    ): SpecCategoryResult? {
+    ): SpecCategoryResult? = synchronized(lock) {
         val s = scope ?: return null
         val fn = getter ?: return null
         val billType = when (type) {
@@ -68,7 +70,7 @@ class SpecCategoryEngine {
             "Refund" -> "Refund"
             else -> "Expend"
         }
-        val cx = Context.enter()
+        val cx = RuleSandbox.enter()
         try {
             cx.optimizationLevel = -1
             cx.languageVersion = Context.VERSION_ES6
@@ -85,7 +87,7 @@ class SpecCategoryEngine {
             // 分类失败不该影响记账：草稿照常落库，只是没有分类。
             return null
         } finally {
-            Context.exit()
+            RuleSandbox.exit()
         }
     }
 

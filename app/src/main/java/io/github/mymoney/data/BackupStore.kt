@@ -76,6 +76,7 @@ object BackupStore {
                 income = LedgerConfig.incomeGroups,
                 accounts = assetRows.accounts.filterNot { it.archived }.sortedBy { it.sortOrder }.map { it.name },
                 noteTemplate = LedgerConfig.noteTemplate,
+                noteFillPolicy = LedgerConfig.noteFillPolicy ?: NoteFillCodec.encode(NoteFillConfig()),
                 localRules = LocalRuleStore.snapshot(),
                 monthStartDay = LedgerPeriodStore.read(context),
             ),
@@ -281,6 +282,7 @@ object BackupStore {
             LedgerConfig.restore(it.expense.takeIf { _ -> it.hasExpense }, it.income.takeIf { _ -> it.hasIncome },
                 it.accounts.takeIf { _ -> it.hasAccounts && !assetsPresent }, it.noteTemplate.takeIf { _ -> it.hasNoteTemplate })
             it.localRules?.let(LocalRuleStore::restore)
+            it.noteFillPolicy?.let(NoteFillStore::restore)
         }
         dao.putMeta(AssetMeta(PENDING_CONFIG, ""))
         AssetStore.refresh()

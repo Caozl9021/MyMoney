@@ -108,7 +108,7 @@ private enum class SettingsPage(val title: String) {
     NOTE_TEMPLATE("备注模板"), NOTE_SUGGESTIONS("备注建议"),
     AUTOMATION("自动记账"), ORDINARY_SETUP("开启自动记账"), BACKGROUND("后台运行设置"), CHANNELS("识别设置"), AUTOMATION_MORE("更多设置"), LSP("LSPosed 模块"), SMS("自动记账"), CONFIRMATION("确认卡"),
     RECOGNITION("应用与通道"), LEARNING("学习记忆"), TEMPLATES("通知模板"),
-    RULE_FILES("规则文件"), MEALS("餐段设置"), STATISTICS("识别统计"),
+    RULE_FILES("识别规则"), MEALS("餐段设置"), STATISTICS("识别统计"),
     PERMISSIONS("权限与后台运行"), ROOT_MODE("Root 状态"),
     PENDING("识别历史"), IMPORT_EXPORT("导入导出"), EXPORT_CSV("导出到 iCost"), EXPORT_HELP("导入说明"),
     QIANJI_IMPORT("导入钱迹账单"), BACKUP("备份与恢复"), APPEARANCE("外观"), DEVELOPMENT("开发调试"),
@@ -301,6 +301,7 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
                 )) }
                 item { SettingsNavigationGroup("自动记账", listOf(
                     SettingsLink("自动记账", health.title, AbIcons.Accessibility) { navigate(SettingsPage.AUTOMATION) },
+                    SettingsLink("识别规则", "查看已有规则、添加或导入", AbIcons.Layers) { navigate(SettingsPage.RULE_FILES) },
                     SettingsLink("识别历史", if (historyReady) "待确认 $pendingCount 条" else "正在读取…", AbIcons.Clock) { navigate(SettingsPage.PENDING) },
                 )) }
                 item { SettingsNavigationGroup("数据与应用", listOf(
@@ -352,7 +353,7 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
             "学习与规则" to listOf(
                 SettingsLink("学习记忆", "${ruleState.learned.size} 条已生效记忆", AbIcons.Note) { navigate(SettingsPage.LEARNING) },
                 SettingsLink("通知模板", "交易提醒与适用范围", AbIcons.Filter) { navigate(SettingsPage.TEMPLATES) },
-                SettingsLink("规则文件", "导入、导出与恢复内置规则", AbIcons.Layers) { navigate(SettingsPage.RULE_FILES) },
+                SettingsLink("识别规则", "查看规则、添加或导入更新", AbIcons.Layers) { navigate(SettingsPage.RULE_FILES) },
                 SettingsLink("餐段设置", "早餐、午餐、晚餐与夜宵", AbIcons.Clock) { navigate(SettingsPage.MEALS) },
             ),
             "帮助" to listOf(

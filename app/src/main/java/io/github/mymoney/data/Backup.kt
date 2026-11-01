@@ -59,6 +59,7 @@ object Backup {
         val hasAccounts: Boolean = true,
         val hasNoteTemplate: Boolean = true,
         val monthStartDay: Int? = null,
+        val noteFillPolicy: String? = null,
     )
 
     /** 只备份"用户重新配起来很烦"的开关；识别开不开这类不备份，恢复后由用户自己决定 */
@@ -145,6 +146,10 @@ object Backup {
                     require(day in 1..31) { "每月起始日须为1–31日" }
                     put("monthStartDay", day)
                 }
+                l.noteFillPolicy?.let { policy ->
+                    NoteFillCodec.decode(policy)
+                    put("noteFillPolicy", MiniJson.decode(policy))
+                }
                 if (!l.hasExpense) remove("expense")
                 if (!l.hasIncome) remove("income")
                 if (!l.hasAccounts) remove("accounts")
@@ -217,6 +222,10 @@ object Backup {
                 accounts = if (l.containsKey("accounts")) strictStrings(l["accounts"]) else emptyList(),
                 noteTemplate = if (l.containsKey("noteTemplate")) l["noteTemplate"] as? String
                     ?: throw IllegalArgumentException("备注模板必须为文本") else "{商户}",
+                noteFillPolicy = if (l.containsKey("noteFillPolicy")) {
+                    require(format >= 8) { "旧备份格式不能包含备注填充规则" }
+                    MiniJson.encode(l["noteFillPolicy"]).also { NoteFillCodec.decode(it) }
+                } else null,
                 localRules = l["localRules"]?.let { LocalRuleCodec.decode(MiniJson.encode(it)) },
                 hasExpense = l.containsKey("expense"), hasIncome = l.containsKey("income"),
                 hasAccounts = l.containsKey("accounts"), hasNoteTemplate = l.containsKey("noteTemplate"),

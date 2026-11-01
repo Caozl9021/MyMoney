@@ -1,3 +1,54 @@
+# 原创规则与独立规则包
+
+当前仅master；原self已合并并删除，规则与App都在master维护。源码在 `src/*.js`。`generate.py` 维护 APK 资产，`package.py` 独立生成完整规则快照；规则Release无需生成APK。首次支持外部包的App为1.1.0/111，引擎API1。
+
+## 维护与发布
+
+1. 保存脱敏实际输入，或编写明确标为 synthetic 的输入；不要把原始订单、姓名、卡号、日志放入规则包。
+2. 修改或补充脚本，在 `generate.py` 登记稳定ID/应用/类型；补充 `src/test/resources/spec/samples.json` 的正反例（由 `make_fixtures.py` 维护的内容应同步更新生成源）。已有采集门禁不能用规则绕过。
+3. 在 `package.json` 递增独立 `packageVersion`（X.Y.Z）、对应 `ruleRevisions`、发布时间与说明。同版本不得重新发布不同内容。
+4. 执行：
+
+```bash
+python3 billkit/rules/generate.py
+python3 billkit/rules/package.py --output-dir dist/rules
+./gradlew :billkit:testDebugUnitTest :billkit:validateRulePackage \
+  -PrulePackage="$PWD/dist/rules/MyMoney-rules-1.0.0.mymoney-rules.zip"
+```
+
+命令使用生产包解析器和Rhino执行器，校验全部启用/禁用脚本与包内正反例，不构建APK。只生成ZIP不等于通过生产引擎验证；Release前必须完成最后一条命令。CI `rule-package` 提供相同校验与下载artifact，不自动发Release。
+
+5. 纯规则Release可使用标签 `rules-vX.Y.Z`，附件为ZIP及其`.sha256`；写明最低App、引擎API、已测App、规则变化与未覆盖场景。App Release可直接附同一个已验证ZIP，规则未变化不必递增版本。
+6. 用户下载ZIP后从App的“设置→识别规则→导入规则包”入口选择、预览并确认导入。不要要求用户逐个安装历史补丁；完整包包含全部规则。规则版本变化不修改App versionName/versionCode。
+
+发布说明模板：
+
+```text
+规则包：X.Y.Z（引擎 API 1）
+最低App：1.1.0/111；实际测试：<填写版本与结果>
+更新：<新增/修正/移除规则及适用输入>
+未覆盖：<真实支付未测/特定版本限制>
+安装：下载 .mymoney-rules.zip → 设置/识别规则/导入规则包
+摘要：见同名 .sha256；支持App内回退上一包
+```
+
+## 个人规则（App 1.2.0起）
+
+App内表单规则使用原生字面条件模型，不生成或执行用户JS，分别支持PAGE/DATA/NOTICE。PersonalRuleCodec提供独立MyMoneyPersonalRules JSON；原子状态保存、官方包更新/回退保持个人规则。官方ZIP仍为原API1格式，个人规则不混入规则包。个人文件导入需App1.2.0或更高兼容版本。用户操作见docs/LOCAL_RULES.md。
+
+## 格式与执行边界
+
+ZIP固定7个根条目：manifest.json、rules_all.json、js_common.js、js_category.js、categories.json、assets.json、samples.json。manifest包含kind=MyMoneyRulePackage、schemaVersion=1、packageId=mymoney-official、packageVersion/version、engineApiVersion=1、requiredCapabilities、发布时间/说明、六文件SHA256和有序规则清单；每条规则含稳定ID、正整数revision、应用/类型/默认启用与来源。包只有完整快照语义。样本格式沿用JVM回放集，额外支持expect.method和反例ruleId；每条规则须至少一个正例、一个反例。
+
+限制：压缩8MiB，解压合计16MiB，单文件4MiB，256条规则，单条JS256KiB，1024条样本，JSON32层，单输入65536字符。拒绝未知/重复条目、目录/穿越、符号链接、加密/分卷/ZIP64/注释及不完整中央目录。文件从不按ZIP路径解压到磁盘。
+
+Rhino解释执行，使用无Java桥接的safe scope、ClassShutter、128层解释栈及每10000指令检查的1秒执行预算；自检总预算30秒。预算用于解释器指令，不是独立进程级CPU/内存隔离，某些原生JS操作无法在操作内部抢占；仅导入可信维护者脚本。不可把该机制描述为可执行任意恶意代码的安全容器。样本验证也不能证明所有真实支付均适配。
+
+App保留活动包与上一包，原子state.json为权威，Room规则表和运行引擎从中重建；安装失败回建旧投影，进程中断下次启动按已提交指针恢复。诊断version包含实际包版本和摘要前16位。启停意图独立按规则ID存储；规则操作不覆盖账本、学习或用户账户。
+
+<details>
+<summary>历史规则契约与来源证据（保留原记录，版本与未测范围按当时解释）</summary>
+
 # 麦米原创规则源
 
 本目录保存可读脚本和确定性生成器，生成 `billkit/src/main/assets/spec/` 五份资产及 `manifest.json`。代码由本次改造按本 App 输入契约与独立业务要求编写，不翻写原 JS/分类表；开发者已看过既有宿主和测试，不宣称严格隔离开发。公开名称、JSON字段和既有采集入口作为兼容契约保留。
@@ -63,3 +114,15 @@ App有效应用范围固定两家，旧白名单/短信偏好只保留兼容值�
 0.33.2当时规则包 `maimi-rules-3` 为16条；0.33.3按用户范围收敛保留14条微信支付宝ID且全部启用。现场app_data47的红包消息无金额、cached字段全空，脱敏为新增负例；不能单独形成草稿。宿主将原始消息与同一sendid的合格业务回执持久化关联后，内部附带hostCorrelationSchema=1及linkedReceipt，规则严格核验规范单号、整数分、资金角色、阶段、适配版本与来源行ID。发送准备成功必须再有同单本人发出消息，个人领取仅接受opened+received_personal，不将群红包总额当收入。展示时间取原消息观察时刻，仍无显式业务时间。
 
 0.33.2当时146条回放（54正/92负，6条captured-redacted）。新增6条联合正例均为合成成功金额证据，另有12条缺金额/串单/错角色/坏金额/错版本等反例，不以此声称真机红包成功。
+
+</details>
+
+## 规则包1.1.0：声明式支付宝支出通知
+
+最低宿主App1.2.1/113，能力notification-template-v1，schema/API仍1。完整ZIP在基础7文件外可包含notification-templates.json，manifest必须声明能力并收录SHA256。无文件旧包仍兼容，使用新宿主的内置通知基线；有文件则完整替换通知模板，空列表可明确移除，不能静默叠加旧模板。
+
+文件schemaVersion=1、templates≤16、samples≤256，总量≤256KiB。模板绑定现有maimi_alipay_notice_expense_v1，只接支付宝；配置id/evidence/channelHashes/category/platformTemplate/title/bodyPattern/rewardPatterns。bodyPattern包含唯一{amount}且保留“元的支出”语义；奖励尾句是领取红包/积分的字面格式，可含唯一{rewardAmount}。宿主转义字面量，不接受用户正则/JS。示例与字段以billkit/src/main/assets/spec/notification-templates.json为准。
+
+每模板必须有经真实NotificationParser执行的正反例，样本声明provenance/evidence/templateId/observation/expectCents；未命中以null预期。失败/其他资金方向/不可信信封/金额上限由宿主固定控制，奖励金额不参与付款提取。先留样确认真实元数据，再补渠道哈希和锚定正文/奖励尾句、自检，再递增packageVersion打包。未来同能力规则Release无需构建APK；新增宿主语法能力仍需App升级，不能通过任意文本放宽。
+
+本包14条JS规则保持原语义；17条通知正反例加原131条，合计148条自检。保留个人规则、按稳定ID启停；原子持久化成功后发布模板快照。旧App对未知能力/新成员拒绝导入，不声称向旧App热修复。CI触发已覆盖通知源码和配置资产，不自动远程发布。

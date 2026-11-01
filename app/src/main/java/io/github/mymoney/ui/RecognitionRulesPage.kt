@@ -63,7 +63,7 @@ internal enum class RecognitionRuleSection(val title: String) {
     APPS("应用与通道"),
     LEARNING("学习记忆"),
     TEMPLATES("通知模板"),
-    FILES("规则文件"),
+    FILES("识别规则"),
     MEALS("餐段设置"),
     STATISTICS("识别统计"),
 }
@@ -80,7 +80,7 @@ internal fun RecognitionRulesPage(
 ) {
     val p = LocalAbPalette.current
     val ruleState by LocalRuleStore.state.collectAsStateWithLifecycle()
-    val bundledRules by io.github.mymoney.data.SpecRuleStore.status.collectAsStateWithLifecycle()
+    var advancedRules by rememberSaveable { mutableStateOf(false) }
 
     var appQuery by rememberSaveable { mutableStateOf("") }
     var appFilter by rememberSaveable { mutableStateOf(AppFilter.ALL) }
@@ -364,16 +364,8 @@ internal fun RecognitionRulesPage(
 
             // ------------------------------------------------------------ 规则文件 / 餐段 / 统计
             if (section == RecognitionRuleSection.FILES) {
-                item {
-                    InsetGroup {
-                        ListRow(title = "自研识别规则", subtitle = when {
-                            bundledRules.error != null -> "加载失败：${bundledRules.error}"
-                            !bundledRules.ready -> "正在准备本地规则"
-                            else -> "${bundledRules.version} · 已启用 ${bundledRules.rules} / ${bundledRules.available} 条"
-                        })
-                    }
-                }
-                rulesFileSection(rulesSections)
+                item { PortableRulesPanel(advancedRules) { advancedRules = it } }
+                if (advancedRules) rulesFileSection(rulesSections)
             }
             if (section == RecognitionRuleSection.MEALS) mealSection(rulesSections)
             if (section == RecognitionRuleSection.STATISTICS) statisticsSection(rulesSections)

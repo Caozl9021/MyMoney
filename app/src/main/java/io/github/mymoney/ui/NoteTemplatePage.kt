@@ -64,7 +64,7 @@ internal fun NoteTemplatePage(onBack: () -> Unit) {
                     }
                 }
                 InsetGroup { ListRow(title = NoteTemplate.render(sample, value.text, includeProduct = example == 2).ifBlank { "（空）" },
-                    subtitle = if (example == 2) "商品只在你点选建议后填入，此处仅为示例" else "按账单发生日期生成，不修改已有备注") }
+                    subtitle = if (example == 2) "商品自动填充由“备注填充”设置控制，此处仅预览模板" else "按账单发生日期生成，不修改已有备注") }
             }
             Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
                 PrimaryButton("保存模板", enabled = unknown.isEmpty(), onClick = {

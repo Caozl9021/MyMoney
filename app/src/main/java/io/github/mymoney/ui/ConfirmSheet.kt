@@ -46,6 +46,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.Composable
@@ -173,6 +174,7 @@ fun ConfirmSheet(
     var note by rememberSaveable { mutableStateOf(draft.note.orEmpty()) }
     var noteOrigin by rememberSaveable { mutableStateOf(draft.noteOrigin) }
     val templateSnapshot = rememberSaveable { draft.noteTemplateSnapshot ?: LedgerConfig.noteTemplate }
+    var noteFillOpen by rememberSaveable { mutableStateOf(false) }
     var discardPrompt by remember { mutableStateOf(false) }
     var discardAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     // 仅挡住宿主saving重组前的连续点按，不能在失败后留下永久锁。
@@ -248,7 +250,7 @@ fun ConfirmSheet(
     })
     LaunchedEffect(locked) { if (locked) picker.cancel() }
     DisposableEffect(onPickerBackHandler) {
-        onPickerBackHandler?.invoke { when { timeOpen -> { timeOpen = false; true }; picker.open -> { picker.cancel(); true }; else -> false } }
+        onPickerBackHandler?.invoke { when { timeOpen -> { timeOpen = false; true }; picker.open -> { picker.cancel(); true }; noteFillOpen -> { noteFillOpen=false; true }; detailsOpen -> { detailsOpen=false; true }; else -> false } }
         onDispose { onPickerBackHandler?.invoke(null) }
     }
 
@@ -300,7 +302,7 @@ fun ConfirmSheet(
             discardPrompt = true
         } else closeAnimated(action)
     }
-    fun dismiss() { if (locked) return; if (timeOpen) { timeOpen = false; return }; if (picker.open) picker.cancel() else { haptic.select(); requestClose { onDismiss(current()) } } }
+    fun dismiss() { if (locked) return; if (timeOpen) { timeOpen = false; return }; if (noteFillOpen) { noteFillOpen=false; return }; if (detailsOpen) { detailsOpen=false; return }; if (picker.open) picker.cancel() else { haptic.select(); requestClose { onDismiss(current()) } } }
     fun ignore() { if (!locked) { haptic.warn(); requestClose(onIgnore) } }
     if (discardPrompt) DiscardChangesDialog(onContinue = { discardPrompt = false; discardAction = null },
         onDiscard = { val action = discardAction; discardPrompt = false; discardAction = null; if (action != null) closeAnimated(action) })
@@ -475,6 +477,7 @@ fun ConfirmSheet(
                     }
                     Column(Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xl)) {
                         CompactNoteField(note, !locked) { note = it; noteOrigin = NoteTemplate.USER; undo = null }
+
                     }
                     if (suggestions.isNotEmpty() || undo != null) LazyRow(
                         contentPadding = PaddingValues(horizontal = AbSpacing.xl), horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
@@ -489,30 +492,33 @@ fun ConfirmSheet(
                             }
                         }
                     }
-                    Row(Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xl).heightIn(min = 48.dp)
-                        .then(if (editableDetails || type == BillType.TRANSFER) Modifier.clickable(enabled = !locked) { picker.cancel(); timeOpen = true }
-                            .semantics { role = Role.Button; contentDescription = "选择记账日期和时间" } else Modifier),
-                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AbSpacing.m)) {
-                        Text("时间", style = AbType.caption1, color = p.secondaryLabel)
-                        Text(SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(timeMillis)), style = AbType.footnote, color = p.label, modifier = Modifier.weight(1f))
-                        if (editableDetails || type == BillType.TRANSFER) Icon(AbIcons.ChevronRight, null, Modifier.size(16.dp), tint = p.secondaryLabel)
+                    Row(Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xl), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.weight(1f).heightIn(min = 48.dp)
+                            .then(if (editableDetails || type == BillType.TRANSFER) Modifier.clickable(enabled = !locked) { picker.cancel(); timeOpen = true }
+                                .semantics { role = Role.Button; contentDescription = "选择记账日期和时间" } else Modifier),
+                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
+                            Text("时间", style = AbType.caption1, color = p.secondaryLabel)
+                            Text(SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(timeMillis)), style = AbType.footnote, color = p.label)
+                        }
+                        TextButton(onClick={picker.cancel();detailsOpen=!detailsOpen;if(!detailsOpen) noteFillOpen=false},enabled=!locked) {
+                            Text(if(detailsOpen) "收起" else "更多")
+                        }
                     }
                     if (editableDetails && timeMillis > System.currentTimeMillis() && assetAccount?.initialized == true)
                         Text("保存即更新当前余额", style = AbType.caption1, color = p.secondaryLabel, modifier = Modifier.padding(horizontal = AbSpacing.xl))
-                    if (merchant.isNotBlank() || draft.method != null || draft.orderTail != null || sourceLabel(draft) != null || assetHint != null) {
-                        Row(Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xl).heightIn(min = 48.dp)
-                            .clickable(enabled = !locked) { picker.cancel(); detailsOpen = !detailsOpen }
-                            .semantics { role = Role.Button; stateDescription = if (detailsOpen) "已展开" else "已收起" }, verticalAlignment = Alignment.CenterVertically) {
-                            Text("来源信息", style = AbType.caption1, color = p.secondaryLabel, modifier = Modifier.weight(1f))
-                            Text(if (detailsOpen) "−" else "+", style = AbType.footnote, color = p.secondaryLabel)
-                        }
-                        AnimatedVisibility(visible = detailsOpen) {
-                            Column(Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xl), verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-                                if (merchant.isNotBlank()) DetailLine("商户", merchant)
-                                draft.method?.let { DetailLine("支付方式", it) }
-                                draft.orderTail?.let { DetailLine("单号尾号", it) }
-                                sourceLabel(draft)?.let { DetailLine("来源", it) }
-                                assetHint?.let { Text(it, style = AbType.caption1, color = p.secondaryLabel) }
+                    AnimatedVisibility(visible = detailsOpen) {
+                        Column(Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xl), verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
+                            Text("来源信息", style = AbType.caption1, color = p.secondaryLabel)
+                            if (merchant.isNotBlank()) DetailLine("商户", merchant)
+                            draft.method?.let { DetailLine("支付方式", it) }
+                            draft.orderTail?.let { DetailLine("单号尾号", it) }
+                            sourceLabel(draft)?.let { DetailLine("来源", it) }
+                            assetHint?.let { Text(it, style = AbType.caption1, color = p.secondaryLabel) }
+                            if (draft.sourcePkg in setOf("com.tencent.mm", "com.eg.android.AlipayGphone") && merchant.isNotBlank() && type != BillType.TRANSFER) {
+                                TextButton(onClick={noteFillOpen=!noteFillOpen},enabled=!locked) {Text(if(noteFillOpen) "收起备注设置" else "设置此商家的备注")}
+                                if(noteFillOpen && !locked) InlineMerchantNoteEditor(current(),templateSnapshot,onClose={noteFillOpen=false},onSaved={updated->
+                                    note=updated.note.orEmpty();noteOrigin=updated.noteOrigin;undo=null;noteFillOpen=false
+                                })
                             }
                         }
                     }
@@ -695,20 +701,9 @@ private fun SheetChip(text: String, selected: Boolean, tint: Color?, modifier: M
 @Composable
 private fun SuggestionBubble(text: String, accent: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
     val p = LocalAbPalette.current
-    var preview by remember { mutableStateOf(false) }
-    if (preview) androidx.compose.ui.window.Dialog(onDismissRequest = { preview = false }) {
-        androidx.compose.material3.Surface(shape = RoundedCornerShape(AbRadius.card), color = p.cardBg) {
-            Column(Modifier.padding(AbSpacing.l), verticalArrangement = Arrangement.spacedBy(AbSpacing.m)) {
-                Text("使用这条备注？", style = AbType.navTitle, color = p.label)
-                Text(text.removePrefix("商品 · "), style = AbType.body, color = p.label)
-                PrimaryButton("填入备注", onClick = { preview = false; onClick() }, enabled = enabled)
-                io.github.mymoney.ui.design.SecondaryButton("取消", onClick = { preview = false })
-            }
-        }
-    }
     Box(
         Modifier.heightIn(min = 48.dp)
-            .clickable(remember { MutableInteractionSource() }, indication = null, enabled = enabled, onClick = { if (!accent && text.codePointCount(0, text.length) > 18) preview = true else onClick() })
+            .clickable(remember { MutableInteractionSource() }, indication = null, enabled = enabled, onClick = onClick)
             .semantics { role = Role.Button; contentDescription = if (accent) "撤销建议" else "用作备注：$text" },
         contentAlignment = Alignment.Center,
     ) {

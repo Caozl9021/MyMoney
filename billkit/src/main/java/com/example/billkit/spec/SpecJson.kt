@@ -82,6 +82,7 @@ internal object SpecJson {
 
     private class Parser(val s: String) {
         var pos = 0
+        private var depth = 0
 
         fun atEnd() = pos >= s.length
 
@@ -93,8 +94,8 @@ internal object SpecJson {
             skipWs()
             if (atEnd()) throw IllegalArgumentException("JSON 意外结束")
             return when (val c = s[pos]) {
-                '{' -> parseObject()
-                '[' -> parseArray()
+                '{' -> nested { parseObject() }
+                '[' -> nested { parseArray() }
                 '"' -> parseString()
                 't' -> literal("true", true)
                 'f' -> literal("false", false)
@@ -102,6 +103,11 @@ internal object SpecJson {
                 else -> if (c == '-' || c.isDigit()) parseNumber() else
                     throw IllegalArgumentException("JSON 非法字符 '$c'（位置 $pos）")
             }
+        }
+
+        private inline fun <T> nested(block: () -> T): T {
+            require(++depth <= 32) { "JSON嵌套超过32层" }
+            try { return block() } finally { depth-- }
         }
 
         private fun literal(word: String, value: Any?): Any? {
@@ -121,6 +127,7 @@ internal object SpecJson {
                 skipWs()
                 if (atEnd() || s[pos] != ':') throw IllegalArgumentException("JSON 期望 ':'（位置 $pos）")
                 pos++
+                require(!out.containsKey(key)) { "JSON键重复" }
                 out[key] = parseValue()
                 skipWs()
                 if (atEnd()) throw IllegalArgumentException("JSON 对象未闭合")

@@ -101,6 +101,8 @@ class PageClassifier {
     /** 「待小千寻乐确认收款」「待对方确认收款」：转账付款后、对方还没点确认的那一页。 */
     private val PENDING_TRANSFER_RE = Regex("""待\s*\S{0,24}\s*确认收款""")
 
+    fun permitsCustomRule(items: List<String>): Boolean = items.count { it.isNotBlank() } >= 3 && !looksLikeListPage(items) && !looksLikeNonBillPage(items)
+
     fun classify(snapshot: UiSnapshot): PageMatch? {
         val items = PaymentResultParser.normalize(snapshot.items)
         if (items.size < 3) return null

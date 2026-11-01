@@ -137,6 +137,18 @@ object LedgerConfig {
         get() = p().getString(KEY_NOTE_TEMPLATE, "{商户}") ?: "{商户}"
         set(value) = p().edit().putString(KEY_NOTE_TEMPLATE, value.trim()).apply()
 
+    /** Optional JSON8 configuration; missing old backup fields do not reset it. */
+    val noteFillPolicy: String? get() = p().getString("note_fill_policy", null)
+    fun saveNoteFillPolicy(text: String) {
+        NoteFillCodec.decode(text)
+        val old = noteFillPolicy
+        if (!p().edit().putString("note_fill_policy", text).commit()) {
+            // commit updates SharedPreferences memory even if disk write fails; restore both views.
+            p().edit().apply { if (old == null) remove("note_fill_policy") else putString("note_fill_policy", old) }.commit()
+            error("备注规则保存失败，原设置已保留")
+        }
+    }
+
     // ---------- 备份恢复 ----------
 
     /** null 表示备份缺失该项；显式空列表表示用户保存的空清单。 */

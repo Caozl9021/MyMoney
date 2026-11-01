@@ -11,6 +11,12 @@
 | [ASSET_MANAGEMENT.md](ASSET_MANAGEMENT.md) | 账户余额口径、净资产算法、转账与还款、账期详情 |
 | [LEDGER_MONTH_PERIOD.md](LEDGER_MONTH_PERIOD.md) | 每月起始日、首页翻期与各处账期的一致性 |
 
+## 工程约定
+
+| 文档 | 内容 |
+| --- | --- |
+| [VERSIONING.md](VERSIONING.md) | 版本号语义、何时升 versionName/versionCode、功能批次与验收节奏 |
+
 ## 导入导出
 
 | 文档 | 内容 |

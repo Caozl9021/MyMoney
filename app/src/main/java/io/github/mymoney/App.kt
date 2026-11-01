@@ -22,6 +22,7 @@ class App : Application() {
 
         RecognitionStore.init(this)
         LedgerConfig.init(this)
+        io.github.mymoney.data.NoteFillStore.init()
         io.github.mymoney.data.LedgerPeriodStore.init(this)
         io.github.mymoney.data.AssetStore.init(this)
         io.github.mymoney.data.LocalRuleStore.init(this)
@@ -62,9 +63,7 @@ class App : Application() {
                     // 账户映射与其它三条通道保持一致：规则/页面给出的是「招商银行信用卡(1234)」这类原文，
                     // 账本账户名是「信用卡」，不映射就挂不上资产。preferred 非空时直接采用，避免覆盖学习结果。
                     val accounted = io.github.mymoney.data.SpecAccountStore.fill(this@App, named, preferred = suggestion.account)
-                    val enriched = accounted.copy(note = accounted.note ?: NoteTemplate.render(accounted).ifBlank { null },
-                        noteOrigin = if (accounted.note == null) NoteTemplate.TEMPLATE else NoteTemplate.USER,
-                        noteTemplateSnapshot = io.github.mymoney.data.LedgerConfig.noteTemplate)
+                    val enriched = io.github.mymoney.data.NoteFillStore.prepare(accounted)
                     val accepted = io.github.mymoney.capture.CaptureCoordinator.accept(this@App,
                         io.github.mymoney.capture.CaptureCoordinator.Input(enriched, "PAGE",
                             "page:" + io.github.mymoney.data.RecognitionIdentity.key(enriched)), allowed = { allowed() }) ?: continue

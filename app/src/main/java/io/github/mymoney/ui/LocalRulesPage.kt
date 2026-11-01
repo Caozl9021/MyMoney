@@ -170,7 +170,7 @@ internal fun RulesActionDialog(state: RulesSectionsState) {
 }
 
 internal fun LazyListScope.rulesFileSection(state: RulesSectionsState) {
-    item { GroupHeader("规则文件") }
+    item { GroupHeader("页面与关键词 JSON") }
     item {
         val p = LocalAbPalette.current
         InsetGroup {

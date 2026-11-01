@@ -72,11 +72,11 @@ class SpecRuleEngine {
         synchronized(lock) {
             val started = System.nanoTime()
             val bundle = buildBundle(commonJs, rules)
-            val cx = Context.enter()
+            val cx = RuleSandbox.enter()
             try {
                 cx.optimizationLevel = -1
                 cx.languageVersion = Context.VERSION_ES6
-                val newScope = cx.initStandardObjects(null, false)
+                val newScope = cx.initSafeStandardObjects(null, false)
                 cx.evaluateString(newScope, bundle, "mymoney-rules", 1, null)
                 val newDispatch = ScriptableObject.getProperty(newScope, "__dispatch") as? Function
                     ?: error("规则分发器缺失")
@@ -94,8 +94,10 @@ class SpecRuleEngine {
                 scope = newScope
                 dispatch = newDispatch
                 registeredCount = count
+            } catch (t: RuleSandbox.BudgetExceeded) {
+                throw IllegalArgumentException("规则构建超过执行预算")
             } finally {
-                Context.exit()
+                RuleSandbox.exit()
             }
             lastBuildMillis = (System.nanoTime() - started) / 1_000_000
         }
@@ -114,7 +116,7 @@ class SpecRuleEngine {
         synchronized(lock) {
             val target = scope ?: return null
             val fn = dispatch ?: return null
-            val cx = Context.enter()
+            val cx = RuleSandbox.enter()
             try {
                 cx.optimizationLevel = -1
                 cx.languageVersion = Context.VERSION_ES6
@@ -150,7 +152,7 @@ class SpecRuleEngine {
                 lastOutcome = Outcome.ERROR
                 return null
             } finally {
-                Context.exit()
+                RuleSandbox.exit()
             }
         }
     }
