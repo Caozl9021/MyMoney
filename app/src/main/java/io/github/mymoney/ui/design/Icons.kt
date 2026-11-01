@@ -66,6 +66,12 @@ object AbIcons {
     )
     val List = line("list", "M4.5 4.5h15v15h-15z", "M8 9h8", "M8 12.5h8", "M8 16h5")
     val Chart = line("chart", "M4 20V11.5", "M9.5 20V4.5", "M15 20v-6.5", "M20.5 20V8", "M2.5 20h19")
+    val Info = line(
+        "info",
+        "M12 3.4a8.6 8.6 0 1 0 0 17.2 8.6 8.6 0 0 0 0-17.2",
+        "M12 10.6v5.6",
+        "M12 7.6h.02",
+    )
     val Settings = line(
         "settings",
         "M4 7.5h5.5", "M14 7.5h6", "M4 12h9.5", "M18 12h2", "M4 16.5h3.5", "M12 16.5h8",

@@ -111,7 +111,7 @@ private enum class SettingsPage(val title: String) {
     RULE_FILES("识别规则"), MEALS("餐段设置"), STATISTICS("识别统计"),
     PERMISSIONS("权限与后台运行"), ROOT_MODE("Root 状态"),
     PENDING("识别历史"), IMPORT_EXPORT("导入导出"), EXPORT_CSV("导出到 iCost"), EXPORT_HELP("导入说明"),
-    QIANJI_IMPORT("导入钱迹账单"), BACKUP("备份与恢复"), APPEARANCE("外观"), DEVELOPMENT("开发调试"),
+    QIANJI_IMPORT("导入钱迹账单"), BACKUP("备份与恢复"), FAMILY_SYNC("家庭同步与备份"), APPEARANCE("外观"), ABOUT("关于"), DEVELOPMENT("开发调试"),
     HELP("识别帮助"), DEBUG("通知诊断"), PAGE_DEBUG("页面诊断"),
 }
 
@@ -306,7 +306,9 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
                 )) }
                 item { SettingsNavigationGroup("数据与应用", listOf(
                     SettingsLink("导入导出", "账单迁移、导出与备份", AbIcons.Export) { navigate(SettingsPage.IMPORT_EXPORT) },
+                    SettingsLink("家庭同步与备份", "规则同步、账本备份与恢复", AbIcons.Layers) { navigate(SettingsPage.FAMILY_SYNC) },
                     SettingsLink("外观", "图标、明暗、文字与动效", AbIcons.Settings) { navigate(SettingsPage.APPEARANCE) },
+                    SettingsLink("关于", "版本与 App 更新", AbIcons.Info) { navigate(SettingsPage.ABOUT) },
                     SettingsLink("开发调试", "识别帮助、通知与页面诊断", AbIcons.Terminal) { navigate(SettingsPage.DEVELOPMENT) },
                 )) }
             }
@@ -406,6 +408,7 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
                 ListRow(title = "范围包含退款时", subtitle = "iCost 模板不支持退款，会阻止整次 CSV 导出。请使用 JSON 备份保存完整账目。")
             }
         }
+        SettingsPage.ABOUT -> AppUpdatePage(back)
         SettingsPage.DEVELOPMENT -> SettingsMenuPage("开发调试", back, listOf("帮助与诊断" to listOf(
             SettingsLink("识别帮助", "使用说明与常见问题", AbIcons.Search) { navigate(SettingsPage.HELP) },
             SettingsLink("通知诊断", "通知事件、处理结论与脱敏样本", AbIcons.Terminal) { navigate(SettingsPage.DEBUG) },
@@ -446,6 +449,7 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
 
         SettingsPage.NOTE_TEMPLATE -> NoteTemplatePage(onBack = back)
 
+        SettingsPage.FAMILY_SYNC -> FamilySyncPage(onBack = back)
         SettingsPage.APPEARANCE -> AppearancePage(onBack = back)
 
         SettingsPage.PERMISSIONS, SettingsPage.BACKGROUND -> PermissionsPage(

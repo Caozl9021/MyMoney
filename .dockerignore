@@ -1,0 +1,21 @@
+# home-sync 镜像只需要 server 源码与 deploy/home-sync 的 Dockerfile；
+# 不让 runs/、deliverables/、Gradle 缓存等进入构建上下文。
+*
+!server
+!server/**
+!deploy
+!deploy/**
+
+# Python 本地环境与测试缓存不需要进镜像
+server/.venv
+server/**/__pycache__
+server/**/.pytest_cache
+server/tests
+server/*.egg-info
+
+# 家庭部署本机认证配置与持久化账本不进入Docker构建上下文。
+deploy/**/.env
+deploy/**/.env.*
+!deploy/**/.env.example
+deploy/**/backups
+deploy/**/backups/**

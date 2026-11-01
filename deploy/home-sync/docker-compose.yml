@@ -1,0 +1,14 @@
+services:
+  home-sync:
+    build:
+      context: ../..
+      dockerfile: deploy/home-sync/Dockerfile
+    container_name: mymoney-home-sync
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - .env
+    environment:
+      MYMONEY_BACKUP_DIR: /data/backups
+    volumes:
+      - ${MYMONEY_BACKUP_DIR:-./backups}:/data/backups

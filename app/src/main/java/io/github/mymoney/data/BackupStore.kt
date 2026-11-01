@@ -1,11 +1,15 @@
 package io.github.mymoney.data
 
 import android.content.Context
+import io.github.mymoney.data.rulesync.RuleSyncRepository
 import androidx.room.withTransaction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.io.File
+import java.io.FileOutputStream
+import java.util.UUID
 
 /**
  * 备份的"有副作用"那一半：查库、写偏好、读写文件。
@@ -26,13 +30,51 @@ object BackupStore {
         REPLACE,
     }
 
-    /** 生成 JSON 文本（IO 线程；几千条账单大约几百毫秒） */
+    /** Every associated Room table is read in one transaction; configuration must remain stable. */
     suspend fun exportJson(context: Context): String = withContext(Dispatchers.IO) {
         RecognitionStore.init(context)
         RecognitionStore.awaitReady()
         AssetStore.init(context)
         AssetStore.awaitReady()
         val db = AppDb.get(context)
+        repeat(3) {
+            val before = exportConfiguration(context)
+            val snapshot = readDatabaseSnapshot(db, before)
+            if (before == exportConfiguration(context)) return@withContext Backup.encode(snapshot)
+        }
+        error("备份期间配置持续变化，请稍后重试；本次未生成快照")
+    }
+
+    internal data class ExportConfiguration(
+        val ledger: Backup.Ledger,
+        val settings: Backup.SettingsSnapshot,
+        val ruleGeneration: Long,
+        val captureRevision: Long,
+    )
+
+    private fun exportConfiguration(context: Context): ExportConfiguration {
+        // Keep one immutable repository snapshot, rather than fetching template and policy separately.
+        val rules = if (RuleSyncRepository.isReady()) RuleSyncRepository.snapshot() else null
+        val settings = Settings(context)
+        return ExportConfiguration(
+            ledger = Backup.Ledger(
+                expense = LedgerConfig.expenseGroups,
+                income = LedgerConfig.incomeGroups,
+                accounts = emptyList(), // Real account names come from the same Room view as balances.
+                noteTemplate = rules?.noteTemplate ?: LedgerConfig.noteTemplate,
+                noteFillPolicy = rules?.let { NoteFillCodec.encode(it.noteConfig()) }
+                    ?: LedgerConfig.noteFillPolicy ?: NoteFillCodec.encode(NoteFillConfig()),
+                localRules = LocalRuleStore.snapshot(),
+                monthStartDay = LedgerPeriodStore.read(context),
+            ),
+            settings = settingsSnapshot(settings),
+            ruleGeneration = rules?.generation ?: -1,
+            captureRevision = settings.captureRevision,
+        )
+    }
+
+    /** Shared production reader used by isolated consistency verification. */
+    internal suspend fun readDatabaseSnapshot(db: AppDb, config: ExportConfiguration): Backup.Snapshot {
         var importRows = emptyList<ImportIdentity>()
         val (data, captureRows) = db.withTransaction {
             importRows = db.imports().all()
@@ -40,8 +82,7 @@ object BackupStore {
                 CaptureSnapshot(db.capture().aliases(), db.capture().exportEvidence(), db.capture().deliveries())
         }
         val (rows, historyRows, assetRows) = data
-        val settings = Settings(context)
-        Backup.Snapshot(
+        return Backup.Snapshot(
             exportedAt = System.currentTimeMillis(),
             bills = rows.map { r ->
                 Backup.Bill(
@@ -72,16 +113,16 @@ object BackupStore {
             capture = CaptureMetadataCodec.portable(captureRows),
             assets = assetRows,
             ledger = Backup.Ledger(
-                expense = LedgerConfig.expenseGroups,
-                income = LedgerConfig.incomeGroups,
+                expense = config.ledger.expense,
+                income = config.ledger.income,
                 accounts = assetRows.accounts.filterNot { it.archived }.sortedBy { it.sortOrder }.map { it.name },
-                noteTemplate = LedgerConfig.noteTemplate,
-                noteFillPolicy = LedgerConfig.noteFillPolicy ?: NoteFillCodec.encode(NoteFillConfig()),
-                localRules = LocalRuleStore.snapshot(),
-                monthStartDay = LedgerPeriodStore.read(context),
+                noteTemplate = config.ledger.noteTemplate,
+                noteFillPolicy = config.ledger.noteFillPolicy,
+                localRules = config.ledger.localRules,
+                monthStartDay = config.ledger.monthStartDay,
             ),
-            settings = settingsSnapshot(settings),
-        ).let { Backup.encode(it) }
+            settings = config.settings,
+        )
     }
 
     /**
@@ -114,8 +155,78 @@ object BackupStore {
             )
         } }
 
+    data class LedgerRestoreResult(val stats: Backup.RestoreStats, val preRestoreFile: File)
+
+    /**
+     * Family restore preserves configuration by default. Explicit configuration restoration replays
+     * ledger settings through a repository-required journal; device permissions/settings and pairing
+     * are always preserved. A durable, private local recovery point is required for both modes.
+     */
+    suspend fun restoreLedger(context: Context, json: String, mode: Mode,
+        restoreConfiguration: Boolean = false): LedgerRestoreResult =
+        withContext(Dispatchers.IO) { restoreMutex.withLock {
+            val decoded = Backup.decode(json)
+            val incoming = decoded.copy(ledger = decoded.ledger.takeIf { restoreConfiguration }, settings = null)
+            if (restoreConfiguration) RuleSyncRepository.init(context)
+            RecognitionStore.init(context)
+            RecognitionStore.awaitReady()
+            AssetStore.init(context)
+            AssetStore.awaitReady()
+            val db = AppDb.get(context)
+            // Keep all concurrent accounting writers outside the recovery-point / replacement gap.
+            val (counts, preRestore) = restoreWithRecoveryPoint(db, incoming, mode, restoreConfiguration) {
+                persistPrivateSnapshot(context, exportJson(context), "pre-restore")
+            }
+            val (billCount, historyCount) = counts
+            if (restoreConfiguration) applyPendingConfiguration(context)
+            AssetStore.refresh()
+            io.github.mymoney.systems.SystemIntegration.refresh(context)
+            LedgerRestoreResult(
+                Backup.RestoreStats(
+                    bills = billCount, history = historyCount, ledger = restoreConfiguration && incoming.ledger != null, settings = null,
+                    assets = incoming.assets != null,
+                    assetWarning = if (incoming.assets == null) "旧备份不含资产，已保留当前余额和流水；请核对账户。" else null,
+                ), preRestore,
+            )
+        } }
+
+    internal suspend fun restoreWithRecoveryPoint(
+        db: AppDb, snapshot: Backup.Snapshot, mode: Mode, restoreConfiguration: Boolean = false,
+        saveBefore: suspend () -> File,
+    ): Pair<Pair<Int, Int>, File> = db.withTransaction {
+        val preRestore = saveBefore() // fsync failure aborts before any accounting mutation.
+        restoreLedgerDatabase(db, snapshot, mode, restoreConfiguration) to preRestore
+    }
+
+    internal suspend fun restoreLedgerDatabase(db: AppDb, snapshot: Backup.Snapshot, mode: Mode,
+        restoreConfiguration: Boolean = false): Pair<Int, Int> =
+        restoreDatabase(db, snapshot.copy(ledger = snapshot.ledger.takeIf { restoreConfiguration }, settings = null),
+            mode, journalConfiguration = restoreConfiguration, requireRuleRepository = restoreConfiguration)
+
+    /** fsync before atomic rename; failures leave the existing ledger and snapshots untouched. */
+    internal fun persistPrivateSnapshot(context: Context, json: String, prefix: String): File {
+        Backup.decode(json)
+        val directory = File(context.filesDir, "ledger-backups")
+        check(directory.isDirectory || directory.mkdirs()) { "无法创建本机恢复点目录，未恢复账本" }
+        val target = File(directory, "$prefix-${UUID.randomUUID()}.json")
+        val partial = File(directory, target.name + ".part")
+        try {
+            FileOutputStream(partial).use { output ->
+                output.write(json.toByteArray(Charsets.UTF_8))
+                output.fd.sync()
+            }
+            check(partial.renameTo(target)) { "无法保存本机恢复点，未恢复账本" }
+            val descriptor = android.system.Os.open(directory.absolutePath, android.system.OsConstants.O_RDONLY, 0)
+            try { android.system.Os.fsync(descriptor) } finally { android.system.Os.close(descriptor) }
+            return target
+        } finally {
+            partial.delete()
+        }
+    }
+
     /** Production database path shared with isolated Room verification; no preference side effects. */
-    internal suspend fun restoreDatabase(db: AppDb, snapshot: Backup.Snapshot, mode: Mode): Pair<Int, Int> {
+    internal suspend fun restoreDatabase(db: AppDb, snapshot: Backup.Snapshot, mode: Mode,
+        journalConfiguration: Boolean = true, requireRuleRepository: Boolean = false): Pair<Int, Int> {
         Backup.validateAssetBills(snapshot.bills, snapshot.assets)
         snapshot.assets?.let(AssetBackupCodec::validate)
         snapshot.capture?.let { CaptureMetadataCodec.validate(it,
@@ -254,9 +365,11 @@ object BackupStore {
                     AssetSnapshot(assetDao.accounts(), assetDao.entries()))
                 // Journal configuration in the same DB commit. A crash after this point can
                 // safely replay configuration without replaying account balances or bill inserts.
-                val configJson = Backup.encode(Backup.Snapshot(snapshot.exportedAt, emptyList(), snapshot.ledger, null))
-                assetDao.putMeta(AssetMeta(PENDING_CONFIG, MiniJson.encode(mapOf(
-                    "assetsPresent" to (snapshot.assets != null), "snapshot" to configJson))))
+                if (journalConfiguration) {
+                    val configJson = Backup.encode(Backup.Snapshot(snapshot.exportedAt, emptyList(), snapshot.ledger, null))
+                    assetDao.putMeta(AssetMeta(PENDING_CONFIG, MiniJson.encode(mapOf(
+                        "assetsPresent" to (snapshot.assets != null), "requireRuleRepository" to requireRuleRepository, "snapshot" to configJson))))
+                }
                 inserted to snapshot.history.orEmpty().size
         }
     }
@@ -276,12 +389,17 @@ object BackupStore {
         val journal = MiniJson.decode(raw) as? Map<*, *> ?: error("恢复配置日志损坏")
         val assetsPresent = journal["assetsPresent"] as? Boolean ?: error("恢复配置日志损坏")
         val config = Backup.decode(journal["snapshot"] as? String ?: error("恢复配置日志损坏"))
+        val requireRepository = journal["requireRuleRepository"] == true
+        // An opted-in family restore must never fall back to direct preference writes on cold replay.
+        if (requireRepository) RuleSyncRepository.init(context)
         config.ledger?.let {
             val periodDay = LedgerMonthPeriod.restoredDay(LedgerPeriodStore.read(context), it.monthStartDay)
             if (it.monthStartDay != null) LedgerPeriodStore.save(context, periodDay)
             LedgerConfig.restore(it.expense.takeIf { _ -> it.hasExpense }, it.income.takeIf { _ -> it.hasIncome },
-                it.accounts.takeIf { _ -> it.hasAccounts && !assetsPresent }, it.noteTemplate.takeIf { _ -> it.hasNoteTemplate })
+                it.accounts.takeIf { _ -> it.hasAccounts && !assetsPresent },
+                it.noteTemplate.takeIf { _ -> it.hasNoteTemplate && !requireRepository })
             it.localRules?.let(LocalRuleStore::restore)
+            it.noteTemplate?.takeIf { _ -> it.hasNoteTemplate }?.let(NoteFillStore::saveNoteTemplate)
             it.noteFillPolicy?.let(NoteFillStore::restore)
         }
         dao.putMeta(AssetMeta(PENDING_CONFIG, ""))

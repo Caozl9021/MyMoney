@@ -39,13 +39,13 @@ internal fun NoteFillRulesPage(onBack:()->Unit) {
                         item {PrimaryButton("添加商家备注规则",onClick={editor="new"},modifier=Modifier.fillMaxWidth(),enabled=!busy)}
                         item {GroupHeader("商家备注规则 · ${config.rules.size} 条")}
                         if(config.rules.isEmpty())item {InsetGroup{ListRow(title="还没有商家规则",subtitle="可给淘宝闪购选择“使用本次商品说明”，每次填写当次店铺或商品。")}}
-                        items(config.rules,key={it.key}) {rule->InsetGroup{ListRow(title=rule.merchant,subtitle="${ruleAppName(rule.app)} · ${noteTypeName(rule.type)} · ${rule.mode.label}"+(if(rule.mode==NoteFillMode.FIXED)"\n${rule.text}"else ""),onClick={editor=rule.key},chevron=true)}}
+                        items(config.rules,key={it.itemKey}) {rule->InsetGroup{ListRow(title=rule.merchant,subtitle="${ruleAppName(rule.app)} · ${noteTypeName(rule.type)} · ${rule.mode.label}"+(if(rule.mode==NoteFillMode.FIXED)"\n${rule.text}"else ""),onClick={editor=rule.itemKey},chevron=true)}}
                         item {GroupFooter("按应用、交易类型和商家全名匹配。固定文字由你明确填写；这些设置随账本备份保存，更新官方规则包不会覆盖。")}
                     }
                 }
         }
     }
-    editor?.let {key->MerchantNoteRuleEditor(config.rules.firstOrNull{it.key==key},onClose={editor=null},onSaved={editor=null})}
+    editor?.let {key->MerchantNoteRuleEditor(config.rules.firstOrNull{it.itemKey==key},onClose={editor=null},onSaved={editor=null})}
 }
 
 @Composable
@@ -70,11 +70,11 @@ internal fun MerchantNoteRuleEditor(initial:MerchantNoteRule?,onClose:()->Unit,o
     var discard by remember{mutableStateOf(false)}
     var deleting by remember{mutableStateOf(false)}
     val scope=rememberCoroutineScope()
-    val rule=MerchantNoteRule(app,merchant.trim(),type,mode,if(mode==NoteFillMode.FIXED)text.trim() else "")
+    val rule=MerchantNoteRule(app,merchant.trim(),type,mode,if(mode==NoteFillMode.FIXED)text.trim() else "",initial?.id.orEmpty())
     val dirty=rule!=(initial ?: MerchantNoteRule("com.eg.android.AlipayGphone",""))
     fun close(){if(!busy){if(dirty)discard=true else onClose()}}
     val invalid=runCatching{rule.validate()}.exceptionOrNull()?.message
-    fun commit(remove:Boolean=false){if(busy)return;busy=true;scope.launch{try{withContext(Dispatchers.IO){if(remove)NoteFillStore.deleteRule(initial!!.key) else NoteFillStore.saveRule(rule,initial?.key)};onSaved()}catch(t:Exception){error=t.message}finally{busy=false}}}
+    fun commit(remove:Boolean=false){if(busy)return;busy=true;scope.launch{try{withContext(Dispatchers.IO){if(remove)NoteFillStore.deleteRule(initial!!.itemKey) else NoteFillStore.saveRule(rule,initial?.itemKey)};onSaved()}catch(t:Exception){error=t.message}finally{busy=false}}}
     Dialog(onDismissRequest={close()},properties=DialogProperties(usePlatformDefaultWidth=false,decorFitsSystemWindows=false)) {
         Box(Modifier.fillMaxSize().backgroundForNotes()) {
             SubPageScaffold(if(initial==null)"添加商家备注规则" else "编辑商家备注规则",{close()},reserveDock=false){padding->
@@ -118,7 +118,7 @@ internal fun InlineMerchantNoteEditor(draft:BillDraft,template:String,onClose:()
     var busy by remember{mutableStateOf(false)}
     var error by remember{mutableStateOf<String?>(null)}
     val scope=rememberCoroutineScope()
-    val rule=MerchantNoteRule(draft.sourcePkg,draft.merchant.orEmpty(),draft.type.name,mode,if(mode==NoteFillMode.FIXED)text.trim()else"")
+    val rule=MerchantNoteRule(draft.sourcePkg,draft.merchant.orEmpty(),draft.type.name,mode,if(mode==NoteFillMode.FIXED)text.trim()else"",initial?.id.orEmpty())
     val invalid=runCatching{rule.validate()}.exceptionOrNull()?.message
     Column(verticalArrangement=Arrangement.spacedBy(AbSpacing.s)) {
         Text("${ruleAppName(rule.app)} · ${rule.merchant}",style=AbType.footnote,color=LocalAbPalette.current.secondaryLabel)
@@ -129,7 +129,7 @@ internal fun InlineMerchantNoteEditor(draft:BillDraft,template:String,onClose:()
         error?.let{Text(it,style=AbType.footnote,color=LocalAbPalette.current.red)}
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(AbSpacing.s)) {
             SecondaryButton("取消",onClick=onClose,modifier=Modifier.weight(1f),enabled=!busy)
-            PrimaryButton("保存方式",onClick={if(!busy){busy=true;scope.launch{try{withContext(Dispatchers.IO){NoteFillStore.saveRule(rule,initial?.key)};onSaved(NoteFillStore.prepare(draft,template))}catch(t:Exception){error=t.message}finally{busy=false}}}},modifier=Modifier.weight(1f),enabled=!busy&&invalid==null)
+            PrimaryButton("保存方式",onClick={if(!busy){busy=true;scope.launch{try{withContext(Dispatchers.IO){NoteFillStore.saveRule(rule,initial?.itemKey)};onSaved(NoteFillStore.prepare(draft,template))}catch(t:Exception){error=t.message}finally{busy=false}}}},modifier=Modifier.weight(1f),enabled=!busy&&invalid==null)
         }
     }
 }

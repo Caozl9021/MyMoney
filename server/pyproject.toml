@@ -1,0 +1,28 @@
+[project]
+name = "mymoney-home"
+version = "0.2.0"
+description = "My Money family rule sync and ledger backup service"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.34",
+  "psycopg[binary,pool]>=3.2",
+  "pydantic>=2.9",
+  "alembic>=1.14",
+  "sqlalchemy>=2.0",
+  "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8.3", "httpx>=0.28"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]

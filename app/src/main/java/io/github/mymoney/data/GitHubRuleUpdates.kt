@@ -1,8 +1,6 @@
 package io.github.mymoney.data
 
 import com.example.billkit.spec.PortableRulePackage
-import java.io.IOException
-import java.net.HttpURLConnection
 import java.net.URL
 
 /** Only public release metadata and rule ZIPs are requested; no device or ledger data. */
@@ -55,28 +53,6 @@ object GitHubRuleUpdates {
         return bytes
     }
 
-    private fun get(initial: String, limit: Int): ByteArray {
-        var url = URL(initial)
-        repeat(6) {
-            require(url.protocol == "https" && url.port == -1 && url.userInfo == null &&
-                url.host in setOf("api.github.com","github.com","release-assets.githubusercontent.com","objects.githubusercontent.com")) { "更新下载地址不受支持" }
-            val connection = url.openConnection() as HttpURLConnection
-            try {
-                connection.instanceFollowRedirects=false
-                connection.connectTimeout=15_000;connection.readTimeout=20_000
-                connection.setRequestProperty("User-Agent","MyMoney-RuleUpdates")
-                connection.setRequestProperty("Accept",if(url.host=="api.github.com") "application/vnd.github+json" else "application/octet-stream")
-                val code=connection.responseCode
-                if(code in setOf(301,302,303,307,308)) {
-                    url=URL(url,connection.getHeaderField("Location") ?: error("下载跳转地址缺失"))
-                } else {
-                    if(code==403 || code==429) throw IOException("GitHub 请求受限，请稍后重试或下载文件导入")
-                    if(code!=200) throw IOException("GitHub 暂不可用（$code），请稍后重试")
-                    require(connection.contentLengthLong <= limit) { "更新文件超过大小限制" }
-                    return connection.inputStream.use { PortableRulePackage.readBytes(it,limit) }
-                }
-            } finally { connection.disconnect() }
-        }
-        throw IOException("下载跳转次数过多，请手动下载导入")
-    }
+    private fun get(initial: String, limit: Int): ByteArray =
+        GitHubHttp.get(initial, limit, acceptApi = initial.startsWith("https://api.github.com/"))
 }

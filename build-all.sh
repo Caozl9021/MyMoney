@@ -107,6 +107,19 @@ for pair in "$APP_DEBUG:$DIST_DEBUG" "$APP_RELEASE:$DIST_RELEASE"; do
     check_version "$dst"
 done
 
+# 正式 Release 的 app-update.json：从最终签名 APK 读取真实版本/签名/摘要。
+echo ""
+echo "🧾 生成 App 更新清单..."
+NOTES_ARGS=()
+if [ -f "dist/RELEASE_NOTES-v${VERSION_NAME}.md" ]; then
+    NOTES_ARGS=(--notes-file "dist/RELEASE_NOTES-v${VERSION_NAME}.md")
+fi
+python3 tools/release/generate-app-update.py \
+    --apk "$DIST_RELEASE" \
+    --output "dist/app-update.json" \
+    "${NOTES_ARGS[@]}"
+cp "dist/app-update.json" "dist/MyMoney-${VERSION_NAME}-app-update.json"
+
 echo ""
 echo "=========================================="
 echo "📊 构建产物："

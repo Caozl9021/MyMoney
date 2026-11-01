@@ -22,7 +22,14 @@ class App : Application() {
 
         RecognitionStore.init(this)
         LedgerConfig.init(this)
+        // 规则同步库是四类用户规则的新权威；先初始化它，备注缓存才能读到迁移后的结果。
+        runCatching {
+            runBlocking(Dispatchers.IO) { io.github.mymoney.data.rulesync.RuleSyncRepository.init(this@App) }
+        }.onFailure {
+            android.util.Log.e("MyMoney", "规则同步库初始化失败，暂用旧规则源", it)
+        }
         io.github.mymoney.data.NoteFillStore.init()
+        io.github.mymoney.data.update.AppUpdateStore.init(this)
         io.github.mymoney.data.LedgerPeriodStore.init(this)
         io.github.mymoney.data.AssetStore.init(this)
         io.github.mymoney.data.LocalRuleStore.init(this)

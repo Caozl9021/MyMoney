@@ -2,4 +2,6 @@
 <paths>
     <!-- 分享给 iCost 的 CSV 走 cache/share/ -->
     <cache-path name="share" path="share/" />
+    <!-- App 更新安装包只暴露 cache/updates/，不暴露整个 cache。 -->
+    <cache-path name="updates" path="updates/" />
 </paths>

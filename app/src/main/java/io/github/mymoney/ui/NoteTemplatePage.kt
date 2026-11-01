@@ -16,6 +16,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import io.github.mymoney.data.LedgerConfig
 import io.github.mymoney.data.NoteTemplate
+import io.github.mymoney.data.NoteFillStore
 import io.github.mymoney.ui.design.*
 import com.example.billkit.BillDraft
 import com.example.billkit.BillType
@@ -68,7 +69,7 @@ internal fun NoteTemplatePage(onBack: () -> Unit) {
             }
             Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
                 PrimaryButton("保存模板", enabled = unknown.isEmpty(), onClick = {
-                    LedgerConfig.noteTemplate = value.text; saved = value.text; onBack()
+                    NoteFillStore.saveNoteTemplate(value.text); saved = value.text; onBack()
                 })
                 SecondaryButton("恢复默认", onClick = { value = TextFieldValue("{商户}", TextRange(4)) })
             }

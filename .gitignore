@@ -1,7 +1,7 @@
 # ============================================================
 # 麦米 My Money .gitignore
 # 原则：业务源码、README.md、构建脚本和图标源图入库；
-#       其他文档、测试文件、规划与验证记录仅在本地保留。
+#       必要用户/部署文档与测试源码入库；规划、交接与验证记录仅在本地保留。
 #       构建产物、缓存、本机配置、密钥及个人媒体不入库。
 # ============================================================
 
@@ -40,6 +40,8 @@ keystore.properties
 *.key
 .env
 .env.*
+# 脱敏模板入库，真实部署配置继续忽略
+!.env.example
 
 # ---------- 3. 缓存与临时文件 ----------
 *.pyc
@@ -146,3 +148,22 @@ scratch/
 .tmp-icons/
 .tmp-probe/
 .dsh-write-test
+
+# 家庭服务的Python环境、安装元数据与测试缓存
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 运行时账本/备份卷与本机部署覆盖配置
+/deploy/home-sync/backups/
+/deploy/home-sync/docker-compose.override.yml
+/deploy/home-sync/docker-compose.override.yaml
+/server/backups/
+
+# 提交必要的公开使用/部署说明，不放行内部交接与验收文档
+!/docs/FAMILY_BACKUPS.md
+!/deploy/home-sync/README.md
+!/server/README.md

@@ -4,8 +4,10 @@
     <permission android:name="io.github.mymoney.permission.LSP_PROBE" android:protectionLevel="signature" />
     <uses-permission android:name="io.github.mymoney.permission.LSP_PROBE" />
 
-    <!-- 仅用户主动检查/下载公开GitHub规则包；采集和账本不联网。 -->
+    <!-- 仅用户主动检查/下载公开GitHub规则包与 App 更新；采集和账本不联网。 -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 仅用户点击“安装更新”后交给系统安装器；不在后台静默安装。 -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- 悬浮确认卡片（root 路径下唯一不受后台启动限制的弹窗方式） -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -47,6 +49,7 @@
     </queries>
 
     <application
+        android:networkSecurityConfig="@xml/network_security_config"
         android:enableOnBackInvokedCallback="true"
         android:name=".App"
         android:allowBackup="false"

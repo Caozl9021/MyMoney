@@ -18,6 +18,7 @@ import com.example.billkit.spec.PersonalRule
 import com.example.billkit.spec.PersonalRuleCodec
 import com.example.billkit.spec.PersonalRuleEngine
 import com.example.billkit.spec.PersonalPageRules
+import io.github.mymoney.data.rulesync.RuleSyncRepository
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -85,21 +86,41 @@ object SpecRuleStore {
         }
     }
 
+    /** Rebuild the runtime projection after a remote sync pull. */
+    suspend fun refreshFromRepository(context: Context) {
+        if (!RuleSyncRepository.isReady()) return
+        lock.withLock {
+            withContext(Dispatchers.IO) {
+                val app = context.applicationContext
+                val state = packageFiles(app).state()
+                activate(app, state, validate = false)
+            }
+        }
+    }
+
     suspend fun ensureReady(context: Context) {
         if (initialized && engine.isReady()) return
         lock.withLock {
             if (initialized && engine.isReady()) return
             withContext(Dispatchers.IO) {
                 val app = context.applicationContext
+                // Repository is the authority after migration; this also makes direct SpecRuleStore tests safe.
+                if (!RuleSyncRepository.isReady()) {
+                    runCatching { RuleSyncRepository.init(app) }
+                        .onFailure { Log.w(TAG, "规则同步库初始化失败，暂用旧规则源", it) }
+                }
                 val store = packageFiles(app)
                 var state = store.state()
                 if (!File(app.filesDir, "rule-packages/state.json").exists()) {
                     val old = AppDb.get(app).rules().allRules().filter { it.creator == "maimi" && !it.enabled && it.struct != "maimi:experimental" }
-                    state = state.copy(enabled = old.associate { it.systemRuleName to false })
+                    state = state.copy(
+                        enabled = old.associate { it.systemRuleName to false } + effectiveEnabled(state),
+                        personalRules = effectivePersonalRules(state),
+                    )
                     store.commit(state)
                 }
                 activate(app, state, validate = true)
-                PersonalPageRules.install(state.personalRules)
+                PersonalPageRules.install(effectivePersonalRules(state))
                 NotificationTemplateRegistry.install(pendingNotificationTemplates)
                 initialized = true
 
@@ -314,10 +335,18 @@ object SpecRuleStore {
     }
     private fun packageFiles(context: Context) = RulePackageFiles(File(context.filesDir, "rule-packages"))
 
+    private fun effectivePersonalRules(state: RulePackageFiles.State): List<PersonalRule> =
+        if (RuleSyncRepository.isReady()) RuleSyncRepository.personalRules() else state.personalRules
+
+    private fun effectiveEnabled(state: RulePackageFiles.State): Map<String, Boolean> =
+        if (RuleSyncRepository.isReady()) RuleSyncRepository.officialEnabled() else state.enabled
+
     private suspend fun activate(context: Context, state: RulePackageFiles.State, validate: Boolean, manual: Boolean = false) {
         val pack = state.active?.let { packageFiles(context).load(it) }
         if (validate) pack?.validate()
         val bundle = pack?.bundle ?: SpecRuleBundle.load { readAsset(context, it) }
+        val enabled = effectiveEnabled(state)
+        val personal = effectivePersonalRules(state)
         val notifications = pack?.notificationConfig ?: NotificationTemplateConfig.decode(readAsset(context, "spec/"+NotificationTemplateConfig.FILE))
         if (validate) notifications.validateSamples()
         val releaseMetadata = if(pack == null) (MiniJson.decode(readAsset(context,"official-rule-release.json")) as Map<*, *>) else null
@@ -326,20 +355,23 @@ object SpecRuleStore {
         // Validate every script, including a locally disabled one, before any database mutation.
         SpecRuleEngine().apply { try { rebuild(common, bundle.rules.map { it.copy(enabled = true) }) } finally { close() } }
         com.example.billkit.spec.SpecCategoryEngine().apply { try { rebuild(common, category) } finally { close() } }
-        val candidate = installBundle(context, AppDb.get(context), bundle, common, explicitEnabled = state.enabled)
+        val candidate = installBundle(context, AppDb.get(context), bundle, common, explicitEnabled = enabled)
         val oldEngine = engine
         engine = candidate
         oldEngine.close()
         activeFiles = pack?.files
-        activePersonalRules = state.personalRules
-        activePersonalDigest = PortableRulePackage.hash(PersonalRuleCodec.export(state.personalRules).toByteArray()).take(16)
-        covered = bundle.rules.filter { state.enabled[it.systemRuleName] ?: it.enabled }.map { it.app + "|" + it.type }.toSet() + state.personalRules.filter { it.enabled }.map { it.app + "|" + it.inputType }
-        pendingNotificationTemplates = notifications.templates.filter { t -> state.enabled[t.ruleId] ?: bundle.rules.first { it.systemRuleName==t.ruleId }.enabled }
+        activePersonalRules = personal
+        activePersonalDigest = PortableRulePackage.hash(PersonalRuleCodec.export(personal).toByteArray()).take(16)
+        covered = bundle.rules.filter { enabled[it.systemRuleName] ?: it.enabled }.map { it.app + "|" + it.type }.toSet() + personal.filter { it.enabled }.map { it.app + "|" + it.inputType }
+        pendingNotificationTemplates = notifications.templates.filter { t -> enabled[t.ruleId] ?: bundle.rules.first { it.systemRuleName==t.ruleId }.enabled }
         mutableStatus.value = Status(ready = true, rules = candidate.registeredRules(), buildMillis = candidate.lastBuildMillis,
             version = pack?.version ?: (releaseMetadata?.get("packageVersion") as? String ?: bundle.version), available = bundle.rules.size, capabilities = covered,
             source = if (pack == null) "内置" else "导入", digest = pack?.digest ?: bundle.digest,
             publishedAt = pack?.publishedAt ?: releaseMetadata?.get("publishedAt") as? String,
-            personalRules = state.personalRules, entries = bundle.rules.map { it.copy(enabled = state.enabled[it.systemRuleName] ?: it.enabled) }, canRollback = state.canRollback, manualActivation = manual)
+            personalRules = personal, entries = bundle.rules.map { it.copy(enabled = enabled[it.systemRuleName] ?: it.enabled) }, canRollback = state.canRollback, manualActivation = manual)
+        if (RuleSyncRepository.isReady()) {
+            RuleSyncRepository.markProjectionActive(RuleSyncRepository.snapshot().generation)
+        }
     }
 
     suspend fun preparePackage(context: Context, bytes: ByteArray): PortableRulePackage = withContext(Dispatchers.IO) {
@@ -373,8 +405,8 @@ object SpecRuleStore {
         val previous = store.state()
         try {
             activate(context, target, validate = true, manual = true)
-            store.commit(target)
-            PersonalPageRules.install(target.personalRules) // publish only after durable commit
+            store.commit(target.copy(personalRules = effectivePersonalRules(target), enabled = effectiveEnabled(target)))
+            PersonalPageRules.install(effectivePersonalRules(target)) // publish only after durable commit
             NotificationTemplateRegistry.install(pendingNotificationTemplates)
             // commit point; if killed before this, startup rebuilds the previous projection.
         } catch (t: Throwable) {
@@ -410,31 +442,50 @@ object SpecRuleStore {
     suspend fun setRuleEnabled(context: Context, id: String, enabled: Boolean) = withContext(Dispatchers.IO) { lock.withLock {
         require(status.value.entries.any { it.systemRuleName == id }) { "规则ID不存在" }
         val state = packageFiles(context).state()
-        change(context, state.copy(enabled = state.enabled + (id to enabled)))
+        if (RuleSyncRepository.isReady()) {
+            RuleSyncRepository.setOfficialRuleEnabled(id, enabled)
+            change(context, state.copy(enabled = RuleSyncRepository.officialEnabled()))
+        } else {
+            change(context, state.copy(enabled = state.enabled + (id to enabled)))
+        }
     } }
 
     suspend fun savePersonalRule(context: Context, rule: PersonalRule) = withContext(Dispatchers.IO) { lock.withLock {
         rule.validate()
         val state = packageFiles(context).state()
-        val old = state.personalRules.firstOrNull { it.id == rule.id }
-        val saved = if(old != null && old.copy(enabled=rule.enabled,updatedAt=null)==rule.copy(updatedAt=null)) rule.copy(updatedAt=old.updatedAt) else rule.copy(updatedAt=System.currentTimeMillis())
-        val rules = listOf(saved) + state.personalRules.filterNot { it.id == rule.id }
-        require(rules.size <= 100) { "个人规则最多100条" }
-        change(context, state.copy(personalRules = rules))
+        if (RuleSyncRepository.isReady()) {
+            RuleSyncRepository.savePersonalRule(rule)
+            change(context, state.copy(personalRules = RuleSyncRepository.personalRules()))
+        } else {
+            val old = state.personalRules.firstOrNull { it.id == rule.id }
+            val saved = if(old != null && old.copy(enabled=rule.enabled,updatedAt=null)==rule.copy(updatedAt=null)) rule.copy(updatedAt=old.updatedAt) else rule.copy(updatedAt=System.currentTimeMillis())
+            val rules = listOf(saved) + state.personalRules.filterNot { it.id == rule.id }
+            require(rules.size <= 100) { "个人规则最多100条" }
+            change(context, state.copy(personalRules = rules))
+        }
     } }
     suspend fun deletePersonalRule(context: Context, id: String) = withContext(Dispatchers.IO) { lock.withLock {
         val state = packageFiles(context).state()
-        change(context, state.copy(personalRules = state.personalRules.filterNot { it.id == id }))
+        if (RuleSyncRepository.isReady()) {
+            RuleSyncRepository.deletePersonalRule(id)
+            change(context, state.copy(personalRules = RuleSyncRepository.personalRules()))
+        } else change(context, state.copy(personalRules = state.personalRules.filterNot { it.id == id }))
     } }
     suspend fun importPersonalRules(context: Context, text: String) = withContext(Dispatchers.IO) { lock.withLock {
         val incoming = PersonalRuleCodec.decode(text)
         val state = packageFiles(context).state()
-        val rules = incoming + state.personalRules.filterNot { old -> incoming.any { it.id == old.id } }
-        require(rules.size <= 100) { "合并后个人规则超过100条" }
-        change(context, state.copy(personalRules = rules))
+        if (RuleSyncRepository.isReady()) {
+            RuleSyncRepository.importPersonalRules(text)
+            change(context, state.copy(personalRules = RuleSyncRepository.personalRules()))
+        } else {
+            val rules = incoming + state.personalRules.filterNot { old -> incoming.any { it.id == old.id } }
+            require(rules.size <= 100) { "合并后个人规则超过100条" }
+            change(context, state.copy(personalRules = rules))
+        }
     } }
     suspend fun exportPersonalRules(context: Context): String = withContext(Dispatchers.IO) { lock.withLock {
-        PersonalRuleCodec.export(packageFiles(context).state().personalRules)
+        if (RuleSyncRepository.isReady()) RuleSyncRepository.exportPersonalRules()
+        else PersonalRuleCodec.export(packageFiles(context).state().personalRules)
     } }
 
     /** Pure preview: no raw persistence, correlation write, learning, dedup or delivery. */

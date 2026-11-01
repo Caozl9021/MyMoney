@@ -6,9 +6,11 @@ import java.util.Locale
 
 enum class NoteFillMode(val label:String) { PRODUCT("使用本次商品说明"), FIXED("固定文字"), NONE("不自动填充") }
 
-data class MerchantNoteRule(val app:String,val merchant:String,val type:String="EXPENSE",val mode:NoteFillMode=NoteFillMode.PRODUCT,val text:String="") {
+data class MerchantNoteRule(val app:String,val merchant:String,val type:String="EXPENSE",val mode:NoteFillMode=NoteFillMode.PRODUCT,val text:String="",val id:String="") {
     val key:String get()=app+"|"+type+"|"+NoteFillPolicy.merchantKey(merchant)
+    val itemKey:String get()=id.ifBlank { key }
     fun validate() {
+        require(id.isBlank() || Regex("merchant_[A-Za-z0-9_-]{6,80}").matches(id)) {"备注规则标识无效"}
         require(app in setOf("com.tencent.mm","com.eg.android.AlipayGphone")) {"请选择微信或支付宝"}
         require(merchant.isNotBlank() && merchant.length<=80 && !merchant.contains('\n')) {"请填写80字以内的完整商家名称"}
         require(type in setOf("EXPENSE","INCOME","REFUND")) {"请选择支出、收入或退款"}

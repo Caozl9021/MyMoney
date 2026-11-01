@@ -14,7 +14,7 @@
 [![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)](#构建)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?logo=kotlin&logoColor=white)](#项目结构)
 [![Compose](https://img.shields.io/badge/Jetpack-Compose-4285F4?logo=jetpackcompose&logoColor=white)](#项目结构)
-![Version](https://img.shields.io/badge/版本-1.3.1%20%2F%20115-00847D)
+![Version](https://img.shields.io/badge/版本-1.7.0%20%2F%20123-00847D)
 
 **[⬇ 下载 App 与规则包](../../releases)**
 
@@ -25,6 +25,8 @@
 <div align="center"><sub>账本 · 确认卡 · 统计 · 资产：App 实际运行截图，示例为测试账本数据</sub></div>
 
 ---
+
+**1.7.0/123** 支持可选家庭规则同步与手动账本快照。使用说明见 [家庭备份](docs/FAMILY_BACKUPS.md)，自托管部署见 [家庭服务部署](deploy/home-sync/README.md)。
 
 ## 一次支付，只要三步
 
@@ -39,7 +41,7 @@ flowchart LR
 
 在“设置 → 自动记账 → 识别规则”分为官方规则、自定义规则、备注填充。官方规则显示版本和发布时间，点击“检查 GitHub 更新”获取可导入包；自定义规则显示最后修改时间，更新官方包会保留。旧规则未记录时间时如实显示“未记录”。
 
-规则支持独立更新：从 Release 下载 `.mymoney-rules.zip`，进入设置 → 识别规则 → 导入规则包。升级兼容 App 会保留已导入规则，详见[导入与回退说明](docs/LOCAL_RULES.md#独立交易规则包引擎-api-1)。规则包可能是最新 Release 的唯一附件，首次使用请下载含 APK 的 App Release。
+规则支持独立更新：从 Release 下载 `.mymoney-rules.zip`，进入设置 → 识别规则 → 导入规则包。升级兼容 App 会保留已导入规则，详见[导入与回退说明](docs/LOCAL_RULES.md#独立交易规则包引擎-api-1)。规则包可能是最新 Release 的唯一附件，首次使用请下载含 APK 的 App Release。App 自身可在设置 → 关于检查 GitHub Releases 更新。
 
 **不猜、不替你做主。** 识别结果一律先成草稿，金额、类型、分类、账户都可以当场改；只有你点了「记一笔」，数据才会写进账本。
 
@@ -159,10 +161,10 @@ echo "sdk.dir=$HOME/Android/Sdk" > local.properties
 
 ## 数据与隐私
 
-- **联网仅用于用户主动检查、下载 GitHub 官方规则包。** 声明 `INTERNET` 权限；识别、账单、学习与备份仍在本机处理，不上传支付内容，没有云端账号或云端学习。可以自己验证权限：
+- **识别与学习在本机处理。** 网络用于用户主动检查、下载 GitHub 规则包和 App 更新，以及可选的家庭规则同步与手动账本备份。配对后，规则和主动备份的账本快照发送到自己配置的家庭服务；不会向 GitHub 上传支付内容，没有平台云端账号或云端学习。可以自己验证权限：
 
   ```bash
-  aapt dump permissions MyMoney-1.3.1-master-release.apk
+  aapt dump permissions MyMoney-1.7.0-master-release.apk
   ```
 
 - 不读写第三方 App 的私有数据库，不 Hook 微信 / 支付宝的 Flutter / Dart 层，不做截图 OCR，不恢复任何「两路同时采集」的旧方案。
