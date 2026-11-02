@@ -18,8 +18,8 @@ android {
         targetSdk = 35
         testInstrumentationRunner = providers.gradleProperty("mymoneyTestRunner")
             .getOrElse("io.github.mymoney.HistoryInstrumentation")
-        versionCode = 123
-        versionName = "1.7.0"
+        versionCode = 124
+        versionName = "1.7.1"
     }
 
     // 签名信息放在仓库之外（~/.mymoney-keys/keystore.properties），不进版本库。

@@ -17,6 +17,7 @@ package io.github.mymoney.data
 object CaptureReviewPolicy {
     const val SAME_SLOT_SAME_AMOUNT = "same-slot-same-amount"
     const val CROSS_SOURCE_SAME_AMOUNT = "cross-source-same-amount"
+    const val AMBIGUOUS_CROSS_SOURCE = "ambiguous-cross-source"
     const val FIELD_CONFLICT = "field-conflict"
     const val SAME_OBSERVATION = "same-observation-conflict"
 
@@ -32,13 +33,14 @@ object CaptureReviewPolicy {
     fun suppresses(weakGuess: Boolean, targetPresented: Boolean): Boolean = !weakGuess || targetPresented
 
     fun isWeakGuess(reason: String?): Boolean =
-        reason == SAME_SLOT_SAME_AMOUNT || reason == CROSS_SOURCE_SAME_AMOUNT
+        reason == SAME_SLOT_SAME_AMOUNT || reason == CROSS_SOURCE_SAME_AMOUNT || reason == AMBIGUOUS_CROSS_SOURCE
 
     /** 诊断文案：把"为什么待核对/为什么仍然弹"写清楚，不再只留一个 needs-review。 */
     fun explanation(reason: String, suppressed: Boolean): String {
         val what = when (reason) {
             SAME_SLOT_SAME_AMOUNT -> "同一通知槽位 120 秒内又来一笔同额"
             CROSS_SOURCE_SAME_AMOUNT -> "另一来源在 120 秒内已有一笔同额"
+            AMBIGUOUS_CROSS_SOURCE -> "60 秒内存在多条可能匹配的跨通道同额记录"
             FIELD_CONFLICT -> "同一交易身份的内容与已有草稿冲突"
             SAME_OBSERVATION -> "同一通知实例再次上报但内容不同"
             else -> "存在同额弱候选"

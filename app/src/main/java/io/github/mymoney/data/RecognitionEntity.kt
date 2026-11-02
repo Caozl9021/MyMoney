@@ -90,7 +90,7 @@ interface RecognitionDao {
     suspend fun byId(id: String): RecognitionEntity?
     @Query("SELECT * FROM recognition_history WHERE identityKey = :key")
     suspend fun byIdentity(key: String): RecognitionEntity?
-    @Query("SELECT * FROM recognition_history WHERE sourcePkg = :pkg AND type = :type AND priceCents = :amount AND recognizedAt BETWEEN :from AND :to ORDER BY recognizedAt DESC LIMIT 10")
+    @Query("SELECT * FROM recognition_history WHERE sourcePkg = :pkg AND type = :type AND priceCents = :amount AND recognizedAt BETWEEN :from AND :to ORDER BY recognizedAt DESC, id")
     suspend fun captureCandidates(pkg: String, type: String, amount: Long, from: Long, to: Long): List<RecognitionEntity>
     @Query("UPDATE recognition_history SET reviewOf = NULL WHERE reviewOf IN (SELECT id FROM recognition_history WHERE status = 'IGNORED')")
     suspend fun unlinkIgnoredReviews()

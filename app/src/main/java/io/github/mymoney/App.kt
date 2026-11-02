@@ -56,10 +56,10 @@ class App : Application() {
         scope.launch { io.github.mymoney.data.SpecRuleStore.init(this@App) }
         // 规格的 64 条分类正则（js_category.js），只在项目内置分类认不出时补一刀。
         scope.launch { io.github.mymoney.data.SpecCategoryStore.init(this@App) }
-        data class PageDelivery(val draft: com.example.billkit.BillDraft, val diagnostic: DebugBus.State?, val token: String)
+        data class PageDelivery(val draft: com.example.billkit.BillDraft, val diagnostic: DebugBus.State?, val token: String, val receivedAt: Long)
         val deliveries = Channel<PageDelivery>(Channel.UNLIMITED)
         scope.launch {
-            for ((draft, diagnostic, token) in deliveries) {
+            for ((draft, diagnostic, token, receivedAt) in deliveries) {
                 try {
                     fun allowed(): Boolean = settings.enabled && settings.pageEnabled && draft.sourcePkg in settings.whitelist &&
                         token == io.github.mymoney.capture.NotificationIngress.configurationToken(this@App)
@@ -73,7 +73,7 @@ class App : Application() {
                     val enriched = io.github.mymoney.data.NoteFillStore.prepare(accounted)
                     val accepted = io.github.mymoney.capture.CaptureCoordinator.accept(this@App,
                         io.github.mymoney.capture.CaptureCoordinator.Input(enriched, "PAGE",
-                            "page:" + io.github.mymoney.data.RecognitionIdentity.key(enriched)), allowed = { allowed() }) ?: continue
+                            "page:" + io.github.mymoney.data.RecognitionIdentity.key(enriched), receivedAt = receivedAt), allowed = { allowed() }) ?: continue
                     val delivery = io.github.mymoney.capture.CaptureCoordinator.deliver(this@App, accepted) { allowed() }
                     if (DebugBus.state.value == diagnostic) DebugBus.annotateOutcome(buildString {
                         append(" → ").append(delivery)
@@ -97,7 +97,7 @@ class App : Application() {
         BillKit.install(
             config = settings.toKitConfig(),
             sink = { draft -> check(deliveries.trySend(PageDelivery(draft, DebugBus.state.value,
-                draft.captureConfigurationToken ?: "missing-capture-token")).isSuccess) },
+                draft.captureConfigurationToken ?: "missing-capture-token", System.currentTimeMillis())).isSuccess) },
             pageSessionProvider = pageSessions::sessionFor,
         )
 

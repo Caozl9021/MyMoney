@@ -261,7 +261,7 @@ object RootNotificationIngress {
         val enriched = NoteFillStore.prepare(accounted)
         val accepted = CaptureCoordinator.accept(
             context,
-            CaptureCoordinator.Input(enriched, SOURCE, observationKey, eventId, System.currentTimeMillis()),
+            CaptureCoordinator.Input(enriched, SOURCE, observationKey, eventId, receivedAt),
             // 判定里不再带实现：只认「通道开着 + 应用在白名单」。刚收到 listener 重新连上、
             // 计划正在从 DUMPSYS 切回 LISTENER 的这一瞬，票据是真的，不该因为它被丢掉。
             allowed = { val s = Settings(context); s.enabled && s.notificationCaptureEnabled && pkg in s.whitelist },

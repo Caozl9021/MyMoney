@@ -65,50 +65,39 @@ class NotificationCaptureInstrumentation : Instrumentation() {
                     check(first.row.reviewOf == null && second.row.reviewOf == null)
                 }
 
-                test("synthetic_undelivered_cross_source_candidate_does_not_swallow_the_notification") { db ->
+                test("synthetic_undelivered_cross_source_merges_and_can_deliver") { db ->
                     val first = accept(db, input("PAGE", "page-weak", draft(null).copy(captureSessionId = "page-weak")))
                     val second = accept(db, input("NOTIFICATION", "notification-weak", draft(null).copy(captureSessionId = "notification-weak")))
-                    check(first.created && second.created && first.row.id != second.row.id)
-                    // The page row never reached the screen, so the notification is still presented.
-                    check(second.decision == "new" && second.row.reviewOf == null)
-                    check(!second.reviewSuppressed && second.reviewReason == CaptureReviewPolicy.CROSS_SOURCE_SAME_AMOUNT)
-                    check(second.row.status == RecognitionStatus.PENDING)
-                    check(first.row.reviewOf == null && db.recognitions().byId(first.row.id)?.reviewOf == null)
-                    check(db.recognitions().allOnce().size == 2)
+                    check(first.created && !second.created && first.row.id == second.row.id)
+                    check(second.decision == "linked" && second.row.reviewOf == null && second.deliverable)
+                    check(second.reviewReason == null && db.recognitions().allOnce().size == 1)
                     check(db.bills().allOnce().isEmpty())
                 }
 
-                test("synthetic_delivered_candidate_keeps_second_source_in_review") { db ->
+                test("synthetic_delivered_candidate_merges_without_second_delivery") { db ->
                     val first = accept(db, input("PAGE", "page-shown", draft(null).copy(captureSessionId = "page-shown")))
-                    // The earlier row was actually presented: its receipt is what licenses suppression.
-                    db.withTransaction { db.capture().putDelivery(CaptureDelivery(first.row.id,
-                        CaptureDeliveryState.ACKNOWLEDGED, "attempt-shown", 1_700_000_000_500L)) }
-                    val second = accept(db, input("NOTIFICATION", "notification-repeated", draft(null)
-                        .copy(captureSessionId = "notification-repeated")))
-                    check(second.created && second.row.id != first.row.id)
-                    check(second.decision == "needs-review" && second.row.reviewOf == first.row.id)
-                    check(second.reviewSuppressed && second.reviewReason == CaptureReviewPolicy.CROSS_SOURCE_SAME_AMOUNT)
-                    check(db.recognitions().allOnce().size == 2)
+                    db.capture().putDelivery(CaptureDelivery(first.row.id, CaptureDeliveryState.ACKNOWLEDGED,
+                        "attempt-shown", 1_700_000_000_500L))
+                    val second = accept(db, input("NOTIFICATION", "notification-repeated", draft(null)))
+                    check(!second.created && second.row.id == first.row.id && !second.deliverable)
+                    check(second.decision == "linked" && second.row.reviewOf == null)
+                    check(db.recognitions().allOnce().size == 1)
                 }
 
-                test("synthetic_weak_notification_then_strong_page_requires_review") { db ->
-                    val weak = accept(db, input("NOTIFICATION", "weak-notification", draft(null).copy(captureSessionId = "weak-notification")))
-                    check(weak.created && weak.row.reviewOf == null)
+                test("synthetic_weak_notification_then_strong_page_merges") { db ->
+                    val weak = accept(db, input("NOTIFICATION", "weak-notification", draft(null)))
                     val strong = accept(db, input("PAGE", "strong-page", draft("page-order")))
-                    check(strong.created && weak.row.id != strong.row.id)
-                    // Neither source has been presented yet, so the page delivery proceeds.
-                    check(strong.decision == "new" && strong.row.reviewOf == null)
-                    check(!strong.reviewSuppressed && strong.reviewReason == CaptureReviewPolicy.CROSS_SOURCE_SAME_AMOUNT)
-                    check(db.recognitions().allOnce().size == 2)
+                    check(weak.created && !strong.created && weak.row.id == strong.row.id)
+                    check(strong.deliverable && strong.row.reviewOf == null)
+                    check(strong.row.transactionKey == "page-order" && db.recognitions().allOnce().size == 1)
                 }
 
-                test("synthetic_weak_page_then_strong_notification_requires_review") { db ->
-                    val weak = accept(db, input("PAGE", "weak-page", draft(null).copy(captureSessionId = "weak-page")))
+                test("synthetic_weak_page_then_strong_notification_merges") { db ->
+                    val weak = accept(db, input("PAGE", "weak-page", draft(null)))
                     val strong = accept(db, input("NOTIFICATION", "strong-notification", draft("notification-order")))
-                    check(weak.created && strong.created && weak.row.id != strong.row.id)
-                    check(strong.decision == "new" && strong.row.reviewOf == null)
-                    check(!strong.reviewSuppressed && strong.reviewReason == CaptureReviewPolicy.CROSS_SOURCE_SAME_AMOUNT)
-                    check(db.recognitions().allOnce().size == 2)
+                    check(weak.created && !strong.created && weak.row.id == strong.row.id)
+                    check(strong.deliverable && strong.row.reviewOf == null)
+                    check(strong.row.transactionKey == "notification-order" && db.recognitions().allOnce().size == 1)
                 }
 
                 test("synthetic_two_cross_source_distinct_strong_ids_are_independent") { db ->
@@ -178,6 +167,7 @@ class NotificationCaptureInstrumentation : Instrumentation() {
                 test("synthetic_same_notification_slot_new_instance_same_amount_requires_review") { db ->
                     val first = accept(db, input("NOTIFICATION", "slot-instance-a", draft(null))
                         .copy(reviewSlotKey = "notification-slot-a"))
+                    db.capture().putDelivery(CaptureDelivery(first.row.id, CaptureDeliveryState.ACKNOWLEDGED, "shown", first.row.recognizedAt))
                     val update = accept(db, input("NOTIFICATION", "slot-instance-b", draft(null))
                         .copy(reviewSlotKey = "notification-slot-a", receivedAt = first.row.recognizedAt + 1))
                     check(first.created && first.row.reviewOf == null)
@@ -230,6 +220,7 @@ class NotificationCaptureInstrumentation : Instrumentation() {
                 test("synthetic_review_slot_repeated_review_instance_does_not_add_third_record_or_review_chain") { db ->
                     val first = accept(db, input("NOTIFICATION", "slot-primary", draft(null))
                         .copy(reviewSlotKey = "notification-slot-a"))
+                    db.capture().putDelivery(CaptureDelivery(first.row.id, CaptureDeliveryState.ACKNOWLEDGED, "shown", first.row.recognizedAt))
                     val candidateInput = input("NOTIFICATION", "slot-review-instance", draft(null))
                         .copy(reviewSlotKey = "notification-slot-a", receivedAt = first.row.recognizedAt + 1)
                     val review = accept(db, candidateInput)
@@ -248,7 +239,7 @@ class NotificationCaptureInstrumentation : Instrumentation() {
                     check(db.capture().alias(slot)?.recognitionId == nextInstance.row.id)
                     // Review candidates cannot enter the automatic delivery branch; this runner
                     // only checks coordination state and never calls actual UI delivery.
-                    check(db.capture().deliveries().isEmpty())
+                    check(db.capture().deliveries().single().recognitionId == first.row.id)
                 }
 
                 // ---- SPEC §7.4 第二层去重（阶段 5 验收：跨源同一笔只落一条） ----
@@ -322,13 +313,11 @@ class NotificationCaptureInstrumentation : Instrumentation() {
                     check(db.bills().allOnce().isEmpty())
                 }
 
-                test("synthetic_spec_dedup_no_key_never_merges") { db ->
-                    // 时间不可信时 SpecRuleStore 不给 dedupKey，此时必须完全退回旧行为。
+                test("synthetic_no_payment_time_or_dedup_key_uses_capture_window") { db ->
                     val a = accept(db, input("PAGE", "page-no-key", draft(null).copy(captureSessionId = "page-no-key")))
                     val b = accept(db, input("NOTIFICATION", "notice-no-key", draft(null).copy(captureSessionId = "notice-no-key")))
-                    check(a.created && b.created && a.row.id != b.row.id)
-                    check(b.reviewReason == CaptureReviewPolicy.CROSS_SOURCE_SAME_AMOUNT)
-                    check(db.recognitions().allOnce().size == 2)
+                    check(a.created && !b.created && a.row.id == b.row.id)
+                    check(b.reviewReason == null && db.recognitions().allOnce().size == 1)
                 }
 
                 test("room5_new_schema_tables_exist_only_in_isolated_memory") { db ->

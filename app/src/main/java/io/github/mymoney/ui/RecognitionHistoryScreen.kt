@@ -122,7 +122,13 @@ fun RecognitionHistoryScreen(onBack: () -> Unit, initialFilter: String = "ALL", 
                         scope.launch {
                             runCatching {
                                 val events = db.capture().forRecord(row.id)
-                                events.joinToString("\n\n") { "${historyTime(it.receivedAt)} · ${it.source}\n${it.outcome}\n${it.detail}" }
+                                events.joinToString("\n\n") {
+                                    val merged = if ("merge=${CaptureShortWindowPolicy.RULE}" in it.detail) {
+                                        val interval = Regex("(?:^|;)intervalMs=(\\d+)").find(it.detail)?.groupValues?.get(1)?.toLongOrNull()
+                                        "\n已自动合并：跨通道同额，间隔 ${interval?.let { ms -> String.format(java.util.Locale.ROOT, "%.1f", ms / 1000.0) } ?: "未知"} 秒"
+                                    } else ""
+                                    "${historyTime(it.receivedAt)} · ${it.source}\n${it.outcome}$merged\n${it.detail}"
+                                }
                                     .ifBlank { "旧记录没有来源时间线；不会补造通知证据。" }
                             }.onSuccess { timeline = it }.onFailure { messageIsError = true; message = it.message }
                         }

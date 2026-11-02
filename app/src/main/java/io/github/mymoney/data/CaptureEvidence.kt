@@ -40,6 +40,10 @@ interface CaptureDao {
     @Query("SELECT * FROM capture_aliases WHERE aliasKey = :key") suspend fun alias(key: String): CaptureAlias?
     @Query("SELECT * FROM capture_deliveries WHERE recognitionId = :id") suspend fun delivery(id: String): CaptureDelivery?
     @Query("SELECT * FROM capture_evidence WHERE recognitionId = :id ORDER BY receivedAt DESC LIMIT 20") suspend fun forRecord(id: String): List<CaptureEvidence>
+    @Query("SELECT DISTINCT source FROM capture_evidence WHERE recognitionId = :id")
+    suspend fun sourcesForRecord(id: String): List<String>
+    @Query("SELECT aliasKey FROM capture_aliases WHERE recognitionId = :id AND aliasKey LIKE 'transaction:%'")
+    suspend fun transactionAliases(id: String): List<String>
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun putAlias(alias: CaptureAlias): Long
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putReviewSlot(alias: CaptureAlias)
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun putEvidence(evidence: CaptureEvidence): Long
