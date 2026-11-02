@@ -87,7 +87,7 @@ class WechatXmlTest {
         val hit = assertNotNull(engine.parse("com.tencent.mm", "DATA", payload))
         assertEquals("maimi_wechat_data_expense_v1", hit.ruleId)
         assertEquals(400L, hit.bill.priceCents)
-        assertEquals("", hit.bill.shopName)
+        assertEquals("早餐店", hit.bill.shopName)
     }
 
     @Test

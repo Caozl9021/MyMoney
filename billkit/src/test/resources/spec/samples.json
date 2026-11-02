@@ -2200,6 +2200,176 @@
       }
     },
     {
+      "id": "maimi_wechat_repayment_expense_v1-positive-0",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "已支付¥19.99",
+          "description": "使用零钱支付¥19.99",
+          "source": "微信支付",
+          "display_name": "美团金融还款",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_repayment_expense_v1",
+        "billType": "Expend",
+        "cents": 1999,
+        "merchant": "美团金融还款",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_repayment_expense_v1-positive-1",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "已支付¥0.01",
+          "description": "使用零钱支付¥0.01",
+          "source": "微信支付",
+          "display_name": "美团金融还款",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_repayment_expense_v1",
+        "billType": "Expend",
+        "cents": 1,
+        "merchant": "美团金融还款",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_repayment_expense_v1-positive-2",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "已支付¥1,234.50",
+          "description": "使用零钱支付¥1,234.50",
+          "source": "微信支付",
+          "display_name": "美团金融还款",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_repayment_expense_v1",
+        "billType": "Expend",
+        "cents": 123450,
+        "merchant": "美团金融还款",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_repayment_expense_v1-negative-0",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "已支付¥19.99",
+          "description": "使用零钱支付¥19.99",
+          "source": "普通公众号",
+          "display_name": "美团金融还款",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_repayment_expense_v1-negative-1",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "已支付¥19.99",
+          "description": "支付失败",
+          "source": "微信支付",
+          "display_name": "美团金融还款",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_repayment_expense_v1-negative-2",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "已支付¥19.999",
+          "description": "使用零钱支付¥19.99",
+          "source": "微信支付",
+          "display_name": "美团金融还款",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_repayment_expense_v1-negative-3",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "已支付¥0.00",
+          "description": "使用零钱支付¥19.99",
+          "source": "微信支付",
+          "display_name": "美团金融还款",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_repayment_expense_v1-negative-4",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-negative-contract-v1",
+      "raw": {
+        "mMap": {
+          "title": "已支付¥19.99",
+          "description": "余额100.00元，交易尚未完成",
+          "source": "微信支付",
+          "display_name": "美团金融还款",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
       "id": "linked-redpacket-positive-1-0",
       "app": "com.tencent.mm",
       "type": "DATA",
@@ -2784,6 +2954,918 @@
       },
       "expect": {
         "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-taobao-captured",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "captured-redacted",
+      "evidence": "local-device-20261102-app-data-77-redacted",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用储蓄卡(1234)支付¥28.98",
+          "display_name": "淘宝平台商户",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_data_expense_v1",
+        "billType": "Expend",
+        "cents": 2898,
+        "merchant": "淘宝平台商户",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_repayment_expense_v1-short-meituan-captured",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "captured-redacted",
+      "evidence": "local-device-20261031-meituan-redacted",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥26.77",
+          "description": "使用零钱支付¥26.77",
+          "display_name": "美团金融还款",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_repayment_expense_v1",
+        "billType": "Expend",
+        "cents": 2677,
+        "merchant": "美团金融还款",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-douyin",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥19.99",
+          "description": "使用零钱支付¥19.99",
+          "display_name": "抖音电商商家",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_data_expense_v1",
+        "billType": "Expend",
+        "cents": 1999,
+        "merchant": "抖音电商商家",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-breakfast",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥4.00",
+          "description": "使用零钱支付¥4.00",
+          "display_name": "早餐店",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_data_expense_v1",
+        "billType": "Expend",
+        "cents": 400,
+        "merchant": "早餐店",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-bank",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用工商银行储蓄卡(1234)支付¥28.98",
+          "display_name": "测试商户",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_data_expense_v1",
+        "billType": "Expend",
+        "cents": 2898,
+        "merchant": "测试商户",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-equivalent",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥19.90",
+          "description": "使用零钱支付￥19.9",
+          "display_name": "淘宝平台商户",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_data_expense_v1",
+        "billType": "Expend",
+        "cents": 1990,
+        "merchant": "淘宝平台商户",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-channel-name",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用储蓄卡(1234)支付¥28.98",
+          "display_name": "微信支付",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_data_expense_v1",
+        "billType": "Expend",
+        "cents": 2898,
+        "merchant": "",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-full-merchant",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "收款方：测试商户\n使用零钱支付¥28.98\n交易状态：支付成功",
+          "display_name": "测试商户",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_data_expense_v1",
+        "billType": "Expend",
+        "cents": 2898,
+        "merchant": "测试商户",
+        "hasExplicitTime": false,
+        "time": 0
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-wrong-source",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "普通公众号",
+          "title": "已支付¥28.98",
+          "description": "使用储蓄卡(1234)支付¥28.98",
+          "display_name": "淘宝平台商户",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-conflicting-money",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用零钱支付¥28.99",
+          "display_name": "淘宝平台商户",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-failed",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用零钱支付¥28.98\n交易状态：支付失败",
+          "display_name": "淘宝平台商户",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-processing",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用零钱支付¥28.98\n交易状态：处理中",
+          "display_name": "淘宝平台商户",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-unknown-state",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用零钱支付¥28.98\n交易状态：未知状态",
+          "display_name": "淘宝平台商户",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-unknown-single",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用零钱支付¥28.98 状态未知",
+          "display_name": "淘宝平台商户",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-extra-line",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用零钱支付¥28.98\n未知状态",
+          "display_name": "淘宝平台商户",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-two-payments",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用零钱支付¥28.98\n使用银行卡支付¥28.98",
+          "display_name": "淘宝平台商户",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-embedded-payment",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用零钱支付¥1 使用银行卡支付¥28.98",
+          "display_name": "淘宝平台商户",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-fee",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用零钱支付¥28.98，手续费1.00元",
+          "display_name": "淘宝平台商户",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-full-extra-money",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用零钱支付¥28.98\n交易状态：支付成功\n另一笔¥1.00",
+          "display_name": "淘宝平台商户",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-currency",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用储蓄卡(1234)支付¥28.98",
+          "display_name": "淘宝平台商户",
+          "t": 1793289600000,
+          "currency": "USD"
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-method-currency",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用USD银行卡支付¥28.98",
+          "display_name": "淘宝平台商户",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-full-currency",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用零钱支付¥28.98\n交易状态：支付成功\n币种：USD",
+          "display_name": "淘宝平台商户",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-zero",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥0.00",
+          "description": "使用储蓄卡(1234)支付¥0.00",
+          "display_name": "淘宝平台商户",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-bad-decimal",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.989",
+          "description": "使用储蓄卡(1234)支付¥28.989",
+          "display_name": "淘宝平台商户",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-negative",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥-28.98",
+          "description": "使用储蓄卡(1234)支付¥28.98",
+          "display_name": "淘宝平台商户",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-missing-title-money",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付",
+          "description": "使用储蓄卡(1234)支付¥28.98",
+          "display_name": "淘宝平台商户",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-cached-only",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付",
+          "description": "支付成功",
+          "display_name": "淘宝平台商户",
+          "t": 1793289600000,
+          "cachedPayMoney": "28.98"
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-merchant-conflict",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "收款方：其他商户\n使用零钱支付¥28.98\n交易状态：支付成功",
+          "display_name": "淘宝平台商户",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-transfer-shop",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用储蓄卡(1234)支付¥28.98",
+          "display_name": "微信转账",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-redpacket-shop",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用储蓄卡(1234)支付¥28.98",
+          "display_name": "微信红包",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-unknown-repayment",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用储蓄卡(1234)支付¥28.98",
+          "display_name": "未知平台还款",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-repayment-suffix",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用储蓄卡(1234)支付¥28.98",
+          "display_name": "美团金融还款通知",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-withdraw",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用储蓄卡(1234)支付¥28.98",
+          "display_name": "微信零钱提现",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-recharge-desc",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用零钱支付¥28.98\n交易状态：支付成功\n充值",
+          "display_name": "淘宝平台商户",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-foreign-description",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用零钱支付¥28.98\n交易状态：支付成功\n手续费：1元",
+          "display_name": "淘宝平台商户",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_repayment_expense_v1-short-repayment-failed",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用零钱支付¥28.98\n交易状态支付失败",
+          "display_name": "美团金融还款",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_repayment_expense_v1-short-repayment-conflict",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用零钱支付¥20.00",
+          "display_name": "美团金融还款",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_repayment_expense_v1-short-repayment-currency",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用储蓄卡(1234)支付¥28.98",
+          "display_name": "美团金融还款",
+          "t": 1793289600000,
+          "currency": "USD"
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_repayment_expense_v1-short-repayment-transfer",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用零钱支付¥28.98\n交易状态支付成功\n转账",
+          "display_name": "美团金融还款",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-review-negative-0",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-negative-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用GBP账户支付¥28.98",
+          "display_name": "淘宝平台商户",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-review-negative-1",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-negative-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用日元账户支付¥28.98",
+          "display_name": "淘宝平台商户",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-review-negative-2",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-negative-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用零钱支付¥28.98\n支付状态：未知\n交易状态支付成功",
+          "display_name": "淘宝平台商户",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-review-negative-3",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-negative-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用零钱支付¥28.98\n收款状态：未知\n交易状态支付成功",
+          "display_name": "淘宝平台商户",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_data_expense_v1-short-review-negative-4",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-negative-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥28.98",
+          "description": "使用零钱支付¥28.98\n状态：未知\n交易状态支付成功",
+          "display_name": "淘宝平台商户",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": false
+      }
+    },
+    {
+      "id": "maimi_wechat_repayment_expense_v1-short-full-label",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "provenance": "synthetic",
+      "evidence": "independent-short-receipt-contract-v1",
+      "raw": {
+        "mMap": {
+          "source": "微信支付",
+          "title": "已支付¥26.77",
+          "description": "收款方：美团金融还款\n使用零钱支付¥26.77\n交易状态支付成功",
+          "display_name": "美团金融还款",
+          "t": 1793289600000
+        }
+      },
+      "expect": {
+        "match": true,
+        "ruleId": "maimi_wechat_repayment_expense_v1",
+        "billType": "Expend",
+        "cents": 2677,
+        "merchant": "美团金融还款",
+        "hasExplicitTime": false,
+        "time": 0
       }
     }
   ]

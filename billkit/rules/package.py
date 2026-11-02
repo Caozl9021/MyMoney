@@ -11,12 +11,6 @@ def build(out):
     files = {name:(assets/name).read_bytes() for name in manifest['files']}
     files['notification-templates.json'] = (assets/'notification-templates.json').read_bytes()
     files['samples.json'] = (ROOT.parent/'src/test/resources/spec/samples.json').read_bytes()
-    samples = json.loads(files['samples.json'])
-    samples['samples'].append(dict(id='maimi_wechat_data_expense_v1-meituan-short-captured',app='com.tencent.mm',type='DATA',
-        provenance='captured-redacted',evidence='20261031-115830-incident-redacted',
-        raw=dict(mMap=dict(source='微信支付',title='已支付¥26.77',description='使用零钱支付¥26.77',display_name='美团金融还款',t=1793419110639)),
-        expect=dict(match=False)))
-    files['samples.json']=(json.dumps(samples,ensure_ascii=False,indent=2)+'\n').encode()
     revisions=meta.pop("ruleRevisions")
     manifest.update(meta,kind='MyMoneyRulePackage',schemaVersion=1,packageId='mymoney-official',version=meta['packageVersion'])
     manifest['files']={name:hashlib.sha256(data).hexdigest() for name,data in files.items()}

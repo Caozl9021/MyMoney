@@ -34,7 +34,7 @@ class PortableRulePackageTest {
     }
     @Test fun optionalNotificationSnapshotRunsItsOwnProductionSelfTests() {
         val pack=PortableRulePackage.load(zip(withNotifications()))
-        assertEquals(1,pack.notificationConfig!!.templates.size);assertEquals(147,pack.validate())
+        assertEquals(1,pack.notificationConfig!!.templates.size);assertEquals(200,pack.validate())
     }
     @Test fun notificationCapabilityAndFileMustAgree() {
         val f=withNotifications();changeManifest(f,"requiredCapabilities",emptyList<String>());invalid {PortableRulePackage.load(zip(f))}
@@ -48,7 +48,7 @@ class PortableRulePackageTest {
     }
     @Test fun completeSnapshotPassesRealEngineAndAllSamples() {
         val p = PortableRulePackage.load(zip(files()))
-        assertEquals("1.0.0", p.version); assertEquals(14, p.bundle.rules.size); assertEquals(130, p.validate())
+        assertEquals("1.0.0", p.version); assertEquals(15, p.bundle.rules.size); assertEquals(183, p.validate())
     }
     @Test fun unsupportedApiAndCapabilitiesReject() {
         val f = files(); changeManifest(f,"engineApiVersion",2); invalid { PortableRulePackage.load(zip(f)) }

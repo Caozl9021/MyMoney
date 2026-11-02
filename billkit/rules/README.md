@@ -2,6 +2,14 @@
 
 当前仅master；原self已合并并删除，规则与App都在master维护。源码在 `src/*.js`。`generate.py` 维护 APK 资产，`package.py` 独立生成完整规则快照；规则Release无需生成APK。首次支持外部包的App为1.1.0/111，引擎API1。
 
+## 当前候选：规则包1.3.0（2026-11-02，待用户验收）
+
+15条全启用；schema/API1及现有能力不变，最低App1.2.1/113。微信通用付款支持可信单行精简凭证，标题与付款行金额数值一致，保留display_name商户；显式失败/未知状态、金额冲突、外币、手续费、多交易及特殊资金类型仍拒绝。完整旧模板继续核对完成状态，普通“红包餐馆”不当作红包类型。
+
+新增稳定ID `maimi_wechat_repayment_expense_v1`（微信美团金融还款支出）：仅精确display_name=美团金融还款且有同等成功付款/金额证据。沿原个人规则输出Expend并保留还款商户，不猜月付产品、负债账户或转账。不允许普通付款规则吞并还款。微信零钱支付和抖音商户场景由通用规则覆盖，个人定义不进入官方包、不自动删除或停用。
+
+`wechat-short-samples.json`保存本轮小型脱敏/合成fixtures，由make_fixtures.py合入标准样本；实际28.98元银行卡与历史26.77元美团凭证保留结构、替换卡尾/时间，不引用手机私有文件到构建过程。183交易样本+17通知样本=200项包内生产自检；1002项JVM通过，真机1.7.3/127原UI导入并只读试跑28.98正确；未做新真实付款实弹验收。包路径为 `dist/releases/rules-v1.3.0/`，未发布。
+
 ## 维护与发布
 
 1. 保存脱敏实际输入，或编写明确标为 synthetic 的输入；不要把原始订单、姓名、卡号、日志放入规则包。
@@ -11,14 +19,16 @@
 
 ```bash
 python3 billkit/rules/generate.py
-python3 billkit/rules/package.py --output-dir dist/rules
+python3 billkit/rules/package.py --output-dir dist/releases/rules-v1.3.0
 ./gradlew :billkit:testDebugUnitTest :billkit:validateRulePackage \
-  -PrulePackage="$PWD/dist/rules/MyMoney-rules-1.0.0.mymoney-rules.zip"
+  -PrulePackage="$PWD/dist/releases/rules-v1.3.0/MyMoney-rules-1.3.0.mymoney-rules.zip"
 ```
 
-命令使用生产包解析器和Rhino执行器，校验全部启用/禁用脚本与包内正反例，不构建APK。只生成ZIP不等于通过生产引擎验证；Release前必须完成最后一条命令。CI `rule-package` 提供相同校验与下载artifact，不自动发Release。
+命令使用生产包解析器和Rhino执行器，校验全部启用/禁用脚本与包内正反例，不构建APK。只生成ZIP不等于通过生产引擎验证；Release前必须完成最后一条命令。CI `rule-package` 提供相同校验与下载artifact；推送 `rules-vX.Y.Z` 标签会在验证成功后发布独立规则Release。PR只做验证、不发布，只有publish作业具有contents:write权限。
 
 5. 纯规则Release可使用标签 `rules-vX.Y.Z`，附件为ZIP及其`.sha256`；写明最低App、引擎API、已测App、规则变化与未覆盖场景。App Release可直接附同一个已验证ZIP，规则未变化不必递增版本。
+发布前在 `releases/<版本>.md` 保存公开说明、`releases/<版本>.json` 固定已交付ZIP的SHA256；发布脚本只接受该摘要及对应提交的标签。附件上传回读一致后才发布；重跑不覆盖已有异内容附件，纯规则Release不抢占App的Latest标记。发布脚本测试：`python3 -m unittest discover -s billkit/rules -p 'test_publish_release.py' -v`。
+
 6. 用户下载ZIP后从App的“设置→识别规则→导入规则包”入口选择、预览并确认导入。不要要求用户逐个安装历史补丁；完整包包含全部规则。规则版本变化不修改App versionName/versionCode。
 
 发布说明模板：

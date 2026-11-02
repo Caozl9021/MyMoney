@@ -19,9 +19,9 @@ class SpecHookPayloadTest {
         assertEquals(t, hit.bill.observedAt)
         assertFalse(hit.bill.hasExplicitTime)
     }
-    @Test fun `缺少可信来源或完成状态不命中`() {
+    @Test fun `缺少可信来源或失败不命中但精简成功可识别`() {
         assertNull(engine.parse("com.tencent.mm", "DATA", payment(source = "其他公众号")))
-        assertNull(engine.parse("com.tencent.mm", "DATA", payment(description = "使用零钱支付¥19.99")))
+        assertNotNull(engine.parse("com.tencent.mm", "DATA", payment(description = "使用零钱支付¥19.99")))
         assertNull(engine.parse("com.tencent.mm", "DATA", payment(description = "支付失败，金额¥19.99")))
     }
     @Test fun `商户必须有明确分隔符不把收款方备注当商户`() {

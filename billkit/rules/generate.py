@@ -4,7 +4,7 @@ from pathlib import Path
 import argparse, hashlib, json
 ROOT = Path(__file__).resolve().parent
 OUT = ROOT.parent / 'src/main/assets/spec'
-VERSION = 'maimi-rules-4'
+VERSION = 'maimi-rules-5'
 
 def encoded(obj): return (json.dumps(obj,ensure_ascii=False,indent=2)+'\n').encode()
 
@@ -15,25 +15,29 @@ def products():
            ('notice','com.tencent.mm','NOTICE','微信通知',[('expense','Expend','付款'),('income','Income','收款')]),
            ('notice','com.eg.android.AlipayGphone','NOTICE','支付宝通知',[('expense','Expend','付款'),('income','Income','收款')]),
            ('wechat-transfer','com.tencent.mm','DATA','微信转账',[('expense','Expend','支出'),('income','Income','收入')]),
-           ('wechat-redpackage','com.tencent.mm','DATA','微信红包',[('expense','Expend','支出'),('income','Income','收入')])]
+           ('wechat-redpackage','com.tencent.mm','DATA','微信红包',[('expense','Expend','支出'),('income','Income','收入')]),
+           ('wechat-repayment','com.tencent.mm','DATA','微信美团金融还款',[('expense','Expend','支出')])]
     for source,app,kind,label,directions in kinds:
         for suffix,direction,name in directions:
             platform='wechat' if app=='com.tencent.mm' else 'alipay' if app=='com.eg.android.AlipayGphone' else 'cmb'
-            channel=source.removeprefix('wechat-') if source in ('wechat-transfer','wechat-redpackage') else kind.lower()
+            channel=source.removeprefix('wechat-') if source in ('wechat-transfer','wechat-redpackage','wechat-repayment') else kind.lower()
             rid=f'maimi_{platform}_{channel}_{suffix}_v1'
-            script=(ROOT/'src'/f'{source}.js').read_text()
-            expression=f'var {rid}=(function(){{\n{script}\nreturn {{get:function(raw){{return parse(raw,{json.dumps(direction)},{json.dumps(app)});}}}};\n}})();'
+            script=(ROOT/'src'/f"{'wechat-data' if source == 'wechat-repayment' else source}.js").read_text()
+            purpose=',"repayment"' if source=='wechat-repayment' else ''
+            expression=f'var {rid}=(function(){{\n{script}\nreturn {{get:function(raw){{return parse(raw,{json.dumps(direction)},{json.dumps(app)}{purpose});}}}};\n}})();'
             enabled=True
             evidence=['local-device-20261027-app-data-'+('39' if kind=='DATA' else '40')] if source in ('wechat-data','notice') and platform=='wechat' and suffix=='expense' else ['local-device-20261029-app-data-27-34'] if source=='wechat-transfer' and suffix=='expense' else []
+            if source=='wechat-data' and suffix=='expense': evidence += ['local-device-20261102-app-data-77-redacted']
+            if source=='wechat-repayment': evidence = ['local-device-20261031-meituan-redacted']
             rules.append(dict(app=app,type=kind,systemRuleName=rid,name=f'麦米·{label}{name}',creator='maimi',autoRecord=0,enabled=1 if enabled else 0,struct='',js=expression,evidence=evidence))
     # 先识别有独立类型证据的红包付款，避免被通用付款规则提前短路。
     rules.sort(key=lambda row: 0 if '_redpackage_' in row['systemRuleName'] else 1)
-    assert len(rules)==14 and len({x['systemRuleName'] for x in rules})==14
-    assert sum(x['enabled'] for x in rules)==14
+    assert len(rules)==15 and len({x['systemRuleName'] for x in rules})==15
+    assert sum(x['enabled'] for x in rules)==15
     categories=[dict(id=i+1,name=name,remoteId='',book=0,sort=i,type=kind) for i,(name,kind) in enumerate([('餐饮','Expend'),('交通','Expend'),('购物','Expend'),('医疗','Expend'),('房租','Expend'),('工资','Income'),('奖金','Income')])]
     assets=[dict(id=i+1,name=n,type='NORMAL',currency='CNY') for i,n in enumerate(['现金','微信钱包','支付宝','储蓄卡','信用卡'])]
     files={'rules_all.json':encoded(rules),'js_common.js':(ROOT/'src/common.js').read_bytes(),'js_category.js':(ROOT/'src/category.js').read_bytes(),'categories.json':encoded(categories),'assets.json':encoded(assets)}
-    manifest=dict(schemaVersion=1,version=VERSION,files={k:hashlib.sha256(v).hexdigest() for k,v in files.items()},rules=[dict(id=x['systemRuleName'],app=x['app'],type=x['type'],enabled=bool(x['enabled']),evidence=x['evidence'],validationLevel='captured-structure' if x['evidence'] else 'synthetic-only') for x in rules],enabledCount=14)
+    manifest=dict(schemaVersion=1,version=VERSION,files={k:hashlib.sha256(v).hexdigest() for k,v in files.items()},rules=[dict(id=x['systemRuleName'],app=x['app'],type=x['type'],enabled=bool(x['enabled']),evidence=x['evidence'],validationLevel='captured-structure' if x['evidence'] else 'synthetic-only') for x in rules],enabledCount=15)
     files['manifest.json']=encoded(manifest)
     return files
 
@@ -44,5 +48,5 @@ def main():
         if args.check:
             if not (OUT/name).exists() or (OUT/name).read_bytes()!=data: raise SystemExit(f'生成产物不一致：{name}')
         else: (OUT/name).write_bytes(data)
-    print(f'{VERSION}: 14 rules, 14 enabled; '+('check passed' if args.check else 'generated'))
+    print(f'{VERSION}: 15 rules, 15 enabled; '+('check passed' if args.check else 'generated'))
 if __name__=='__main__': main()

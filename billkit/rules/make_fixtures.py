@@ -19,6 +19,8 @@ def data_for(rule, amount='19.99'):
     if kind=='NOTICE':
         return dict(title='微信支付' if app=='com.tencent.mm' else '交易提醒',text=('已支付' if direction=='expense' else '已收款')+'¥'+amount,t=T,observedAt=T,envelopeVerified=True)
     if app=='com.tencent.mm':
+        if '_repayment_' in rule['systemRuleName']:
+            return dict(mMap=dict(title='已支付¥'+amount,description='使用零钱支付¥'+amount,source='微信支付',display_name='美团金融还款',t=T))
         head={'expense':'已支付','income':'已收款','refund':'退款到账'}[direction]
         description={'expense':f'收款方：麦米测试店\n使用零钱支付¥{amount}\n交易状态支付成功，对方已收款','income':'收款已到账\n付款方：测试付款人','refund':'原支付退款已到账'}[direction]
         return dict(mMap=dict(title=head+'¥'+amount,description=description,source='微信支付',display_name='微信支付',t=T))
@@ -91,12 +93,13 @@ for r in rules:
         merchant=''
         if r['app']=='com.tencent.mm' and r['type']=='DATA' and '_transfer_' not in r['systemRuleName'] and '_redpackage_' not in r['systemRuleName']: merchant='麦米测试店' if direction=='expense' else '测试付款人' if direction=='income' else ''
         elif r['type']=='DATA' and r['app']!='com.tencent.mm': merchant='麦米测试店'
-        if r['app']=='com.tencent.mm' and direction=='expense' and index==1 and '_redpackage_' not in r['systemRuleName'] and '_transfer_' not in r['systemRuleName']:
+        if r['app']=='com.tencent.mm' and direction=='expense' and index==1 and '_redpackage_' not in r['systemRuleName'] and '_transfer_' not in r['systemRuleName'] and '_repayment_' not in r['systemRuleName']:
             provenance='captured-redacted'; evidence='local-device-20261027-app-data-'+('39' if r['type']=='DATA' else '40')
             if r['type']=='DATA': raw['mMap']['description']='收款方测试商户甲\n使用零钱支付¥0.01\n交易状态支付成功，对方已收款'
             merchant=''
         if '_transfer_expense_' in r['systemRuleName'] and index==1:
             provenance='captured-redacted'; evidence='local-device-20261029-app-data-27'
+        if '_repayment_' in r['systemRuleName']: merchant='美团金融还款'
         explicit='_transfer_' in r['systemRuleName']
         samples.append(dict(id=r['systemRuleName']+'-positive-'+str(index),app=r['app'],type=r['type'],provenance=provenance,evidence=evidence,raw=raw,expect=dict(match=True,ruleId=r['systemRuleName'],billType=types[direction],cents=round(float(a.replace(',',''))*100),merchant=merchant,hasExplicitTime=explicit,time=T if explicit else 0)))
     for index,raw in enumerate(negatives(r,data_for(r))):
@@ -138,5 +141,6 @@ v=joined(1);v['hostCorrelationSchema']=2;invalid.append(v)
 v=joined(1);v['linkedReceipt']['currency']='USD';invalid.append(v)
 for i,raw in enumerate(invalid):
     samples.append(dict(id='linked-redpacket-negative-'+str(i),app='com.tencent.mm',type='DATA',provenance='captured-redacted' if i==0 else 'synthetic',evidence='local-device-20261029-app-data-47-no-amount' if i==0 else 'host-joined-receipt-negative-v1',raw=raw,expect=dict(match=False)))
+samples.extend(json.loads((ROOT/'wechat-short-samples.json').read_text()))
 out=ROOT.parent/'src/test/resources/spec/samples.json'; out.write_text(json.dumps(dict(schemaVersion=1,samples=samples),ensure_ascii=False,indent=2)+'\n')
-print(f'{len(samples)}独立回放（{sum(s["expect"]["match"] for s in samples)}正/{sum(not s["expect"]["match"] for s in samples)}负，含6条captured-redacted；联合金额凭证均合成）')
+print(f'{len(samples)}独立回放（{sum(s["expect"]["match"] for s in samples)}正/{sum(not s["expect"]["match"] for s in samples)}负，含{sum(s["provenance"]=="captured-redacted" for s in samples)}条captured-redacted；联合金额凭证均合成）')

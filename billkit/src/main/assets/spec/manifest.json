@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "version": "maimi-rules-4",
+  "version": "maimi-rules-5",
   "files": {
-    "rules_all.json": "784aa16fd3fc151d2533a71e3c9402a01d79596d26edf0662890e248ed40c9af",
+    "rules_all.json": "151da41f096426d36931d40987a76ea5acb6d757ae5a9d95dc052d7c4a0b0c04",
     "js_common.js": "fa457e05031e14e44c696c29179cefd882560a779dee993056cc00f508cde919",
     "js_category.js": "b5e40731bf06cd8968a3cebdb3ed30cc12a15e76bdcca08d80a33d6c2328e5e1",
     "categories.json": "e244c251bf4072c659d3740fc60224106d7109887225ce25c8cb5981d40b7b0e",
@@ -31,7 +31,8 @@
       "type": "DATA",
       "enabled": true,
       "evidence": [
-        "local-device-20261027-app-data-39"
+        "local-device-20261027-app-data-39",
+        "local-device-20261102-app-data-77-redacted"
       ],
       "validationLevel": "captured-structure"
     },
@@ -126,7 +127,17 @@
       "enabled": true,
       "evidence": [],
       "validationLevel": "synthetic-only"
+    },
+    {
+      "id": "maimi_wechat_repayment_expense_v1",
+      "app": "com.tencent.mm",
+      "type": "DATA",
+      "enabled": true,
+      "evidence": [
+        "local-device-20261031-meituan-redacted"
+      ],
+      "validationLevel": "captured-structure"
     }
   ],
-  "enabledCount": 14
+  "enabledCount": 15
 }

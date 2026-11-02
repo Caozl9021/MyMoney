@@ -85,6 +85,7 @@ tmp/
 !/app/libs/*.md
 !/app/src/main/assets/licenses/**/*.md
 !/billkit/rules/README.md
+!/billkit/rules/releases/*.md
 
 # GitHub 协作模板需要入库
 !/.github/**/*.md

@@ -1,7 +1,7 @@
 {
-  "packageVersion": "1.1.0",
-  "publishedAt": "2026-11-01T12:30:00+08:00",
-  "notes": "需App1.2.1/113或更新版本：支付宝小米推送支出渠道与声明式通知模板，支持17.53元付款附2元奖励尾句，保留个人规则及严格拒绝条件。",
+  "packageVersion": "1.3.0",
+  "publishedAt": "2026-11-02T19:05:00+08:00",
+  "notes": "微信精简成功付款：零钱/银行卡金额一致校验，覆盖淘宝/抖音商户；独立美团金融还款支出规则。保留个人规则，不重放旧交易，不自动映射负债。",
   "engineApiVersion": 1,
   "requiredCapabilities": [
     "wechat-data-v1",
@@ -10,11 +10,11 @@
     "notification-template-v1"
   ],
   "ruleRevisions": {
-    "maimi_wechat_redpackage_expense_v1": 1,
+    "maimi_wechat_redpackage_expense_v1": 2,
     "maimi_wechat_redpackage_income_v1": 1,
-    "maimi_wechat_data_expense_v1": 1,
-    "maimi_wechat_data_income_v1": 1,
-    "maimi_wechat_data_refund_v1": 1,
+    "maimi_wechat_data_expense_v1": 2,
+    "maimi_wechat_data_income_v1": 2,
+    "maimi_wechat_data_refund_v1": 2,
     "maimi_alipay_data_expense_v1": 1,
     "maimi_alipay_data_income_v1": 1,
     "maimi_alipay_data_refund_v1": 1,
@@ -23,6 +23,7 @@
     "maimi_alipay_notice_expense_v1": 1,
     "maimi_alipay_notice_income_v1": 1,
     "maimi_wechat_transfer_expense_v1": 1,
-    "maimi_wechat_transfer_income_v1": 1
+    "maimi_wechat_transfer_income_v1": 1,
+    "maimi_wechat_repayment_expense_v1": 1
   }
 }
