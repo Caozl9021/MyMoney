@@ -24,8 +24,10 @@ jobs:
       - name: Test release publication guards
         run: python3 -m unittest discover -s billkit/rules -p 'test_publish_release.py' -v
       - name: Build deterministic rule snapshot
+        id: rule_version
         run: |
           version=$(python3 -c "import json; print(json.load(open('billkit/rules/package.json'))['packageVersion'])")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
           python3 billkit/rules/package.py --output-dir "dist/releases/rules-v${version}/upload"
       - name: Verify release tag matches package
         if: startsWith(github.ref, 'refs/tags/rules-v')
@@ -41,7 +43,8 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: mymoney-rule-package
-          path: dist/releases/rules-v*/upload/*
+          path: dist/releases/rules-v${{ steps.rule_version.outputs.version }}/upload/*
+          if-no-files-found: error
           retention-days: 30
 
   publish:
