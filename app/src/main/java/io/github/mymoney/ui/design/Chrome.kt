@@ -283,10 +283,9 @@ fun LiquidTabCells(
                     selectedColor = p.label,
                     modifier = Modifier.weight(1f).fillMaxHeight(),
                     onSelect = {
-                        if (index != selected) {
-                            haptic.tick()
-                            onSelect(index)
-                        }
+                        if (index != selected) haptic.tick()
+                        // The owner decides reselect semantics (settings returns to its root).
+                        onSelect(index)
                     },
                 )
             }
@@ -377,6 +376,7 @@ fun PageScaffold(
     compact: Boolean = false,
     floatingHeader: Boolean = false,
     titleActive: Boolean = false,
+    titleAnimationEnabled: Boolean = true,
     titleStateDescription: String? = null,
     onTitleClick: (() -> Unit)? = null,
     /**
@@ -396,7 +396,7 @@ fun PageScaffold(
 
     if (floatingHeader && onBack == null) {
         FloatingPageScaffold(title = title, bottomPadding = dockHeight() + navBottom + AbLayout.pageBottom,
-            modifier = modifier, titleActive = titleActive, titleStateDescription = titleStateDescription,
+            modifier = modifier, titleActive = titleActive, titleAnimationEnabled = titleAnimationEnabled, titleStateDescription = titleStateDescription,
             onTitleClick = onTitleClick, actions = actions, content = content)
         return
     }

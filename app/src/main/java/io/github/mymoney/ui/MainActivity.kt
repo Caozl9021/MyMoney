@@ -95,6 +95,9 @@ class MainActivity : ComponentActivity() {
     private val tabState = mutableIntStateOf(0)
     private val requestAdd = mutableIntStateOf(0)
     private val editorVisible = mutableStateOf(false)
+    // One-shot UI intent: deliberately not saved/replayed across Activity recreation.
+    private val settingsRootRequest = mutableStateOf<Long?>(null)
+    private var settingsRootSequence = 0L
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -138,6 +141,7 @@ class MainActivity : ComponentActivity() {
 
         val select: (Int) -> Unit = { next ->
             if (next != tabState.intValue) tabState.intValue = next
+            else if (next == 3) settingsRootRequest.value = ++settingsRootSequence
         }
 
         val root = FrameLayout(this)
@@ -147,7 +151,10 @@ class MainActivity : ComponentActivity() {
             setViewCompositionStrategy(
                 ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed,
             )
-            setContent { MyMoneyTheme { AppContent(tabState = tabState, requestAdd = requestAdd.intValue, onEditorVisibilityChanged = { editorVisible.value = it }) } }
+            setContent { MyMoneyTheme { AppContent(tabState = tabState, requestAdd = requestAdd.intValue,
+                settingsRootRequest = settingsRootRequest.value, onSettingsRootHandled = { handled ->
+                    if (settingsRootRequest.value == handled) settingsRootRequest.value = null
+                }, onEditorVisibilityChanged = { editorVisible.value = it }) } }
         }
         root.addView(
             contentView,
@@ -269,7 +276,7 @@ private val tabs = listOf(
 )
 
 @Composable
-private fun AppContent(tabState: MutableIntState, requestAdd: Int, onEditorVisibilityChanged: (Boolean) -> Unit) {
+private fun AppContent(tabState: MutableIntState, requestAdd: Int, settingsRootRequest: Long?, onSettingsRootHandled: (Long) -> Unit, onEditorVisibilityChanged: (Boolean) -> Unit) {
     // Outgoing AnimatedContent pages may dispose after the incoming editor opens.
     // Track each page independently so an old page cannot unhide the sibling dock.
     val editors = remember { androidx.compose.runtime.mutableStateMapOf<Int, Boolean>() }
@@ -353,6 +360,7 @@ private fun AppContent(tabState: MutableIntState, requestAdd: Int, onEditorVisib
                 when (current) {
                     0 -> HomeScreen(
                         bills = bills,
+                        isVisible = current == tab && !detailsOpen,
                         onEditorVisibilityChanged = { editorChanged(0, it) },
                         onOpenAssets = { tabState.intValue = 2 },
                         onOpenSettings = { destination -> captureSettingsDestination = destination; tabState.intValue = 3 },
@@ -360,7 +368,8 @@ private fun AppContent(tabState: MutableIntState, requestAdd: Int, onEditorVisib
                     1 -> StatsScreen(onOpenDetails = { openDetails() })
                     2 -> AssetsScreen(onBack = { tabState.intValue = 0 }, isTab = true,
                         onSubpageVisibilityChanged = { editorChanged(2, it) })
-                    else -> SettingsScreen(destination = captureSettingsDestination, onDestinationHandled = { captureSettingsDestination = null },
+                    else -> SettingsScreen(rootRequest = settingsRootRequest.takeIf { current == tab }, onRootRequestHandled = onSettingsRootHandled,
+                        destination = captureSettingsDestination, onDestinationHandled = { captureSettingsDestination = null },
                         onEditorVisibilityChanged = { editorChanged(3, it) }, onReturnToOrigin = { tabState.intValue = 0 })
                 }
             }

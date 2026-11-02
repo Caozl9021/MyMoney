@@ -45,6 +45,7 @@ internal fun QianjiImportPage(onBack: () -> Unit) {
     var visibleCount by remember { mutableIntStateOf(QIANJI_PREVIEW_PAGE_SIZE) }
     var expandedRow by remember { mutableStateOf<Int?>(null) }
     ActiveBackHandler(enabled = busy) { }
+    SettingsRootExitHandler(enabled = busy) { /* Match the existing busy back guard. */ }
 
     fun showReport(value: QianjiImport.Preview) {
         report = value

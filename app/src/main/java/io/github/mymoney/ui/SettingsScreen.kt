@@ -110,7 +110,7 @@ private enum class SettingsPage(val title: String) {
     RECOGNITION("应用与通道"), LEARNING("学习记忆"), TEMPLATES("通知模板"),
     RULE_FILES("识别规则"), MEALS("餐段设置"), STATISTICS("识别统计"),
     PERMISSIONS("权限与后台运行"), ROOT_MODE("Root 状态"),
-    PENDING("识别历史"), IMPORT_EXPORT("导入导出"), EXPORT_CSV("导出到 iCost"), EXPORT_HELP("导入说明"),
+    PENDING("识别历史"), IMPORT_EXPORT("迁移与备份"), EXPORT_CSV("导出到 iCost"), EXPORT_HELP("导入说明"),
     QIANJI_IMPORT("导入钱迹账单"), BACKUP("备份与恢复"), FAMILY_SYNC("家庭同步与备份"), APPEARANCE("外观"), ABOUT("关于"), DEVELOPMENT("开发调试"),
     HELP("识别帮助"), DEBUG("通知诊断"), PAGE_DEBUG("页面诊断"),
 }
@@ -139,9 +139,9 @@ private fun settingsPageFor(route: Route): SettingsPage = when (route) {
     Route.STATISTICS -> SettingsPage.STATISTICS
 }
 
-/** 分层设置：首页三组九入口，子页沿用统计页的中性圆角卡片。 */
+/** 分层设置：首页三组，迁移备份与开发工具按用途收纳。 */
 @Composable
-fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinationHandled: () -> Unit = {}, onEditorVisibilityChanged: (Boolean) -> Unit = {}, onReturnToOrigin: () -> Unit = {}) {
+fun SettingsScreen(rootRequest: Long? = null, onRootRequestHandled: (Long) -> Unit = {}, destination: CaptureSettingsDestination? = null, onDestinationHandled: () -> Unit = {}, onEditorVisibilityChanged: (Boolean) -> Unit = {}, onReturnToOrigin: () -> Unit = {}) {
     val context = LocalContext.current
     val settings = remember { Settings(context) }
     val p = LocalAbPalette.current
@@ -157,37 +157,61 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
     val backPixels = RememberBackPixels()
     val previews = remember { mutableMapOf<SettingsPage, androidx.compose.ui.graphics.ImageBitmap>() }
     var navigating by remember { mutableStateOf(false) }
+    var navigationRevision by remember { mutableIntStateOf(0) }
+    var navigationJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    val rootExitGate = remember { SettingsRootExitGate() }
+    fun invalidateNavigation() {
+        navigationRevision++
+        navigationJob?.cancel()
+        navigationJob = null
+        navigating = false
+        rootExitGate.invalidate()
+    }
     val predictiveEnabled = io.github.mymoney.ui.design.LocalPredictiveBackEnabled.current
     LaunchedEffect(predictiveEnabled) { previews.clear() }
     var directEntry by rememberSaveable { mutableStateOf(false) }
     fun navigate(target: SettingsPage) {
         if (navigating || target == page) return
+        rootExitGate.invalidate()
+        val ticket = ++navigationRevision
         navigating = true
         val origin = pagePath
-        navigationScope.launch {
+        navigationJob = navigationScope.launch {
             try {
                 snapshotFlow { !pageTransition.isRunning && pageTransition.currentState == pageTransition.targetState }.first { it }
                 withFrameNanos { }
-                if (pagePath != origin) return@launch
+                if (pagePath != origin || navigationRevision != ticket) return@launch
                 backPixels.snapshot()?.let { previews[origin.last()] = it }
-                if (pagePath != origin) return@launch
+                if (pagePath != origin || navigationRevision != ticket) return@launch
                 // Bound retained pixels to the current ancestor path.
                 previews.keys.retainAll(pagePath.toSet())
                 pagePath = pagePath + target
-            } finally { navigating = false }
+            } finally { if (navigationRevision == ticket) navigating = false }
         }
     }
     fun returnToParent() {
         if (navigating) return
+        rootExitGate.invalidate()
         if (directEntry && pagePath.size <= 2) {
             directEntry = false; pagePath = listOf(SettingsPage.ROOT); onReturnToOrigin()
         } else pagePath = pagePath.dropLast(1).ifEmpty { listOf(SettingsPage.ROOT) }
     }
-    LaunchedEffect(destination) {
-        destination?.let {
-            val target = captureSettingsPage(it)
+    LaunchedEffect(rootRequest, destination) {
+        if (rootRequest != null) {
+            onRootRequestHandled(rootRequest)
+            // A queued direct entry predating this explicit reselect must not reopen a child.
+            if (destination != null) onDestinationHandled()
+            invalidateNavigation()
+            rootExitGate.request {
+                invalidateNavigation()
+                directEntry = false
+                previews.clear()
+                pagePath = listOf(SettingsPage.ROOT)
+            }
+        } else destination?.let {
+            invalidateNavigation()
             directEntry = true
-            pagePath = listOf(SettingsPage.ROOT, target)
+            pagePath = listOf(SettingsPage.ROOT, captureSettingsPage(it))
             onDestinationHandled()
         }
     }
@@ -285,7 +309,8 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
             androidx.compose.animation.slideOutHorizontally(androidx.compose.animation.core.tween(duration)) { if (targetState.size < initialState.size) it else -it }
     }) { shownPath ->
     val shown = shownPath.last()
-    androidx.compose.runtime.CompositionLocalProvider(LocalBackActive provides (shownPath == pagePath), LocalPageBackManaged provides true) {
+    androidx.compose.runtime.CompositionLocalProvider(LocalBackActive provides (shownPath == pagePath), LocalPageBackManaged provides true,
+        LocalSettingsRootExitGate provides rootExitGate) {
     pageStates.SaveableStateProvider(shown) {
     when (shown) {
         SettingsPage.ROOT -> PageScaffold(title = "设置", listState = listState, floatingHeader = true) { padding ->
@@ -305,11 +330,9 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
                     SettingsLink("识别历史", if (historyReady) "待确认 $pendingCount 条" else "正在读取…", AbIcons.Clock) { navigate(SettingsPage.PENDING) },
                 )) }
                 item { SettingsNavigationGroup("数据与应用", listOf(
-                    SettingsLink("导入导出", "账单迁移、导出与备份", AbIcons.Export) { navigate(SettingsPage.IMPORT_EXPORT) },
-                    SettingsLink("家庭同步与备份", "规则同步、账本备份与恢复", AbIcons.Layers) { navigate(SettingsPage.FAMILY_SYNC) },
+                    SettingsLink("迁移与备份", "导入导出、家庭同步与备份", AbIcons.Export) { navigate(SettingsPage.IMPORT_EXPORT) },
                     SettingsLink("外观", "图标、明暗、文字与动效", AbIcons.Settings) { navigate(SettingsPage.APPEARANCE) },
-                    SettingsLink("关于", "版本与 App 更新", AbIcons.Info) { navigate(SettingsPage.ABOUT) },
-                    SettingsLink("开发调试", "识别帮助、通知与页面诊断", AbIcons.Terminal) { navigate(SettingsPage.DEVELOPMENT) },
+                    SettingsLink("关于", "版本、App 更新与开发调试", AbIcons.Info) { navigate(SettingsPage.ABOUT) },
                 )) }
             }
         }
@@ -387,7 +410,7 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
                     chevron = true, onClick = { navigate(SettingsPage.LEARNING) })
             }
         }
-        SettingsPage.IMPORT_EXPORT -> SettingsMenuPage("导入导出", back, listOf(
+        SettingsPage.IMPORT_EXPORT -> SettingsMenuPage("迁移与备份", back, listOf(
             "导入账单" to listOf(
                 SettingsLink("钱迹账单", "选择 XLSX，预览后导入", AbIcons.Export) { navigate(SettingsPage.QIANJI_IMPORT) },
             ),
@@ -396,6 +419,7 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
             ),
             "备份与恢复" to listOf(
                 SettingsLink("完整备份与恢复", "保存账单、资产和本地配置", AbIcons.Layers) { navigate(SettingsPage.BACKUP) },
+                SettingsLink("家庭同步与备份", "规则同步、账本备份与恢复", AbIcons.Layers) { navigate(SettingsPage.FAMILY_SYNC) },
             ),
         ))
         SettingsPage.EXPORT_HELP -> SettingsContentPage("导入说明", back) {
@@ -408,7 +432,7 @@ fun SettingsScreen(destination: CaptureSettingsDestination? = null, onDestinatio
                 ListRow(title = "范围包含退款时", subtitle = "iCost 模板不支持退款，会阻止整次 CSV 导出。请使用 JSON 备份保存完整账目。")
             }
         }
-        SettingsPage.ABOUT -> AppUpdatePage(back)
+        SettingsPage.ABOUT -> AppUpdatePage(back, onOpenDevelopment = { navigate(SettingsPage.DEVELOPMENT) })
         SettingsPage.DEVELOPMENT -> SettingsMenuPage("开发调试", back, listOf("帮助与诊断" to listOf(
             SettingsLink("识别帮助", "使用说明与常见问题", AbIcons.Search) { navigate(SettingsPage.HELP) },
             SettingsLink("通知诊断", "通知事件、处理结论与脱敏样本", AbIcons.Terminal) { navigate(SettingsPage.DEBUG) },

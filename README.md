@@ -14,7 +14,7 @@
 [![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)](#构建)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?logo=kotlin&logoColor=white)](#项目结构)
 [![Compose](https://img.shields.io/badge/Jetpack-Compose-4285F4?logo=jetpackcompose&logoColor=white)](#项目结构)
-![Version](https://img.shields.io/badge/版本-1.7.1%20%2F%20124-00847D)
+![Version](https://img.shields.io/badge/版本-1.7.3%20%2F%20127-00847D)
 
 **[⬇ 下载 App 与规则包](../../releases)**
 
@@ -26,7 +26,7 @@
 
 ---
 
-**1.7.1/124（待用户验收）** 修复跨通道重复待处理：同应用、同类型、同金额的唯一跨通道候选在首次采集60秒内自动合并，不同明确订单分开；已保存仅追加来源。旧待核对不批量清理。支持可选家庭规则同步与手动账本快照。使用说明见 [家庭备份](docs/FAMILY_BACKUPS.md)，自托管部署见 [家庭服务部署](deploy/home-sync/README.md)。
+**1.7.3/127（待用户验收）** 设置中家庭同步归入“迁移与备份”，开发调试归入“关于”；设置子页重选底部设置回首页，保留编辑保护。包含1.7.2首页绿色柔光呼吸。包含上一版修复跨通道重复待处理：同应用、同类型、同金额的唯一跨通道候选在首次采集60秒内自动合并，不同明确订单分开；已保存仅追加来源。旧待核对不批量清理。支持可选家庭规则同步与手动账本快照。使用说明见 [家庭备份](docs/FAMILY_BACKUPS.md)，自托管部署见 [家庭服务部署](deploy/home-sync/README.md)。
 
 ## 一次支付，只要三步
 
@@ -164,7 +164,7 @@ echo "sdk.dir=$HOME/Android/Sdk" > local.properties
 - **识别与学习在本机处理。** 网络用于用户主动检查、下载 GitHub 规则包和 App 更新，以及可选的家庭规则同步与手动账本备份。配对后，规则和主动备份的账本快照发送到自己配置的家庭服务；不会向 GitHub 上传支付内容，没有平台云端账号或云端学习。可以自己验证权限：
 
   ```bash
-  aapt dump permissions MyMoney-1.7.1-master-release.apk
+  aapt dump permissions MyMoney-1.7.3-master-release.apk
   ```
 
 - 不读写第三方 App 的私有数据库，不 Hook 微信 / 支付宝的 Flutter / Dart 层，不做截图 OCR，不恢复任何「两路同时采集」的旧方案。

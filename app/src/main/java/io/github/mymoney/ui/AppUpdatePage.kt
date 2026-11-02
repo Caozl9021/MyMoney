@@ -25,7 +25,7 @@ import kotlinx.coroutines.launch
 
 /** 关于页：版本信息与 GitHub Release App 更新。 */
 @Composable
-fun AppUpdatePage(onBack: () -> Unit) {
+fun AppUpdatePage(onBack: () -> Unit, onOpenDevelopment: () -> Unit = {}) {
     val context = LocalContext.current
     val state by AppUpdateStore.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
@@ -111,6 +111,11 @@ fun AppUpdatePage(onBack: () -> Unit) {
                     scope.launch(Dispatchers.IO) { AppUpdateStore.checkForUpdates() }
                 }, modifier = Modifier.fillMaxWidth(),
             )
+        }
+        InsetGroup {
+            ListRow(title = "开发调试", subtitle = "识别帮助、通知与页面诊断",
+                leading = { io.github.mymoney.ui.design.SettingsIconBadge("开发调试", io.github.mymoney.ui.design.AbIcons.Terminal) },
+                chevron = true, onClick = onOpenDevelopment)
         }
         if (state.status != AppUpdateStore.Status.CHECKING &&
             state.status != AppUpdateStore.Status.DOWNLOADING

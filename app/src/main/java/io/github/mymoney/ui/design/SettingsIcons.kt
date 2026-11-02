@@ -45,11 +45,11 @@ internal fun SettingsIconBadge(title: String, fallback: ImageVector, size: Dp = 
         "自动记账", "通知模板" -> colors.pink
         "识别历史", "学习记忆", "外观", "分类预设" -> colors.violet
         "备份", "完整备份与恢复", "权限与后台运行", "规则文件" -> colors.teal
-        "导出", "导入导出", "钱迹账单", "应用与通道", "识别统计" -> colors.green
+        "导出", "导入导出", "迁移与备份", "钱迹账单", "应用与通道", "识别统计" -> colors.green
         else -> colors.indigo
     }
     val glyph = when (title) {
-        "导入导出" -> "swap_horiz"
+        "导入导出", "迁移与备份" -> "swap_horiz"
         "钱迹账单" -> "receipt_long"
         "分类", "支出分类", "收入分类", "分类预设" -> "category"
         "资产" -> "account_balance_wallet"

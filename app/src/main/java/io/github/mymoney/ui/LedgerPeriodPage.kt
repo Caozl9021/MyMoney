@@ -40,6 +40,7 @@ internal fun LedgerPeriodPage(onBack: () -> Unit) {
     val current = LedgerMonthPeriod.containing(clock.date, selected, clock.zone)
     val scope = rememberCoroutineScope()
     ActiveBackHandler(enabled = busy) { }
+    SettingsRootExitHandler(enabled = busy) { /* Match the existing busy back guard. */ }
     ActiveBackHandler(enabled = picker && !busy) { picker = false }
     if (picker) {
         MonthStartDayPage(selected, clock, onBack = { picker = false }, onSelect = { selected = it; picker = false })

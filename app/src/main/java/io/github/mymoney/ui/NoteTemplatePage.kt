@@ -28,11 +28,20 @@ internal fun NoteTemplatePage(onBack: () -> Unit) {
     var saved by rememberSaveable { mutableStateOf(LedgerConfig.noteTemplate) }
     var value by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue(saved)) }
     var discard by remember { mutableStateOf(false) }
+    var rootExit by remember { mutableStateOf<(() -> Unit)?>(null) }
     var example by rememberSaveable { mutableIntStateOf(0) }
     val unknown = remember(value.text) { NoteTemplate.unknownTokens(value.text) }
     fun back() { if (value.text != saved) discard = true else onBack() }
     ActiveBackHandler(enabled = value.text != saved || !LocalPageBackManaged.current) { back() }
-    if (discard) DiscardChangesDialog(onContinue = { discard = false }, onDiscard = { value = TextFieldValue(saved); discard = false; onBack() })
+    SettingsRootExitHandler { allow ->
+        if (value.text != saved) { rootExit = allow; discard = true } else allow()
+    }
+    if (discard) DiscardChangesDialog(onContinue = { discard = false; rootExit = null }, onDiscard = {
+        value = TextFieldValue(saved); discard = false
+        val leave = rootExit
+        rootExit = null
+        if (leave != null) leave() else onBack()
+    })
     val sample = remember(example) {
         BillDraft(2350, BillType.EXPENSE, System.currentTimeMillis(), if (example == 1) null else "瑞幸咖啡", "零钱", null,
             "com.example.demo", "示例", category = "餐饮", subCategory = if (example == 1) null else "咖啡", account = "微信",
