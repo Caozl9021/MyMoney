@@ -62,7 +62,6 @@ import io.github.mymoney.ui.design.formatAmount
 @Composable
 fun HomeScreen(
     bills: List<BillEntity>,
-    isVisible: Boolean = true,
     onOpenAssets: () -> Unit = {},
     onOpenSettings: (CaptureSettingsDestination) -> Unit,
     onEditorVisibilityChanged: (Boolean) -> Unit = {},
@@ -139,9 +138,6 @@ fun HomeScreen(
         title = "账本",
         compact = true,
         floatingHeader = true,
-        titleActive = healthInput.recognitionReady,
-        titleAnimationEnabled = isVisible && newSource == null && !historyOpen && selectedId == null && !healthDetails,
-        titleStateDescription = if (healthInput.recognitionReady) "自动记账运行中" else health.title,
         onTitleClick = { onOpenSettings(CaptureSettingsDestination.AUTOMATION) },
         actions = {
             io.github.mymoney.ui.design.FloatingHeaderAction(AbIcons.Plus, "记一笔") { addBill() }

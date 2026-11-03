@@ -375,9 +375,6 @@ fun PageScaffold(
     subtitle: String? = null,
     compact: Boolean = false,
     floatingHeader: Boolean = false,
-    titleActive: Boolean = false,
-    titleAnimationEnabled: Boolean = true,
-    titleStateDescription: String? = null,
     onTitleClick: (() -> Unit)? = null,
     /**
      * 传非 null 时改用固定子页导航栏（居中标题、右动作；系统返回），
@@ -396,7 +393,7 @@ fun PageScaffold(
 
     if (floatingHeader && onBack == null) {
         FloatingPageScaffold(title = title, bottomPadding = dockHeight() + navBottom + AbLayout.pageBottom,
-            modifier = modifier, titleActive = titleActive, titleAnimationEnabled = titleAnimationEnabled, titleStateDescription = titleStateDescription,
+            modifier = modifier,
             onTitleClick = onTitleClick, actions = actions, content = content)
         return
     }

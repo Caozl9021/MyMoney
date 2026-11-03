@@ -360,7 +360,6 @@ private fun AppContent(tabState: MutableIntState, requestAdd: Int, settingsRootR
                 when (current) {
                     0 -> HomeScreen(
                         bills = bills,
-                        isVisible = current == tab && !detailsOpen,
                         onEditorVisibilityChanged = { editorChanged(0, it) },
                         onOpenAssets = { tabState.intValue = 2 },
                         onOpenSettings = { destination -> captureSettingsDestination = destination; tabState.intValue = 3 },

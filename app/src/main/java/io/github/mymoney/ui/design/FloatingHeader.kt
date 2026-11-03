@@ -2,8 +2,6 @@ package io.github.mymoney.ui.design
 
 import android.os.Build
 import androidx.annotation.RequiresApi
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
@@ -19,7 +17,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
@@ -44,7 +41,6 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -65,9 +61,6 @@ internal fun FloatingPageScaffold(
     title: String,
     bottomPadding: androidx.compose.ui.unit.Dp,
     modifier: Modifier = Modifier,
-    titleActive: Boolean = false,
-    titleAnimationEnabled: Boolean = true,
-    titleStateDescription: String? = null,
     onTitleClick: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit,
     content: @Composable (PaddingValues) -> Unit,
@@ -101,11 +94,8 @@ internal fun FloatingPageScaffold(
                     Box(Modifier.heightIn(min = headerHeight)
                         .then(if (onTitleClick == null) Modifier else Modifier.clickable(
                             onClickLabel = "查看自动记账模式", onClick = onTitleClick))
-                        .semantics(mergeDescendants = true) {
-                            titleStateDescription?.let { stateDescription = it }
-                        }, contentAlignment = Alignment.Center) {
-                        HeaderGlassCapsule(Modifier.heightIn(min = capsuleHeight),
-                            activeGlow = titleActive, animateGlow = titleAnimationEnabled) {
+                        .semantics(mergeDescendants = true) {}, contentAlignment = Alignment.Center) {
+                        HeaderGlassCapsule(Modifier.heightIn(min = capsuleHeight)) {
                             Text(title, style = AbType.title2.copy(fontSize = 20.sp, lineHeight = 24.sp, fontWeight = FontWeight.Medium),
                                 color = palette.label, maxLines = 1,
                                 modifier = Modifier.padding(horizontal = AbSpacing.l, vertical = AbSpacing.xs + AbSpacing.xxs)
@@ -145,8 +135,6 @@ fun FloatingHeaderAction(icon: ImageVector, label: String, onClick: () -> Unit) 
 @Composable
 private fun HeaderGlassCapsule(
     modifier: Modifier = Modifier,
-    activeGlow: Boolean = false,
-    animateGlow: Boolean = false,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val p = LocalAbPalette.current
@@ -167,23 +155,7 @@ private fun HeaderGlassCapsule(
         } else BlurEffect(12f * density, 12f * density, TileMode.Clamp)
     }
     val shape = RoundedCornerShape(AbRadius.capsule)
-    val glow = rememberHeaderGlow(activeGlow, animateGlow)
-    Box(modifier.drawBehind {
-        // Read animation state only while drawing: no per-frame page recomposition or glass recording.
-        val strength = glow.value
-        if (strength > 0f) {
-            val alpha = (if (dark) 0.12f else 0.18f) * strength
-            // Nested translucent silhouettes approximate a soft shadow on every supported API.
-            // Draw outside the capsule's clip; use fixed geometry and animate only opacity.
-            for (step in 16 downTo 1) {
-                val spread = (step * 0.625f).dp.toPx()
-                drawRoundRect(p.green.copy(alpha = alpha / 16f),
-                    topLeft = Offset(-spread, -spread),
-                    size = androidx.compose.ui.geometry.Size(size.width + spread * 2, size.height + spread * 2),
-                    cornerRadius = CornerRadius(size.height / 2 + spread))
-            }
-        }
-    }.onSizeChanged { measuredSize = it }
+    Box(modifier.onSizeChanged { measuredSize = it }
         .onGloballyPositioned { placed ->
             val origin = backdrop?.coordinates
             if (origin != null && origin.isAttached && placed.isAttached)
@@ -246,28 +218,4 @@ private object HeaderGlassApi33 {
             android.graphics.Shader.TileMode.CLAMP)
         return android.graphics.RenderEffect.createChainEffect(lens, blur).asComposeRenderEffect()
     }
-}
-
-
-/** Lifecycle and visibility cancel the coroutine, including during outgoing tab transitions. */
-@Composable
-private fun rememberHeaderGlow(active: Boolean, visible: Boolean): Animatable<Float, androidx.compose.animation.core.AnimationVector1D> {
-    val reduce = LocalReduceMotion.current
-    val lifecycleState by androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
-    val resumed = lifecycleState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)
-    val glow = remember { Animatable(if (active) 0.65f else 0f) }
-    LaunchedEffect(active, visible, resumed, reduce) {
-        if (!visible || !resumed || reduce) {
-            glow.snapTo(if (active) 0.65f else 0f)
-        } else if (!active) {
-            glow.animateTo(0f, tween(200))
-        } else {
-            glow.animateTo(0.56f, tween(200))
-            while (true) {
-                glow.animateTo(1f, tween(2000, easing = FastOutSlowInEasing))
-                glow.animateTo(0.56f, tween(2000, easing = FastOutSlowInEasing))
-            }
-        }
-    }
-    return glow
 }
