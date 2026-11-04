@@ -1,6 +1,6 @@
 # My Money 家庭服务
 
-Python 3.12+、PostgreSQL，提供设备配对、规则同步及完整JSON8账本快照。六张业务表位于专用schema，文件卷保存账本快照正文；不提供逐笔账单双向同步。
+Python 3.12+、PostgreSQL，提供设备配对、规则同步及完整JSON8/JSON9账本快照（JSON9含只读删除日志）。六张业务表位于专用schema，文件卷保存账本快照正文；不提供逐笔账单双向同步。
 
 推荐使用[容器部署说明](../deploy/home-sync/README.md)。本地开发：
 

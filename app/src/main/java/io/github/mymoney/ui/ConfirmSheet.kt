@@ -50,6 +50,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -95,6 +97,8 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.text.rememberTextMeasurer
 import io.github.mymoney.R
 import io.github.mymoney.data.LedgerConfig
 import io.github.mymoney.data.NoteTemplate
@@ -136,7 +140,7 @@ import kotlinx.coroutines.launch
 fun ConfirmSheet(
     draft: BillDraft,
     onSave: (BillDraft) -> Unit,
-    // Kept for existing hosts; sharing is now available only after saving.
+    // Kept for existing capture hosts; external export belongs to Settings.
     onImport: (BillDraft) -> Unit,
     onIgnore: () -> Unit,
     onDismiss: (BillDraft) -> Unit = { onIgnore() },
@@ -150,6 +154,10 @@ fun ConfirmSheet(
     errorMessage: String? = null,
     assetHint: String? = null,
     amountVisibility: Boolean = true,
+    sharedAmountProgress: Float? = null,
+    managedEditorExit: Boolean = false,
+    editorExiting: Boolean = false,
+    onAmountFontSize: ((androidx.compose.ui.unit.TextUnit) -> Unit)? = null,
     onAmountBounds: ((androidx.compose.ui.geometry.Rect) -> Unit)? = null,
     onPickerBackHandler: (((() -> Boolean)?) -> Unit)? = null,
     noteSuggestions: (current: BillDraft) -> List<NoteSuggester.Suggestion> = { emptyList() },
@@ -203,6 +211,8 @@ fun ConfirmSheet(
     var selectAllOnFocus by remember { mutableStateOf(!isNew) }
     var forceSelectAll by remember { mutableStateOf(false) }
     val amountFocus = remember { FocusRequester() }
+    var amountWidth by remember { mutableIntStateOf(0) }
+    val amountMeasurer = rememberTextMeasurer()
     LaunchedEffect(Unit) { if (isNew && editableDetails) runCatching { amountFocus.requestFocus() } }
     val validAmount = parseAmountCents(amount.text)
     val amountInvalid = amount.text.isNotBlank() && validAmount == null
@@ -228,7 +238,7 @@ fun ConfirmSheet(
     // noteSuggestions 本身也是 key：最近账单是异步读的，读完换了一个新的 lambda，要重算
     val suggestions = remember(noteSuggestions, editedDraft) { noteSuggestions(current()) }
     var closing by remember { mutableStateOf(false) }
-    val locked = saving || dispatching || closing
+    val locked = saving || dispatching || closing || editorExiting || (sharedAmountProgress != null && sharedAmountProgress < 1f)
     val picker = remember { CategoryPickerState() }
     var categoryViewport by remember { mutableStateOf(Rect.Zero) }
     var hostOrigin by remember { mutableStateOf(Offset.Zero) }
@@ -258,13 +268,13 @@ fun ConfirmSheet(
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
-    val offsetY = remember { Animatable(if (reduceMotion) 0f else screenHeightPx) }
+    val offsetY = remember { Animatable(if (reduceMotion || sharedAmountProgress != null) 0f else screenHeightPx) }
     val tracker = remember { VelocityTracker() }
     var dragging by remember { mutableStateOf(false) }
     var dragOffset by remember { mutableStateOf(0f) }
     val displayedOffset = if (dragging) dragOffset else offsetY.value
     LaunchedEffect(reduceMotion) {
-        if (reduceMotion) offsetY.snapTo(0f) else offsetY.animateTo(0f, spring(dampingRatio = 0.86f, stiffness = 420f))
+        if (reduceMotion || sharedAmountProgress != null) offsetY.snapTo(0f) else offsetY.animateTo(0f, spring(dampingRatio = 0.86f, stiffness = 420f))
     }
 
     var closeJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
@@ -284,6 +294,7 @@ fun ConfirmSheet(
     fun closeAnimated(then: () -> Unit) {
         if (locked || closing) return
         closing = true
+        if (managedEditorExit) { then(); return }
         closeJob = scope.launch {
             var delivered = false
             try {
@@ -316,9 +327,9 @@ fun ConfirmSheet(
     Box(Modifier.fillMaxSize().onGloballyPositioned { hostOrigin = it.boundsInRoot().topLeft }, contentAlignment = Alignment.BottomCenter) {
         // 压暗层：识别草稿回待确认；编辑器由宿主处理取消。
         Box(
-            Modifier.fillMaxSize().background(Color.Black.copy(alpha = scrimAlpha))
+            Modifier.fillMaxSize().background(Color.Black.copy(alpha = scrimAlpha * (sharedAmountProgress ?: 1f)))
                 .clickable(remember { MutableInteractionSource() }, indication = null, enabled = !locked) { dismiss() }
-                .semantics { contentDescription = if (editableDetails) "取消编辑" else "关闭，稍后在待确认里处理" },
+                .semantics { contentDescription = if (editableDetails) "取消编辑" else "关闭，稍后在待处理里查看" },
         )
 
         // Insets belong to the viewport, not the painted card. The padding modifiers
@@ -332,6 +343,7 @@ fun ConfirmSheet(
                 modifier = Modifier
                     .widthIn(max = 560.dp).fillMaxWidth()
                     .offset { IntOffset(0, displayedOffset.roundToInt()) }
+                    .graphicsLayer { alpha = sharedAmountProgress ?: 1f }
                     .clip(RoundedCornerShape(topStart = AbRadius.sheet, topEnd = AbRadius.sheet))
                     .background(p.cardBg)
                     .heightIn(max = maxHeight * 0.92f)
@@ -392,8 +404,12 @@ fun ConfirmSheet(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text("¥", style = AbType.amountTitle, color = amountTint(p, type.name), modifier = Modifier.padding(end = 6.dp))
-                        val amountStyle = AbType.amountEntry.copy(color = amountTint(p, type.name),
+                        val preferredAmountStyle = AbType.amountEntry.copy(color = amountTint(p, type.name),
                             fontSize = AbType.amountEntry.fontSize / density.fontScale.coerceAtLeast(1f))
+                        val naturalWidth = amountMeasurer.measure(amount.text.ifBlank { "0.00" }, preferredAmountStyle, maxLines = 1, softWrap = false).size.width
+                        val fit = if (amountWidth > 0) ((amountWidth - 2f) / naturalWidth.coerceAtLeast(1)).coerceIn(0.1f, 1f) else 1f
+                        val amountStyle = preferredAmountStyle.copy(fontSize = preferredAmountStyle.fontSize * fit)
+                        SideEffect { if (amountWidth > 0) onAmountFontSize?.invoke(amountStyle.fontSize) }
                         BasicTextField(
                             value = amount,
                             onValueChange = { next ->
@@ -409,7 +425,7 @@ fun ConfirmSheet(
                             textStyle = amountStyle,
                             cursorBrush = SolidColor(p.accent),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                            modifier = Modifier.weight(1f).focusRequester(amountFocus)
+                            modifier = Modifier.weight(1f).onSizeChanged { amountWidth = it.width }.focusRequester(amountFocus)
                                 .onFocusChanged { state ->
                                     // 只在第一次获得焦点时全选；之后再点保留光标位置，不丢已输入内容
                                     if (state.isFocused && selectAllOnFocus) {
@@ -427,7 +443,7 @@ fun ConfirmSheet(
                             },
                         )
                         Box(Modifier.heightIn(min = 48.dp).widthIn(min = 48.dp)
-                            .clickable(enabled = !locked) { ignore() }.semantics { role = Role.Button; contentDescription = if (editableDetails) "取消编辑" else "忽略，可在识别历史重新打开" },
+                            .clickable(enabled = !locked) { ignore() }.semantics { role = Role.Button; contentDescription = if (editableDetails) "取消编辑" else "忽略，可在记录历史重新打开" },
                             contentAlignment = Alignment.Center) { Text(ignoreLabel, style = AbType.footnote, color = p.secondaryLabel) }
                     }
                     if (amountInvalid) Text("请输入有效金额", color = p.red, style = AbType.caption1,

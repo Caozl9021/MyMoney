@@ -15,6 +15,7 @@
 
 | 文档 | 内容 |
 | --- | --- |
+| [PACKAGING.md](PACKAGING.md) | 打包产物目录、独立构建、防覆盖与发布快照规则 |
 | [VERSIONING.md](VERSIONING.md) | 版本号语义、何时升 versionName/versionCode、功能批次与验收节奏 |
 | [FAMILY_BACKUPS.md](FAMILY_BACKUPS.md) | 家庭账本手动备份、下载预览、合并/覆盖与恢复前快照 |
 

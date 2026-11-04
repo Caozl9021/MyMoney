@@ -14,7 +14,7 @@
 [![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)](#构建)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?logo=kotlin&logoColor=white)](#项目结构)
 [![Compose](https://img.shields.io/badge/Jetpack-Compose-4285F4?logo=jetpackcompose&logoColor=white)](#项目结构)
-![Version](https://img.shields.io/badge/版本-1.7.3%20%2F%20127-00847D)
+![Version](https://img.shields.io/badge/版本-1.8.0%20%2F%20133-00847D)
 
 **[⬇ 下载 App 与规则包](../../releases)**
 
@@ -26,7 +26,7 @@
 
 ---
 
-**1.7.3/127（待用户验收）** 设置中家庭同步归入“迁移与备份”，开发调试归入“关于”；设置子页重选底部设置回首页，保留编辑保护。包含1.7.2首页绿色柔光呼吸。包含上一版修复跨通道重复待处理：同应用、同类型、同金额的唯一跨通道候选在首次采集60秒内自动合并，不同明确订单分开；已保存仅追加来源。旧待核对不批量清理。支持可选家庭规则同步与手动账本快照。使用说明见 [家庭备份](docs/FAMILY_BACKUPS.md)，自托管部署见 [家庭服务部署](deploy/home-sync/README.md)。
+**1.8.0/133（待用户验收）** 统计分类与账户可下钻查看账单，复用统一详情；删除改为确认后执行，并在“记录历史”保存只读删除快照。记录历史采用五项滑块，设置分组调整；修改、取消与保存的金额过渡统一。单笔流程移除iCost分享，设置批量导出保留。Room10/JSON9备份包含删除日志，旧备份可读；家庭备份服务需兼容新格式。使用说明见 [家庭备份](docs/FAMILY_BACKUPS.md)，部署见 [家庭服务部署](deploy/home-sync/README.md)。
 
 ## 一次支付，只要三步
 
@@ -153,7 +153,7 @@ echo "sdk.dir=$HOME/Android/Sdk" > local.properties
 - 构建需要访问 `https://api.xposed.info/` 拉取 `de.robv.android.xposed:api:82`（`compileOnly`，不进 APK）。该仓库不可用时，可先注释掉这一行，只构建非 LSP 部分。
 - 依赖缓存完整时才加 `--offline`。
 
-`./build-all.sh` 会读取 `app/build.gradle.kts` 里的版本号，把 debug / release 两个包输出到 `dist/MyMoney-<版本>-<分支>-<类型>.apk`。
+`./build-all.sh` 会读取 `app/build.gradle.kts` 里的版本号，把 debug / release 两个包输出到 `dist/app/<版本>-<构建号>/<run-id>/`，最新位置见 `dist/latest-app.json`。
 
 > **自行构建的包使用你自己的签名，与官方 Release 的签名不同，无法覆盖安装官方包。** 想跟官方版本共存或升级，请从 Releases 下载。
 
@@ -219,3 +219,5 @@ echo "sdk.dir=$HOME/Android/Sdk" > local.properties
 ---
 
 <div align="center"><sub>规则、账单与学习都留在你自己的手机里 · Made with ♥ for 只想记好账的人</sub></div>
+
+打包产物按版本、构建号和独立运行目录存放，位置见 `dist/latest-app.json`；详细规则见 [打包文件存放规则](docs/PACKAGING.md)。

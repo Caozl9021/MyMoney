@@ -15,7 +15,7 @@ package io.github.mymoney.data
  */
 object Backup {
 
-    const val FORMAT = 8
+    const val FORMAT = 9
     const val KIND = "MyMoneyBackup"
 
     data class Bill(
@@ -78,6 +78,7 @@ object Backup {
         val assets: AssetSnapshot? = null,
         val capture: CaptureSnapshot? = null,
         val imports: List<ImportIdentity>? = null,
+        val deletions: List<BillDeletionLog>? = null,
     )
 
     /**
@@ -101,6 +102,10 @@ object Backup {
         root["kind"] = KIND
         root["format"] = FORMAT
         root["exportedAt"] = snapshot.exportedAt
+        snapshot.deletions?.let { rows ->
+            validateDeletionLogs(rows)
+            root["deletions"] = rows.map(BillDeletionCodec::encode)
+        }
         snapshot.imports?.let { rows ->
             ImportIdentityCodec.validate(rows)
             root["imports"] = rows.map { mapOf("key" to it.sourceKey, "hash" to it.contentHash) }
@@ -270,11 +275,35 @@ object Backup {
             assets = assets,
             history = history,
             capture = capture,
+            deletions = if (root.containsKey("deletions")) {
+                require(format >= 9) { "旧备份格式不能包含删除记录" }
+                val entries = root["deletions"] as? List<*> ?: throw IllegalArgumentException("deletions必须是数组")
+                entries.map(BillDeletionCodec::decode).also(::validateDeletionLogs)
+            } else null,
             imports = if (root.containsKey("imports")) {
                 require(format >= 5) { "旧格式不能包含导入身份" }
                 ImportIdentityCodec.decode(root["imports"])
             } else null,
         )
+    }
+
+    /** Audit events are immutable and never re-enter the live bill/asset restore path. */
+    fun validateDeletionLogs(rows: List<BillDeletionLog>) {
+        require(rows.map { it.eventId }.distinct().size == rows.size) { "删除记录ID重复" }
+        rows.forEach(BillDeletionCodec::validate)
+    }
+
+    /** Both merge and replacement preserve local audit history; conflicts abort the whole restore. */
+    fun mergeDeletionLogs(local: List<BillDeletionLog>, incoming: List<BillDeletionLog>): List<BillDeletionLog> {
+        validateDeletionLogs(local)
+        validateDeletionLogs(incoming)
+        val byId = local.associateBy { it.eventId }.toMutableMap()
+        incoming.forEach { row ->
+            val existing = byId[row.eventId]
+            require(existing == null || existing == row) { "同一删除记录ID对应不同内容，未恢复" }
+            byId[row.eventId] = row
+        }
+        return byId.values.sortedWith(compareByDescending<BillDeletionLog> { it.deletedAt }.thenBy { it.eventId })
     }
 
     /** Cross-reference checks run before any restore transaction can delete existing data. */

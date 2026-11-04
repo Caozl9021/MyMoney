@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build a deterministic complete snapshot; no APK or signing key is needed."""
-import argparse, hashlib, json, pathlib, subprocess, zipfile, io
+import argparse, hashlib, json, pathlib, subprocess, zipfile, io, tempfile
+from datetime import datetime
 ROOT = pathlib.Path(__file__).resolve().parent
 
 def build(out):
@@ -23,10 +24,20 @@ def build(out):
             z.writestr(info,data,compresslevel=9)
     out.mkdir(parents=True,exist_ok=True)
     name=f"MyMoney-rules-{meta['packageVersion']}.mymoney-rules.zip"
-    data=buffer.getvalue();(out/name).write_bytes(data)
-    (out/(name+'.sha256')).write_text(hashlib.sha256(data).hexdigest()+'  '+name+'\n')
+    data=buffer.getvalue()
+    if (out/name).exists() or (out/(name+'.sha256')).exists():
+        raise FileExistsError(f"Refusing to overwrite rule artifacts in {out}")
+    with (out/name).open('xb') as f: f.write(data)
+    with (out/(name+'.sha256')).open('x') as f: f.write(hashlib.sha256(data).hexdigest()+'  '+name+'\n')
     print(out/name)
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--output-dir',type=pathlib.Path,required=True)
-    build(parser.parse_args().output_dir)
+    parser=argparse.ArgumentParser();parser.add_argument('--output-dir',type=pathlib.Path)
+    args=parser.parse_args()
+    out=args.output_dir
+    if out is None:
+        version=json.loads((ROOT/'package.json').read_text())['packageVersion']
+        parent=ROOT.parents[1]/'dist/rules'/version
+        parent.mkdir(parents=True,exist_ok=True)
+        out=pathlib.Path(tempfile.mkdtemp(prefix=datetime.now().strftime('%Y%m%d-%H%M%S-'),dir=parent))
+    build(out)

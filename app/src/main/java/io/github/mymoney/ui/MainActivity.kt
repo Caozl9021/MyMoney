@@ -289,12 +289,14 @@ private fun AppContent(tabState: MutableIntState, requestAdd: Int, settingsRootR
     val reduceMotion = io.github.mymoney.ui.design.LocalReduceMotion.current
     val tab = tabState.intValue
     var detailsOpen by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var detailScope by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<io.github.mymoney.data.StatisticsDrilldown?>(null) }
     var detailAddRequest by androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(0) }
     var consumedAddRequest by androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(0) }
     androidx.compose.runtime.LaunchedEffect(requestAdd) {
         if (requestAdd != 0 && requestAdd != consumedAddRequest) {
             consumedAddRequest = requestAdd
             detailAddRequest = requestAdd
+            detailScope = null
             detailsOpen = true
         }
     }
@@ -313,11 +315,11 @@ private fun AppContent(tabState: MutableIntState, requestAdd: Int, settingsRootR
     var detailPreview by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     val navigationScope = androidx.compose.runtime.rememberCoroutineScope()
     var openingDetails by remember { mutableStateOf(false) }
-    fun openDetails() {
+    fun openDetails(scope: io.github.mymoney.data.StatisticsDrilldown? = null) {
         if (openingDetails || detailsOpen) return
         openingDetails = true
         navigationScope.launch {
-            try { detailPreview = backPixels.snapshot(); detailAddRequest = 0; detailsOpen = true }
+            try { detailPreview = backPixels.snapshot(); detailScope = scope; detailAddRequest = 0; detailsOpen = true }
             finally { openingDetails = false }
         }
     }
@@ -364,7 +366,7 @@ private fun AppContent(tabState: MutableIntState, requestAdd: Int, settingsRootR
                         onOpenAssets = { tabState.intValue = 2 },
                         onOpenSettings = { destination -> captureSettingsDestination = destination; tabState.intValue = 3 },
                     )
-                    1 -> StatsScreen(onOpenDetails = { openDetails() })
+                    1 -> StatsScreen(onOpenDetails = { openDetails() }, onOpenGroup = { openDetails(it) })
                     2 -> AssetsScreen(onBack = { tabState.intValue = 0 }, isTab = true,
                         onSubpageVisibilityChanged = { editorChanged(2, it) })
                     else -> SettingsScreen(rootRequest = settingsRootRequest.takeIf { current == tab }, onRootRequestHandled = onSettingsRootHandled,
@@ -375,7 +377,8 @@ private fun AppContent(tabState: MutableIntState, requestAdd: Int, settingsRootR
         }
         }
         if (detailsOpen) {
-            BillsScreen(requestAdd = detailAddRequest, onBack = { detailsOpen = false })
+            BillsScreen(requestAdd = detailAddRequest, onBack = { detailsOpen = false },
+                onEditorVisibilityChanged = { editorChanged(4, it) }, statisticsScope = detailScope)
         }
     }
     }

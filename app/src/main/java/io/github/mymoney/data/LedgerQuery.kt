@@ -10,6 +10,8 @@ data class LedgerQuery(
     val toMillis: Long = Long.MAX_VALUE,
     val category: String? = null,
     val type: String? = null,
+    val statisticsCategory: String? = null,
+    val statisticsAccount: String? = null,
 ) {
     val likePattern: String
         get() = buildString {
@@ -38,5 +40,17 @@ fun ledgerDateWindow(
     return LedgerDateWindow(
         fromMillis = start.atStartOfDay(zone).toInstant().toEpochMilli(),
         toMillis = endInclusive.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli(),
+    )
+}
+
+/** Fixed scope captured at the instant a statistics group is opened. */
+data class StatisticsDrilldown(
+    val fromMillis: Long, val toMillis: Long, val type: String,
+    val groupName: String, val byAccount: Boolean, val periodLabel: String,
+) : java.io.Serializable {
+    fun query(keyword: String = "") = LedgerQuery(
+        keyword = keyword, fromMillis = fromMillis, toMillis = toMillis, type = type,
+        statisticsCategory = groupName.takeUnless { byAccount },
+        statisticsAccount = groupName.takeIf { byAccount },
     )
 }

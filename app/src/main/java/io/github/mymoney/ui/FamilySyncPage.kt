@@ -82,13 +82,13 @@ fun FamilySyncPage(onBack: () -> Unit) {
 
         if (!config.paired) {
             InsetGroup {
-                InputRow("服务地址", serverUrl, { serverUrl = it }, placeholder = "https://home.example.com 或 http://192.168.x.x:8080")
+                InputRow("服务地址", serverUrl, { serverUrl = it }, placeholder = "http://100.65.248.62:18080")
                 InputRow("设备名称", deviceName, { deviceName = it }, placeholder = "手机", dividerAbove = true)
                 InputRow("配对码", pairingCode, { pairingCode = it.uppercase() }, placeholder = "服务端显示的一次性配对码", dividerAbove = true)
             }
             ListRow(
                 title = "地址说明",
-                subtitle = "家庭局域网可用 http://192.168.x.x:8080；公网访问必须使用 HTTPS。",
+                subtitle = "家庭局域网支持 HTTP；Tailscale 支持 http://100.65.248.62:18080；其他地址须使用 HTTPS。",
             )
             PrimaryButton(
                 text = if (state.busy) "正在配对…" else "配对并连接",

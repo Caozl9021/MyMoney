@@ -96,16 +96,11 @@ class Batch4Instrumentation : Instrumentation() {
                         it.fold({ continuation.resume(Unit) }, { error -> continuation.resumeWithException(error) })
                     }
                 }
-                suspend fun undo(id: Long) = suspendCoroutine<Unit> { continuation ->
-                    BillWriter.undoDelete(targetContext, id) {
-                        it.fold({ continuation.resume(Unit) }, { error -> continuation.resumeWithException(error) })
-                    }
-                }
                 db.withTransaction { dao.deleteAll(); db.recognitions().deleteAll() }
                 val ids = dao.insertAll((0 until 1205).map { fixture(it) })
                 val expected = ids.reversed()
                 test("same_day_same_time_1205_progressive_windows_complete_stable") {
-                    check(db.openHelper.readableDatabase.version == 3)
+                    check(db.openHelper.readableDatabase.version == 10)
                     var previous = emptyList<Long>()
                     var pages = 0
                     for (limit in 100..1300 step 100) {
@@ -163,36 +158,39 @@ class Batch4Instrumentation : Instrumentation() {
                         window.first { it.lastOrNull()?.note == "批次4边界编辑" }
                         check(count.value == 1205)
                     }
-                    test("boundary_delete_two_independent_undos_restore_original_id_and_history") {
+                    test("boundary_confirmed_delete_logs_and_preserves_recorded_history") {
                         val linked = selected.first { it?.note == "批次4边界编辑" }!!
                         val secondId = expected[100]
                         val second = dao.byId(secondId)!!
-                        val deleteErrors = java.util.concurrent.CopyOnWriteArrayList<String>()
-                        BillWriter.deleteUndoably(targetContext, linked.id) { deleteErrors += it }
+                        suspend fun delete(row: BillEntity) {
+                            val preview = BillWriter.deletionPreview(targetContext, row.id)
+                            suspendCoroutine<Unit> { continuation ->
+                                BillWriter.deleteConfirmed(targetContext, preview, "instrumentation") { result ->
+                                    result.fold({ continuation.resume(Unit) }, { continuation.resumeWithException(it) })
+                                }
+                            }
+                        }
+                        delete(linked)
                         selected.first { it == null }
-                        BillWriter.pendingUndo.first { items -> items.any { it.bill.id == linked.id } }
                         window.first { it.map { bill -> bill.id } == expected.filterNot { id -> id == linked.id }.take(100) }
                         count.first { it == 1204 }
-                        BillWriter.deleteUndoably(targetContext, secondId) { deleteErrors += it }
-                        BillWriter.pendingUndo.first { items -> items.any { it.bill.id == secondId } }
+                        delete(second)
                         count.first { it == 1203 }
-                        val pending = BillWriter.pendingUndo.value.filter { it.bill.id == linked.id || it.bill.id == secondId }
-                        check(pending.size == 2 && pending.all { it.expiresAt > System.currentTimeMillis() })
+                        val log = db.deletions().latestForPrincipal(linked.id)!!
+                        check(BillDeletionCodec.bills(log).single() == linked)
+                        val secondLog = db.deletions().latestForPrincipal(secondId)!!
                         val history = db.recognitions().byId(linked.recognitionId!!)!!
                         check(history.status == RecognitionStatus.RECORDED && history.billId == linked.id)
                         check(RecognitionStore.reopen(history.id) == null)
-                        undo(linked.id)
-                        selected.first { it == linked }
-                        count.first { it == 1204 }
-                        check(BillWriter.pendingUndo.value.any { it.bill.id == secondId })
-                        undo(secondId)
+                        // Test cleanup uses a transaction helper, never a user-facing restore action.
+                        db.withTransaction {
+                            BillWriter.restoreGroupInTransaction(db, listOf(linked, second))
+                            db.openHelper.writableDatabase.execSQL("DELETE FROM bill_deletion_log WHERE eventId IN (?, ?)", arrayOf(log.eventId, secondLog.eventId))
+                        }
                         count.first { it == 1205 }
                         check(dao.byId(secondId) == second)
                         check(db.recognitions().byId(history.id) == history)
-                        check(deleteErrors.isEmpty()) { deleteErrors.joinToString() }
-                        check(BillWriter.pendingUndo.value.none { it.bill.id == linked.id || it.bill.id == secondId })
                         window.first { it.map { bill -> bill.id } == expected.take(100) }
-                        check(dao.observeWindow(1300).first().map { it.id } == expected)
                     }
                     test("outside_500_delete_updates_all_ids_with_unchanged_recent_and_recorded_history") {
                         val old = dao.byId(expected[1000])!!

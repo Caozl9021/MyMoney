@@ -30,11 +30,9 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
-import io.github.mymoney.data.AppDb
 import io.github.mymoney.data.BillWriter
 import io.github.mymoney.data.RecognitionStore
 import kotlinx.coroutines.*
-import io.github.mymoney.export.CostShare
 import io.github.mymoney.ui.MyMoneyTheme
 import io.github.mymoney.ui.ConfirmResultSheet
 import io.github.mymoney.ui.BillResultActivity
@@ -43,7 +41,6 @@ import io.github.mymoney.ui.ConfirmFeedback
 import io.github.mymoney.ui.design.AbHaptic
 import android.widget.Toast
 import com.example.billkit.BillDraft
-import com.example.billkit.BillType
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -122,8 +119,6 @@ object ConfirmOverlay {
     private class Session(val draft: BillDraft) {
         var edited: BillDraft = draft
         var result by mutableStateOf<BillWriter.SaveResult?>(null)
-        var sharing by mutableStateOf(false)
-        var shareMessage by mutableStateOf<String?>(null)
         var saving by mutableStateOf(false)
         var error by mutableStateOf<String?>(null)
         var busyLabel by mutableStateOf("保存中…")
@@ -234,12 +229,8 @@ object ConfirmOverlay {
                     title = ConfirmFeedback.saved(result.inserted),
                     detail = ConfirmFeedback.resultDetail(result),
                     canView = result.bill != null,
-                    sharing = card.sharing,
-                    shareMessage = card.shareMessage,
                     onDismiss = { if (session === card) dismissOnMain() },
                     onView = { result.bill?.let { if (BillResultActivity.open(app, it.id) && session === card) dismissOnMain() } },
-                    onShare = if (result.bill != null && result.bill.type != BillType.REFUND.name)
-                        ({ share(app, card) }) else null,
                 )
             } else ConfirmSheet(
                 draft = card.edited,
@@ -290,36 +281,6 @@ object ConfirmOverlay {
         )
     }
 
-    private fun share(app: Context, card: Session) {
-        val stored = card.result ?: return
-        val bill = stored.bill ?: return
-        if (session !== card || card.sharing || bill.type == BillType.REFUND.name) return
-        card.sharing = true
-        card.shareMessage = null
-        scope.launch {
-            try {
-                val current = withContext(Dispatchers.IO) { AppDb.get(app).bills().byId(bill.id) }
-                if (session !== card) return@launch
-                if (current == null) {
-                    card.result = stored.copy(bill = null)
-                    card.shareMessage = "本地记录已处理，但关联账单已删除，无法分享"
-                } else {
-                    val launched = runCatching { CostShare.shareBills(app, listOf(BillWriter.toDraft(current)), onlyTarget = true) }.getOrNull() != null
-                    val marked = runCatching { card.draft.historyId?.let { RecognitionStore.markShare(it, launched) } }.isSuccess
-                    card.shareMessage = ConfirmFeedback.shared(stored.inserted, launched) + if (marked) "" else "；分享状态保存失败"
-                    if (launched && session === card) {
-                        // The overlay must not cover the target app's own import confirmation.
-                        dismissOnMain()
-                        Toast.makeText(app, card.shareMessage, Toast.LENGTH_LONG).show()
-                    }
-                }
-            } catch (failure: Exception) {
-                card.shareMessage = "已保存到本地，分享失败，可重试"
-            } finally {
-                card.sharing = false
-            }
-        }
-    }
 
     /** User dismissal preserves the draft; an in-flight save owns it until its result. */
     private fun setAside(app: Context, card: Session) {

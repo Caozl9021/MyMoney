@@ -24,4 +24,7 @@
     <instrumentation android:name="io.github.mymoney.ConfigurationMigrationInstrumentation" android:targetPackage="io.github.mymoney" />
     <instrumentation android:name="io.github.mymoney.ShortWindowDedupInstrumentation" android:targetPackage="io.github.mymoney" />
     <instrumentation android:name="io.github.mymoney.NotificationCaptureInstrumentation" android:targetPackage="io.github.mymoney" />
+    <instrumentation android:name="io.github.mymoney.BillDeletionInstrumentation" android:targetPackage="io.github.mymoney" />
+    <instrumentation android:name="io.github.mymoney.DeletionBackupInstrumentation" android:targetPackage="io.github.mymoney" />
+    <instrumentation android:name="io.github.mymoney.StatisticsDrilldownInstrumentation" android:targetPackage="io.github.mymoney" />
 </manifest>

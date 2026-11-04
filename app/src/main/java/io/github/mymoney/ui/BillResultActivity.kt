@@ -43,7 +43,6 @@ class BillResultActivity : ComponentActivity() {
                 Surface(color = LocalAbPalette.current.pageBg, modifier = Modifier.fillMaxSize()) {
                     Box(Modifier.fillMaxSize()) {
                         BillActionsHost(billId = id, onClose = { finish() })
-                        Box(Modifier.align(Alignment.BottomCenter)) { BillUndoStack() }
                     }
                 }
             }

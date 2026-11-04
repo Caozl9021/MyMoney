@@ -110,16 +110,24 @@ object RuleSyncApi {
             nums[0] == 127
     }
 
+    /** 共用端点策略：保留私网HTTP，仅为指定Tailscale IP和端口增加例外。 */
+    internal fun isAllowedServiceUrl(url: URL): Boolean {
+        if (url.userInfo != null || url.ref != null) return false
+        return url.protocol == "https" || (url.protocol == "http" &&
+            (isPrivateHttpHost(url.host) || (url.host == "100.65.248.62" && url.port == 18080)))
+    }
+
     private fun request(serverUrl: String, method: String, path: String, body: Any?, token: String?): Any? {
         val base = serverUrl.trim().trimEnd('/')
         val url = URL(base + path)
-        if (url.protocol != "https" && !(url.protocol == "http" && isPrivateHttpHost(url.host))) {
-            throw RuleSyncApiException("家庭同步地址必须使用 HTTPS，或使用家庭局域网私网地址（如 http://192.168.1.10:8080）")
+        if (!isAllowedServiceUrl(url)) {
+            throw RuleSyncApiException("家庭同步地址须使用 HTTPS、家庭私网 HTTP 或 http://100.65.248.62:18080（不能含账号密码或片段）")
         }
         val payload = body?.let { MiniJson.encode(it) }?.toByteArray(Charsets.UTF_8)
         if (payload != null && payload.size > MAX_BODY) throw RuleSyncApiException("同步请求超过大小限制")
         val connection = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = method
+            instanceFollowRedirects = false
             connectTimeout = CONNECT_TIMEOUT
             readTimeout = READ_TIMEOUT
             setRequestProperty("Accept", "application/json")
@@ -139,6 +147,7 @@ object RuleSyncApi {
                     val body = MiniJson.decode(text) as? Map<*, *>
                     (body?.get("detail") as? String) ?: (body?.get("error") as? String)
                 }.getOrNull() ?: when (code) {
+                    in 300..399 -> "家庭服务发生重定向，请检查连接地址"
                     401, 403 -> "设备连接已失效，请重新配对"
                     409 -> "家庭规则已被重置，请重新对账"
                     413 -> "同步内容超过大小限制"

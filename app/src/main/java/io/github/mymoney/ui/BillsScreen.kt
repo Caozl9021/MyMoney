@@ -46,7 +46,7 @@ private data class BillWindowState(
 
 /** Complete ledger, grown in windows while every bill remains an independent lazy item. */
 @Composable
-fun BillsScreen(requestAdd: Int = 0, onEditorVisibilityChanged: (Boolean) -> Unit = {}, onBack: (() -> Unit)? = null) {
+fun BillsScreen(requestAdd: Int = 0, onEditorVisibilityChanged: (Boolean) -> Unit = {}, onBack: (() -> Unit)? = null, statisticsScope: StatisticsDrilldown? = null) {
     val app = LocalContext.current.applicationContext
     val dao = remember(app) { AppDb.get(app).bills() }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -63,8 +63,8 @@ fun BillsScreen(requestAdd: Int = 0, onEditorVisibilityChanged: (Boolean) -> Uni
     var resetPosition by rememberSaveable { mutableStateOf(false) }
     var retry by remember { mutableStateOf(0) }
     val dateWindow = remember(dateMode, start, end, clock, monthStartDay) { ledgerFilterWindow(dateMode, start, end, clock.date, clock.zone, monthStartDay) }
-    val query = remember(keyword, dateWindow, category, type) {
-        LedgerQuery(keyword, dateWindow.fromMillis, dateWindow.toMillis, category, type)
+    val query = remember(keyword, dateWindow, category, type, statisticsScope) {
+        statisticsScope?.query(keyword) ?: LedgerQuery(keyword, dateWindow.fromMillis, dateWindow.toMillis, category, type)
     }
     val active = keyword.isNotBlank() || dateMode != "ALL" || category != null || type != null
     fun changed() { limit = 100; resetPosition = true }
@@ -73,8 +73,8 @@ fun BillsScreen(requestAdd: Int = 0, onEditorVisibilityChanged: (Boolean) -> Uni
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             value = if (value.query == query) value.copy(loading = true, error = null) else BillWindowState(query = query)
             combine(
-                dao.observeFilteredWindow(query.likePattern, query.fromMillis, query.toMillis, query.category, query.type, limit),
-                dao.observeFilteredSummary(query.likePattern, query.fromMillis, query.toMillis, query.category, query.type),
+                dao.observeFilteredWindow(query.likePattern, query.fromMillis, query.toMillis, query.category, query.type, limit, query.statisticsCategory, query.statisticsAccount),
+                dao.observeFilteredSummary(query.likePattern, query.fromMillis, query.toMillis, query.category, query.type, query.statisticsCategory, query.statisticsAccount),
                 dao.observeCount(),
             ) { bills, summary, total -> BillWindowState(query, bills, summary, total, loading = false) }
                 .catch { value = BillWindowState(query = query, loading = false, error = it.message ?: "读取账单失败") }
@@ -103,6 +103,7 @@ fun BillsScreen(requestAdd: Int = 0, onEditorVisibilityChanged: (Boolean) -> Uni
     }
     // Include configured names and historical names even when configuration was subsequently removed.
     val categoryOptions = (LedgerConfig.expenseGroups.map { it.name } + LedgerConfig.incomeGroups.map { it.name } + categories + listOfNotNull(category)).distinct()
+    var deleteId by rememberSaveable { mutableStateOf<Long?>(null) }
     var historyOpen by rememberSaveable { mutableStateOf(false) }
     var selectedId by rememberSaveable { mutableStateOf<Long?>(null) }
     var newSource by rememberSaveable { mutableStateOf<String?>(null) }
@@ -140,16 +141,18 @@ fun BillsScreen(requestAdd: Int = 0, onEditorVisibilityChanged: (Boolean) -> Uni
     }
     BackSurface(enabled = false, onBack = {}, pixels = pagePixels) {
     Box(Modifier.fillMaxSize().background(LocalAbPalette.current.pageBg)) {
-        PageScaffold(title = "明细", listState = listState, onBack = onBack,
+        PageScaffold(title = statisticsScope?.let { "${it.groupName}账单" } ?: "明细", listState = listState, onBack = onBack,
             actions = {
                 IconButton(onClick = { historyOpen = true }, modifier = Modifier.size(48.dp)) {
-                    Icon(AbIcons.Clock, contentDescription = "识别历史", tint = LocalAbPalette.current.label)
+                    Icon(AbIcons.Clock, contentDescription = "记录历史", tint = LocalAbPalette.current.label)
                 }
                 TextButton(onClick = { addBill() }, modifier = Modifier.heightIn(min = 48.dp)) { Text("记一笔") }
             },
         ) { padding ->
             Column(Modifier.fillMaxSize().imePadding()) {
-                LedgerFilters(keyword, { keyword = it; changed() }, dateMode, start, end, clock.date,
+                if (statisticsScope != null) {
+                    GroupFooter("${statisticsScope.periodLabel} · ${when (statisticsScope.type) { "INCOME" -> "收入"; "REFUND" -> "退款"; else -> "支出" }} · ${statisticsScope.groupName}")
+                } else LedgerFilters(keyword, { keyword = it; changed() }, dateMode, start, end, clock.date,
                     { mode, from, to -> dateMode = mode; start = from; end = to; changed() },
                     category, categoryOptions, { category = it; changed() }, type, { type = it; changed() }, active, { clear() },
                     monthStartDay = monthStartDay, summaryLabel = window.summary?.let { "${if (active) "匹配" else "共"} ${it.count} 笔" }
@@ -171,8 +174,8 @@ fun BillsScreen(requestAdd: Int = 0, onEditorVisibilityChanged: (Boolean) -> Uni
                             InsetGroup {
                                 val emptyLedger = window.totalCount == 0
                                 EmptyState(icon = AbIcons.Note, title = if (emptyLedger) "还没有账单" else "没有匹配的账单",
-                                    message = if (emptyLedger) "点右上角「记一笔」，或开启识别后确认保存。" else "试试其他关键词，或清除筛选查看全部账单。")
-                                if (active) TextButton(onClick = { clear() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("清除筛选") }
+                                    message = if (emptyLedger) "点右上角「记一笔」，或开启识别后确认保存。" else "该筛选范围内没有账单。")
+                                if (active && statisticsScope == null) TextButton(onClick = { clear() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("清除筛选") }
                             }
                         }
                         days.forEach { (day, dayBills) ->
@@ -192,7 +195,7 @@ fun BillsScreen(requestAdd: Int = 0, onEditorVisibilityChanged: (Boolean) -> Uni
                                         if (index > 0) InsetDivider()
                                         SwipeableBillRow(bill, onAmountBounds = {}, hideAmount = false,
                                             onEdit = { openBill(bill.id); newSource = null },
-                                            onDelete = { BillWriter.deleteUndoably(app, bill.id) { Toast.makeText(app, it, Toast.LENGTH_LONG).show() } })
+                                            onDelete = { deleteId = bill.id })
                                     }
                                 }
                             }
@@ -201,17 +204,16 @@ fun BillsScreen(requestAdd: Int = 0, onEditorVisibilityChanged: (Boolean) -> Uni
                         if (window.error != null) item(key = "error") { InsetGroup { ListRow(title = "读取失败，点此重试", subtitle = window.error, onClick = { retry++ }) } }
                         item(key = "history") {
                             Spacer(Modifier.height(AbSpacing.l))
-                            InsetGroup { ListRow(title = "识别历史", subtitle = "查看待处理及全部识别记录", chevron = true, onClick = { historyOpen = true }) }
+                            InsetGroup { ListRow(title = "记录历史", subtitle = "查看识别记录及已删除账单", chevron = true, onClick = { historyOpen = true }) }
                         }
                         item(key = "footer") {
-                            GroupFooter(if (reduceMotion) "点账单查看操作 · 删除后5秒内可撤销" else "点账单查看操作 · 左滑删除后5秒内可撤销")
+                            GroupFooter(if (reduceMotion) "点账单查看操作 · 删除前需要确认" else "点账单查看操作 · 左滑删除前需要确认")
                         }
                     }
-                    Box(Modifier.align(Alignment.BottomCenter).padding(horizontal = AbSpacing.page)
-                        .padding(bottom = padding.calculateBottomPadding())) { BillUndoStack() }
                 }
             }
         }
+        deleteId?.let { id -> DeleteBillDialog(id, origin = "ledger", onDismiss = { deleteId = null }, onDeleted = { deleteId = null }) }
         if (historyOpen) Box(Modifier.fillMaxSize().zIndex(9f)) {
             RecognitionHistoryScreen(onBack = { historyOpen = false }, reserveDock = false)
         }
@@ -250,7 +252,7 @@ private fun LedgerDayHeader(day: LocalDate, clock: LedgerClock, query: LedgerQue
     val state by key(dailyQuery) { produceState<Pair<BillQuerySummary?, Boolean>>(null to false, dao, lifecycle, dailyQuery, retry, localRetry) {
         value = null to false
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            dao.observeFilteredSummary(dailyQuery.likePattern, dailyQuery.fromMillis, dailyQuery.toMillis, dailyQuery.category, dailyQuery.type)
+            dao.observeFilteredSummary(dailyQuery.likePattern, dailyQuery.fromMillis, dailyQuery.toMillis, dailyQuery.category, dailyQuery.type, dailyQuery.statisticsCategory, dailyQuery.statisticsAccount)
                 .catch { value = null to true }.collect { value = it to false }
         }
     } }
@@ -304,7 +306,7 @@ private fun LedgerDayHeader(day: LocalDate, clock: LedgerClock, query: LedgerQue
     }
 }
 
-/** 左滑删除：滑过阈值即删库，条目随列表刷新消失。 */
+/** 左滑请求删除确认；取消时保持原账单。 */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun SwipeableBillRow(bill: BillEntity, onEdit: () -> Unit, onDelete: () -> Unit, onAmountBounds: (Rect) -> Unit, hideAmount: Boolean) {
@@ -315,7 +317,7 @@ private fun SwipeableBillRow(bill: BillEntity, onEdit: () -> Unit, onDelete: () 
             BillListRow(bill, modifier = Modifier.weight(1f).clickable(onClick = onEdit),
                 onAmountBounds = onAmountBounds, hideAmount = hideAmount)
             IconButton(onClick = { haptic.warn(); onDelete() }) {
-                Icon(AbIcons.Close, contentDescription = "删除账单，可在5秒内撤销", tint = LocalAbPalette.current.red)
+                Icon(AbIcons.Close, contentDescription = "删除账单，需确认", tint = LocalAbPalette.current.red)
             }
         }
         return

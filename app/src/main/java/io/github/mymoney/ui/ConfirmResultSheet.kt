@@ -65,11 +65,8 @@ fun ConfirmResultSheet(
     title: String,
     detail: String?,
     canView: Boolean,
-    sharing: Boolean = false,
-    shareMessage: String? = null,
     onDismiss: () -> Unit,
     onView: () -> Unit,
-    onShare: (() -> Unit)? = null,
 ) {
     val p = LocalAbPalette.current
     val density = LocalDensity.current
@@ -144,17 +141,6 @@ fun ConfirmResultSheet(
                 PrimaryButton(text = "完成", onClick = onDismiss, modifier = Modifier.fillMaxWidth())
                 // Stack optional actions to remain legible at large font sizes.
                 if (canView) SecondaryButton(text = "查看账单", onClick = onView, modifier = Modifier.fillMaxWidth())
-                if (onShare != null) {
-                    SecondaryButton(
-                        text = "分享至 iCost", onClick = onShare, enabled = !sharing,
-                        busy = sharing, busyLabel = "正在启动分享…", modifier = Modifier.fillMaxWidth(),
-                    )
-                    Text("分享后请在 iCost 中确认导入", style = AbType.caption1, color = p.secondaryLabel)
-                }
-                shareMessage?.takeIf { it.isNotBlank() }?.let {
-                    Text(it, style = AbType.footnote, color = p.secondaryLabel,
-                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-                }
             }
         }
     }

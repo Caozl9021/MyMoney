@@ -110,7 +110,7 @@ private enum class SettingsPage(val title: String) {
     RECOGNITION("应用与通道"), LEARNING("学习记忆"), TEMPLATES("通知模板"),
     RULE_FILES("识别规则"), MEALS("餐段设置"), STATISTICS("识别统计"),
     PERMISSIONS("权限与后台运行"), ROOT_MODE("Root 状态"),
-    PENDING("识别历史"), IMPORT_EXPORT("迁移与备份"), EXPORT_CSV("导出到 iCost"), EXPORT_HELP("导入说明"),
+    PENDING("记录历史"), IMPORT_EXPORT("迁移与备份"), EXPORT_CSV("导出到 iCost"), EXPORT_HELP("导入说明"),
     QIANJI_IMPORT("导入钱迹账单"), BACKUP("备份与恢复"), FAMILY_SYNC("家庭同步与备份"), APPEARANCE("外观"), ABOUT("关于"), DEVELOPMENT("开发调试"),
     HELP("识别帮助"), DEBUG("通知诊断"), PAGE_DEBUG("页面诊断"),
 }
@@ -151,7 +151,8 @@ fun SettingsScreen(rootRequest: Long? = null, onRootRequestHandled: (Long) -> Un
     val page = pagePath.last()
     val pageTransition = updateTransition(pagePath, label = "settingsRoute")
     val visibilityChanged by androidx.compose.runtime.rememberUpdatedState(onEditorVisibilityChanged)
-    LaunchedEffect(page) { visibilityChanged(page == SettingsPage.ASSETS) }
+    var historyDetailVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(page, historyDetailVisible) { visibilityChanged(page == SettingsPage.ASSETS || (page == SettingsPage.PENDING && historyDetailVisible)) }
     DisposableEffect(Unit) { onDispose { visibilityChanged(false) } }
     val navigationScope = rememberCoroutineScope()
     val backPixels = RememberBackPixels()
@@ -299,7 +300,7 @@ fun SettingsScreen(rootRequest: Long? = null, onRootRequestHandled: (Long) -> Un
     val reduceMotion = io.github.mymoney.ui.design.LocalReduceMotion.current
     val pageStates = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
     val contentReady = !pageTransition.isRunning && pageTransition.currentState == pagePath && pageTransition.targetState == pagePath
-    BackSurface(enabled = page != SettingsPage.ROOT, onBack = ::returnToParent, routeKey = pagePath, contentReady = contentReady,
+    BackSurface(enabled = page != SettingsPage.ROOT && !(page == SettingsPage.PENDING && historyDetailVisible), onBack = ::returnToParent, routeKey = pagePath, contentReady = contentReady,
         preview = previews[pagePath.dropLast(1).lastOrNull()], pixels = backPixels) {
     val predictiveCommit = LocalPredictiveBackCommit.current
     pageTransition.AnimatedContent(modifier = Modifier.fillMaxSize().clipToBounds(), transitionSpec = {
@@ -322,12 +323,12 @@ fun SettingsScreen(rootRequest: Long? = null, onRootRequestHandled: (Long) -> Un
                     SettingsLink("记账周期", "每月${rememberMonthStartDay()}日开始", AbIcons.Clock) { navigate(SettingsPage.LEDGER_PERIOD) },
                     SettingsLink("分类", "支出、收入与二级分类", AbIcons.Tag) { navigate(SettingsPage.CATEGORIES) },
                     SettingsLink("资产", "账户、余额、转账与还款", AbIcons.Wallet) { navigate(SettingsPage.ASSETS) },
-                    SettingsLink("备注", "模板与本地备注建议", AbIcons.Note) { navigate(SettingsPage.NOTE) },
+                    SettingsLink("记录历史", if (historyReady) "待处理 $pendingCount 条 · 识别与删除记录" else "正在读取…", AbIcons.Clock) { navigate(SettingsPage.PENDING) },
                 )) }
                 item { SettingsNavigationGroup("自动记账", listOf(
                     SettingsLink("自动记账", health.title, AbIcons.Accessibility) { navigate(SettingsPage.AUTOMATION) },
                     SettingsLink("识别规则", "查看已有规则、添加或导入", AbIcons.Layers) { navigate(SettingsPage.RULE_FILES) },
-                    SettingsLink("识别历史", if (historyReady) "待确认 $pendingCount 条" else "正在读取…", AbIcons.Clock) { navigate(SettingsPage.PENDING) },
+                    SettingsLink("备注", "模板与本地备注建议", AbIcons.Note) { navigate(SettingsPage.NOTE) },
                 )) }
                 item { SettingsNavigationGroup("数据与应用", listOf(
                     SettingsLink("迁移与备份", "导入导出、家庭同步与备份", AbIcons.Export) { navigate(SettingsPage.IMPORT_EXPORT) },
@@ -521,7 +522,7 @@ fun SettingsScreen(rootRequest: Long? = null, onRootRequestHandled: (Long) -> Un
             onApps = { navigate(SettingsPage.RECOGNITION) }, onPending = { navigate(SettingsPage.PENDING) })
         SettingsPage.DEBUG -> DebugPage(onBack = back, notifications = true)
         SettingsPage.PAGE_DEBUG -> DebugPage(onBack = back, notifications = false)
-        SettingsPage.PENDING -> RecognitionHistoryScreen(onBack = back, initialFilter = io.github.mymoney.data.RecognitionStatus.PENDING)
+        SettingsPage.PENDING -> RecognitionHistoryScreen(onBack = back, onDetailVisibilityChanged = { historyDetailVisible = it })
     }
     }
     }
@@ -999,7 +1000,7 @@ private fun BackupPage(onBack: () -> Unit, onRestored: (Backup.SettingsSnapshot?
             InsetGroup {
                 ListRow(
                     title = "导出备份文件",
-                    subtitle = if (busy) "处理中…" else "JSON，含账单、识别历史、账户余额与完整流水、配置",
+                    subtitle = if (busy) "处理中…" else "JSON，含账单、记录历史、账户余额与完整流水、配置",
                     chevron = true,
                     onClick = {
                         if (!busy) createLauncher.launch(BackupStore.fileName())
@@ -1044,12 +1045,13 @@ private fun BackupPage(onBack: () -> Unit, onRestored: (Backup.SettingsSnapshot?
                 Text(
                     if (confirmReplace) {
                         "覆盖恢复会替换现有的全部账单，导入 ${snap.bills.size} 条账单。" +
-                            (if (snap.history != null) "同时替换全部识别历史，导入 ${snap.history.size} 条历史。" else "这是不含历史的旧备份：保留现有识别历史，失效的账单关联会解除，已记账状态保留。") +
+                            (if (snap.history != null) "同时替换全部识别记录，导入 ${snap.history.size} 条。删除日志按事件合并，保留本机日志。" else "这是不含识别记录的旧备份：保留现有记录历史，失效的账单关联会解除，已记账状态保留。") +
                             (if (snap.assets != null) "同时覆盖全部账户与资产流水，导入 ${snap.assets.accounts.size} 个账户、${snap.assets.entries.size} 条分录。显式空资产将清空当前资产。" else "此备份不含资产：保留当前余额与流水，导入账单不联动，恢复后请对账。") +
                             "钱迹导入身份${snap.imports?.let { "将覆盖为 ${it.size} 条（含删除标记）" } ?: "未包含，将保留本机身份"}。如备份含分类账户和设置，也会恢复这些配置。建议先导出当前备份；此操作不可撤销，确定吗？"
                     } else {
                         "备份时间：${whenText}\n账单：${snap.bills.size} 条\n" +
-                            "识别历史：${snap.history?.let { "${it.size} 条" } ?: "旧格式未包含，保留本机历史"}\n" +
+                            "识别记录：${snap.history?.let { "${it.size} 条" } ?: "旧格式未包含，保留本机历史"}\n" +
+                            "删除记录：${snap.deletions?.let { "${it.size} 条，按事件合并" } ?: "未包含，保留本机日志"}\n" +
                             "资产：${snap.assets?.let { "${it.accounts.size} 个账户、${it.entries.size} 条分录" } ?: "旧格式未包含，保留本机资产；导入后请对账"}\n" +
                             "分类账户清单：${if (snap.ledger != null) "有" else "无"}\n" +
                             "记账周期：${snap.ledger?.monthStartDay?.let { "每月${it}日" } ?: "备份未包含，保留本机周期"}\n" +
@@ -1071,7 +1073,7 @@ private fun BackupPage(onBack: () -> Unit, onRestored: (Backup.SettingsSnapshot?
                                 BackupStore.restore(context, json, BackupStore.Mode.REPLACE)
                             }
                             message = result.fold(
-                                onSuccess = { "已覆盖导入账单 ${it.bills} 条、识别历史 ${it.history} 条${if (snap.history == null) "（本机历史已保留）" else ""}" + (if (it.assets) "；资产已恢复" else "") + (it.assetWarning?.let { warning -> "\n$warning" } ?: "") },
+                                onSuccess = { "已覆盖导入账单 ${it.bills} 条、识别记录 ${it.history} 条${if (snap.history == null) "（本机历史已保留）" else ""}" + (if (it.assets) "；资产已恢复" else "") + (it.assetWarning?.let { warning -> "\n$warning" } ?: "") },
                                 onFailure = { "恢复失败：${it.message}" },
                             )
                             result.getOrNull()?.let { onRestored(it.settings) }
@@ -1087,7 +1089,7 @@ private fun BackupPage(onBack: () -> Unit, onRestored: (Backup.SettingsSnapshot?
                                 BackupStore.restore(context, json, BackupStore.Mode.MERGE)
                             }
                             message = result.fold(
-                                onSuccess = { "已合并导入账单 ${it.bills} 条、识别历史 ${it.history} 条（已有记录不重复导入）" + (if (it.assets) "；资产已恢复" else "") + (it.assetWarning?.let { warning -> "\n$warning" } ?: "") },
+                                onSuccess = { "已合并导入账单 ${it.bills} 条、识别记录 ${it.history} 条（已有记录不重复导入）" + (if (it.assets) "；资产已恢复" else "") + (it.assetWarning?.let { warning -> "\n$warning" } ?: "") },
                                 onFailure = { "恢复失败：${it.message}" },
                             )
                             result.getOrNull()?.let { onRestored(it.settings) }

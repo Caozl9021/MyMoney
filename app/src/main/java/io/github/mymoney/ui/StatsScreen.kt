@@ -50,10 +50,11 @@ private sealed interface StatisticsLoad {
 /** Full local calendar ranges; this page does not depend on the home page's recent window. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun StatsScreen(onOpenDetails: () -> Unit = {}) {
+fun StatsScreen(onOpenDetails: () -> Unit = {}, onOpenGroup: (StatisticsDrilldown) -> Unit = {}) {
     val p = LocalAbPalette.current
     val context = LocalContext.current
-    val dao = remember(context) { AppDb.get(context).bills() }
+    val db = remember(context) { AppDb.get(context) }
+    val dao = remember(db) { db.bills() }
     val listState = rememberLazyListState()
     var periodName by rememberSaveable { mutableStateOf(StatisticsPeriod.WEEK.name) }
     val clock = rememberLedgerClock()
@@ -82,7 +83,7 @@ fun StatsScreen(onOpenDetails: () -> Unit = {}) {
     LaunchedEffect(dao, range, retry) {
         result = null
         try {
-            combine(dao.observeRange(range.fromMillis, range.toMillis), AssetStore.accounts) { bills, accounts ->
+            combine(dao.observeRange(range.fromMillis, range.toMillis), db.assets().observeAccounts()) { bills, accounts ->
                 val namesById = accounts.associate { it.id to it.name }
                 bills.map { bill -> bill.accountId?.let(namesById::get)?.let { bill.copy(account = it) } ?: bill }
             }.collect { bills ->
@@ -284,7 +285,10 @@ fun StatsScreen(onOpenDetails: () -> Unit = {}) {
                 }
                 groups.forEachIndexed { index, group ->
                     item("group-$grouping-${group.name}") {
-                        CompactStatisticsGroupRow(index + 1, group, selectedGroup == group.name, index == groups.lastIndex) { selectedGroup = group.name }
+                        CompactStatisticsGroupRow(index + 1, group, selectedGroup == group.name, index == groups.lastIndex) {
+                            selectedGroup = group.name
+                            onOpenGroup(StatisticsDrilldown(range.fromMillis, range.toMillis, type, group.name, grouping == 1, label))
+                        }
                     }
                 }
 

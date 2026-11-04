@@ -43,11 +43,12 @@ class ConfirmSaveResultTest {
         assertFalse(ConfirmFeedback.saved(false).contains("已记一笔"))
     }
 
-    @Test fun refundResultExplainsUnsupportedExternalShare() {
+    @Test fun refundResultKeepsLocalLedgerFeedback() {
         val result = BillWriter.SaveResult(true, stored.copy(type = "REFUND"))
         val detail = ConfirmFeedback.resultDetail(result).orEmpty()
         assertTrue(detail.contains("已保存到本地"))
-        assertTrue(detail.contains("不支持退款"))
-        assertTrue(detail.contains("无法分享"))
+        assertTrue(detail.contains("查看账单"))
+        assertFalse(detail.contains("分享"))
+        assertFalse(detail.contains("iCost"))
     }
 }

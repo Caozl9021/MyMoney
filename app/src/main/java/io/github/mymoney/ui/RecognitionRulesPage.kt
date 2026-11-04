@@ -382,7 +382,7 @@ internal fun RecognitionRulesPage(
             text = {
                 Text(
                     "${rule?.merchant ?: "这条记忆"}的偏好会被移除，后续推荐不再使用它；要重新累计确认次数。" +
-                        "账单、识别历史和其他记忆不受影响。",
+                        "账单、记录历史和其他记忆不受影响。",
                     style = AbType.body, color = p.secondaryLabel,
                 )
             },
@@ -406,7 +406,7 @@ internal fun RecognitionRulesPage(
             text = {
                 Text(
                     "删除全部 ${ruleState.learned.size} 条已记住的偏好及 ${effectivePending.size} 条待生效确认，" +
-                        "后续从头学习。保留账单、识别历史、导入规则和餐段设置。此操作不可撤销。",
+                        "后续从头学习。保留账单、记录历史、导入规则和餐段设置。此操作不可撤销。",
                     style = AbType.body, color = p.secondaryLabel,
                 )
             },

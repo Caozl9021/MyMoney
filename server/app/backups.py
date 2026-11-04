@@ -1,4 +1,4 @@
-"""Immutable JSON8 backup files; only committed indexes are downloadable."""
+"""Immutable JSON8/9 backup files; only committed indexes are downloadable."""
 from __future__ import annotations
 
 import hashlib
@@ -28,12 +28,92 @@ def file_digest(path: Path) -> str:
     return digest.hexdigest()
 
 
-def validate_snapshot(path: Path) -> tuple[int, datetime]:
+def _integer(value, *, positive=False):
+    if type(value) is not int or not -9223372036854775808 <= value <= 9223372036854775807:
+        raise ValueError()
+    if positive and value <= 0:
+        raise ValueError()
+    return value
+
+
+def validate_deletion(event: object) -> None:
+    """Audit snapshots remain separate from live bills and must retain their original group."""
+    if not isinstance(event, dict):
+        raise ValueError()
+    for key in ("eventId", "groupId", "origin", "snapshotJson"):
+        if not isinstance(event.get(key), str) or not event[key].strip():
+            raise ValueError()
+    if str(UUID(event["eventId"])) != event["eventId"] or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", event["origin"]):
+        raise ValueError()
+    if len(event["snapshotJson"].encode("utf-8")) > 1024 * 1024:
+        raise ValueError()
+    _integer(event.get("deletedAt"), positive=True)
+    _integer(event.get("principalId"), positive=True)
+    if type(event.get("snapshotVersion")) is not int or event["snapshotVersion"] != 1:
+        raise ValueError()
+    if event.get("recognitionId") is not None and (not isinstance(event["recognitionId"], str) or not event["recognitionId"].strip()):
+        raise ValueError()
+    snapshot = json.loads(event["snapshotJson"], parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
+    if not isinstance(snapshot, dict) or not isinstance(snapshot.get("bills"), list) or not 1 <= len(snapshot["bills"]) <= 100:
+        raise ValueError()
+    rows = snapshot["bills"]
+    ids = set()
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ValueError()
+        identity = _integer(row.get("id"), positive=True)
+        if identity in ids:
+            raise ValueError()
+        ids.add(identity)
+        _integer(row.get("priceCents"), positive=True)
+        _integer(row.get("timeMillis"))
+        _integer(row.get("createdAt"))
+        if row.get("type") not in ("EXPENSE", "INCOME", "TRANSFER", "REFUND"):
+            raise ValueError()
+        for key in ("sourcePkg", "strategy", "fingerprint", "assetKey"):
+            if not isinstance(row.get(key), str):
+                raise ValueError()
+        for key in ("merchant", "method", "orderTail", "category", "subCategory", "account", "note", "transferAccount", "productName", "productSource", "noteOrigin", "noteTemplateSnapshot"):
+            if row.get(key) is not None and not isinstance(row[key], str):
+                raise ValueError()
+        for key in ("recognitionId", "accountId", "transferAccountId", "feeParentKey"):
+            if row.get(key) is not None and (not isinstance(row[key], str) or not row[key].strip()):
+                raise ValueError()
+        if type(row.get("assetLinked")) is not bool:
+            raise ValueError()
+        fee = _integer(row.get("transferFeeCents"))
+        if fee < 0:
+            raise ValueError()
+    principal = rows[0]
+    if principal["id"] != event["principalId"] or principal.get("feeParentKey") is not None:
+        raise ValueError()
+    if principal.get("recognitionId") != event.get("recognitionId"):
+        raise ValueError()
+    group = principal["assetKey"] if principal["assetKey"].strip() else f"bill:{principal['id']}"
+    if event["groupId"] != group:
+        raise ValueError()
+    fees = rows[1:]
+    if principal["type"] != "TRANSFER":
+        if fees or principal["transferFeeCents"] != 0:
+            raise ValueError()
+    else:
+        expected_fee = principal["transferFeeCents"]
+        if len(fees) != (1 if expected_fee > 0 else 0):
+            raise ValueError()
+        if fees:
+            fee = fees[0]
+            if (not principal["assetKey"].strip() or fee["type"] != "EXPENSE" or
+                    fee.get("feeParentKey") != principal["assetKey"] or
+                    fee["priceCents"] != expected_fee or fee.get("accountId") != principal.get("accountId")):
+                raise ValueError()
+
+
+def validate_snapshot(path: Path) -> tuple[int, datetime, int]:
     """Validate the portable envelope and actual rows; Android validates all relations."""
     try:
         with path.open("r", encoding="utf-8") as stream:
             data = json.load(stream, parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
-        if not isinstance(data, dict) or data.get("kind") != "MyMoneyBackup" or type(data.get("format")) is not int or data["format"] != 8:
+        if not isinstance(data, dict) or data.get("kind") != "MyMoneyBackup" or type(data.get("format")) is not int or data["format"] not in (8, 9):
             raise ValueError()
         timestamp = data.get("exportedAt")
         if type(timestamp) is not int or timestamp <= 0:
@@ -56,9 +136,18 @@ def validate_snapshot(path: Path) -> tuple[int, datetime]:
         for key in ("assets", "capture", "ledger", "settings"):
             if data.get(key) is not None and not isinstance(data[key], dict):
                 raise ValueError()
-        return len(bills), snapshot_at
+        if "deletions" in data:
+            if data["format"] < 9 or not isinstance(data["deletions"], list):
+                raise ValueError()
+            event_ids = set()
+            for event in data["deletions"]:
+                validate_deletion(event)
+                if event["eventId"] in event_ids:
+                    raise ValueError()
+                event_ids.add(event["eventId"])
+        return len(bills), snapshot_at, data["format"]
     except (ValueError, TypeError, UnicodeError, RecursionError, OverflowError, OSError) as exc:
-        raise HTTPException(status_code=422, detail="备份不是有效的 JSON8 快照") from exc
+        raise HTTPException(status_code=422, detail="备份不是有效的 JSON8/JSON9 快照；请检查文件或升级家庭服务") from exc
 
 
 def metadata(row: dict) -> dict:
@@ -103,7 +192,7 @@ async def upload_backup(
     if not re.fullmatch(r"[0-9a-f]{64}", x_content_sha256) or not 1 <= len(x_app_version) <= 80:
         raise HTTPException(status_code=422, detail="备份摘要或应用版本无效")
     if request.headers.get("content-encoding", "identity").lower() != "identity":
-        raise HTTPException(status_code=415, detail="仅接受未压缩 JSON8 快照")
+        raise HTTPException(status_code=415, detail="仅接受未压缩 JSON8/JSON9 快照")
     if request.headers.get("content-type", "").split(";")[0].strip().lower() != "application/json":
         raise HTTPException(status_code=415, detail="备份必须使用 application/json")
     try:
@@ -131,7 +220,7 @@ async def upload_backup(
             os.fsync(stream.fileno())
         if received != length or digest.hexdigest() != x_content_sha256:
             raise HTTPException(status_code=422, detail="备份长度或 SHA-256 不匹配")
-        count, snapshot_at = validate_snapshot(temporary)
+        count, snapshot_at, backup_schema = validate_snapshot(temporary)
         storage_key = f"{device['space_id']}/{backup_id}.json"
         final = _backup_file(storage_key)
         with connection() as conn:
@@ -160,8 +249,8 @@ async def upload_backup(
                 os.replace(temporary, final)
                 _sync_directory(directory)
             conn.execute("""INSERT INTO ledger_backups(space_id,id,device_id,app_version,backup_schema,storage_key,sha256,
-                              size_bytes,bill_count,snapshot_at) VALUES (%s,%s,%s,%s,8,%s,%s,%s,%s,%s)""",
-                         (device["space_id"], backup_id, device["device_id"], x_app_version, storage_key,
+                              size_bytes,bill_count,snapshot_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                         (device["space_id"], backup_id, device["device_id"], x_app_version, backup_schema, storage_key,
                           x_content_sha256, received, count, snapshot_at))
             row = conn.execute(SELECT + " WHERE b.space_id=%s AND b.id=%s", (device["space_id"], backup_id)).fetchone()
             conn.commit()

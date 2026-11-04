@@ -15,7 +15,7 @@ object LedgerBackupApi {
     data class Entry(
         val id: String, val deviceName: String, val appVersion: String,
         val sha256: String, val sizeBytes: Long, val billCount: Long,
-        val snapshotAt: String, val uploadedAt: String,
+        val snapshotAt: String, val uploadedAt: String, val backupSchema: Int = Backup.FORMAT,
     )
     data class Page(val items: List<Entry>, val nextOffset: Int, val hasMore: Boolean)
 
@@ -90,8 +90,7 @@ object LedgerBackupApi {
 
     private fun open(config: RuleSyncConfig, token: String, path: String, method: String): HttpURLConnection {
         val url = URL(config.serverUrl.trimEnd('/') + path)
-        require(url.userInfo == null && url.ref == null && (url.protocol == "https" ||
-            (url.protocol == "http" && RuleSyncApi.isPrivateHttpHost(url.host)))) { "家庭服务地址必须使用HTTPS或私网HTTP" }
+        require(RuleSyncApi.isAllowedServiceUrl(url)) { "家庭服务地址须使用HTTPS、私网HTTP或http://100.65.248.62:18080（不能含账号密码或片段）" }
         return (url.openConnection() as HttpURLConnection).apply {
             requestMethod = method; instanceFollowRedirects = false
             connectTimeout = 15_000; readTimeout = 120_000
@@ -105,7 +104,7 @@ object LedgerBackupApi {
             401, 403 -> "家庭连接已失效，请重新配对"
             409 -> "备份或家庭空间已变化，请重新检查"
             413 -> "备份超过家庭服务大小限制"
-            422 -> "家庭服务拒绝了备份格式或摘要"
+            422 -> "家庭服务拒绝了快照格式或摘要；请检查文件，使用新格式时需升级家庭服务"
             507 -> "家庭服务存储空间不足，已有备份已保留"
             in 300..399 -> "家庭服务发生重定向，请检查连接地址"
             else -> "家庭备份操作失败（$code），可重试"
@@ -134,7 +133,8 @@ object LedgerBackupApi {
         val size = integer("sizeBytes")
         val count = integer("billCount")
         require(size in 1..MAX_BYTES && count >= 0) { "备份索引超出限制" }
-        require(integer("backupSchema") == Backup.FORMAT.toLong()) { "备份格式不受支持，请升级App" }
-        return Entry(id, text("deviceName"), text("appVersion"), hash, size, count, text("snapshotAt"), text("uploadedAt"))
+        val schema = integer("backupSchema")
+        require(schema in 8L..Backup.FORMAT.toLong()) { "备份格式不受支持，请升级App" }
+        return Entry(id, text("deviceName"), text("appVersion"), hash, size, count, text("snapshotAt"), text("uploadedAt"), schema.toInt())
     }
 }

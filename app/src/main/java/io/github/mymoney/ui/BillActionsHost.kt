@@ -24,11 +24,15 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.mymoney.data.AppDb
 import io.github.mymoney.data.BillEntity
 import io.github.mymoney.data.BillWriter
+import io.github.mymoney.data.BillDeletionLog
+import io.github.mymoney.data.BillDeletionCodec
+import kotlinx.coroutines.flow.flowOf
 import io.github.mymoney.ui.design.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.catch
@@ -45,24 +49,26 @@ fun BillActionsHost(
     onClose: () -> Unit,
     onEditorVisibilityChanged: (Boolean) -> Unit = {},
     sourcePreview: androidx.compose.ui.graphics.ImageBitmap? = null,
+    deletedSnapshot: BillDeletionLog? = null,
 ) {
     val app = LocalContext.current.applicationContext
     val dao = remember(app) { AppDb.get(app).bills() }
     var retry by remember(billId) { mutableStateOf(0) }
-    val read by remember(dao, billId, retry) {
-        dao.observeById(billId).map { BillRead(loaded = true, bill = it) }
+    val read by remember(dao, billId, retry, deletedSnapshot) {
+        if (deletedSnapshot != null) flowOf(runCatching {
+            BillRead(loaded = true, bill = BillDeletionCodec.bills(deletedSnapshot).firstOrNull())
+        }.getOrElse { BillRead(error = it.message ?: "删除快照读取失败") })
+        else dao.observeById(billId).map { BillRead(loaded = true, bill = it) }
             .catch { error ->
                 if (error is CancellationException) throw error
                 emit(BillRead(error = error.message ?: "读取账单失败，请重试"))
             }
     }.collectAsStateWithLifecycle(initialValue = BillRead())
-    val undoItems by BillWriter.pendingUndo.collectAsStateWithLifecycle()
-    var detail by rememberSaveable(billId) { mutableStateOf(false) }
+    var detail by rememberSaveable(billId) { mutableStateOf(deletedSnapshot != null) }
     var recognitionExpanded by rememberSaveable(billId) { mutableStateOf(false) }
     var editing by rememberSaveable(billId) { mutableStateOf(false) }
+    var editorWasTransfer by rememberSaveable(billId) { mutableStateOf(false) }
     var deleting by remember(billId) { mutableStateOf(false) }
-    var sharing by remember(billId) { mutableStateOf(false) }
-    var shareMessage by remember(billId) { mutableStateOf<String?>(null) }
     var deleteError by remember(billId) { mutableStateOf<String?>(null) }
     var linkConfirm by remember(billId) { mutableStateOf(false) }
     var linking by remember(billId) { mutableStateOf(false) }
@@ -70,6 +76,7 @@ fun BillActionsHost(
     val assetAccounts by io.github.mymoney.data.AssetStore.accounts.collectAsStateWithLifecycle()
     val allBills by remember(dao) { dao.observeRange(Long.MIN_VALUE, Long.MAX_VALUE) }.collectAsStateWithLifecycle(initialValue = emptyList())
     var amountBounds by remember(billId) { mutableStateOf<Rect?>(null) }
+    var amountFont by remember(billId) { mutableStateOf<androidx.compose.ui.unit.TextUnit?>(null) }
     val summaryScroll = rememberLazyListState()
     val detailScroll = rememberLazyListState()
     val visibilityChanged by rememberUpdatedState(onEditorVisibilityChanged)
@@ -80,17 +87,11 @@ fun BillActionsHost(
         visibilityChanged(true)
         onDispose { visibilityChanged(false) }
     }
-    // deleteUndoably has no completion callback. Only database absence or its undo entry
-    // is positive evidence: a tap alone must never dismiss a failed deletion.
-    LaunchedEffect(deleting, read, undoItems) {
-        if (deleting && ((read.loaded && read.bill == null) || undoItems.any { it.bill.id == billId })) {
-            close()
-        }
-    }
     fun back() {
-        if (detail) detail = false else close()
+        if (detail && deletedSnapshot == null) detail = false else close()
     }
     val bill = read.bill
+    fun beginEdit() { editorWasTransfer = bill?.type == "TRANSFER"; editing = true }
     val backPixels = RememberBackPixels()
     val navigationScope = rememberCoroutineScope()
     var detailPreview by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
@@ -104,7 +105,7 @@ fun BillActionsHost(
     }
     BackSurface(enabled = !editing || bill == null, onBack = ::back, routeKey = listOf(billId, detail, editing), preview = if (detail) detailPreview else sourcePreview, pixels = backPixels) {
     Box(Modifier.fillMaxSize().pointerInput(billId) { detectTapGestures { } }) {
-        if (!editing || bill == null) {
+        Box(Modifier.fillMaxSize().then(if (editing) Modifier.clearAndSetSemantics {} else Modifier)) {
             SubPageScaffold(title = if (detail) "账单详情" else "账单操作", onBack = { back() }, reserveDock = false) { padding ->
                 io.github.mymoney.ui.design.SectionLazyColumn(
                     state = if (detail) detailScroll else summaryScroll,
@@ -131,15 +132,24 @@ fun BillActionsHost(
                         detail -> {
                             item("record") {
                                 InsetGroup {
-                                    BillField("金额", formatAmount(bill.priceCents))
+                                    Column(Modifier.padding(AbSpacing.l)) {
+                                        BillAmountDisplay(bill.priceCents, bill.type, hidden = editing,
+                                            onBounds = { amountBounds = it }, onFontSize = { amountFont = it })
+                                    }
+                                    if (deletedSnapshot != null) {
+                                        BillField("状态", "已删除 · ${billTime(deletedSnapshot.deletedAt)}")
+                                        GroupFooter("删除当时的账单快照，仅供查看；不代表当前账户余额。")
+                                        val fees = BillDeletionCodec.bills(deletedSnapshot).drop(1)
+                                        if (fees.isNotEmpty()) BillField("一同删除的手续费", fees.joinToString { formatAmount(it.priceCents) })
+                                    }
                                     BillField("类型", billTypeLabel(bill.type))
                                     BillField("账单时间", billTime(bill.timeMillis))
                                     bill.note?.takeIf { it.isNotBlank() }?.let { BillField("备注", it) }
                                     BillField("分类", bill.category)
                                     BillField("二级分类", bill.subCategory)
-                                    BillField("账户", assetAccounts.firstOrNull { it.id == bill.accountId }?.name ?: bill.account)
-                                    if (bill.type == "TRANSFER") BillField("转入账户", assetAccounts.firstOrNull { it.id == bill.transferAccountId }?.name ?: bill.transferAccount ?: "未补全")
-                                    BillField("余额联动", if (bill.assetLinked) "已计入账户余额" else "未计入余额；历史账单不会自动重复扣减")
+                                    BillField("账户", if (deletedSnapshot != null) bill.account else assetAccounts.firstOrNull { it.id == bill.accountId }?.name ?: bill.account)
+                                    if (bill.type == "TRANSFER") BillField("转入账户", if (deletedSnapshot != null) bill.transferAccount ?: "未补全" else assetAccounts.firstOrNull { it.id == bill.transferAccountId }?.name ?: bill.transferAccount ?: "未补全")
+                                    BillField(if (deletedSnapshot != null) "删除前余额联动" else "余额联动", if (bill.assetLinked) "已计入账户余额" else "未计入余额；历史账单不会自动重复扣减")
                                 }
                             }
                             item("source") {
@@ -173,16 +183,15 @@ fun BillActionsHost(
                                 InsetGroup {
                                     Column(Modifier.fillMaxWidth().padding(AbSpacing.l),
                                         verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-                                        Text(formatAmount(bill.priceCents), style = AbType.amountEntry, color = amountTint(p, bill.type),
-                                            modifier = Modifier.onGloballyPositioned { amountBounds = it.boundsInRoot() })
+                                        BillAmountDisplay(bill.priceCents, bill.type, hidden = editing, onBounds = { amountBounds = it }, onFontSize = { amountFont = it })
                                         Text(billTypeLabel(bill.type), style = AbType.headline, color = p.secondaryLabel)
                                     }
                                     bill.note?.takeIf { it.isNotBlank() }?.let { BillField("备注", it) }
                                     BillField("账单时间", billTime(bill.timeMillis))
                                     BillField("分类", bill.category)
-                                    BillField("账户", assetAccounts.firstOrNull { it.id == bill.accountId }?.name ?: bill.account)
-                                    if (bill.type == "TRANSFER") BillField("转入账户", assetAccounts.firstOrNull { it.id == bill.transferAccountId }?.name ?: bill.transferAccount ?: "未补全")
-                                    BillField("余额联动", if (bill.assetLinked) "已计入账户余额" else "未计入余额；历史账单不会自动重复扣减")
+                                    BillField("账户", if (deletedSnapshot != null) bill.account else assetAccounts.firstOrNull { it.id == bill.accountId }?.name ?: bill.account)
+                                    if (bill.type == "TRANSFER") BillField("转入账户", if (deletedSnapshot != null) bill.transferAccount ?: "未补全" else assetAccounts.firstOrNull { it.id == bill.transferAccountId }?.name ?: bill.transferAccount ?: "未补全")
+                                    BillField(if (deletedSnapshot != null) "删除前余额联动" else "余额联动", if (bill.assetLinked) "已计入账户余额" else "未计入余额；历史账单不会自动重复扣减")
                                 }
                             }
                             item("actions") {
@@ -192,48 +201,29 @@ fun BillActionsHost(
                                         ListRow(title = "手续费随原转账一同修改 / 删除", subtitle = "保持本金、手续费与双账户余额一致",
                                             chevron = parent != null, onClick = parent?.let { { parentId = it.id } })
                                     } else ListRow(title = "修改", chevron = true,
-                                        onClick = if (deleting) null else { { editing = true } })
+                                        onClick = if (deleting) null else { { beginEdit() } })
                                     if (!bill.assetLinked && bill.feeParentKey == null) ListRow(
                                         title = if (bill.type == "TRANSFER") "补全转账账户并计入余额" else "计入账户余额",
                                         subtitle = "仅在当前余额尚未包含这笔账单时使用", chevron = true,
-                                        onClick = if (deleting || linking) null else { { if (bill.type == "TRANSFER") editing = true else linkConfirm = true } })
+                                        onClick = if (deleting || linking) null else { { if (bill.type == "TRANSFER") beginEdit() else linkConfirm = true } })
                                     ListRow(title = "详情", chevron = true, dividerAbove = true,
                                         onClick = if (deleting) null else { { openDetail() } })
                                     InsetDivider()
                                     Column(Modifier.fillMaxWidth().padding(AbSpacing.l),
                                         verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-                                        InlineMessage("删除后5秒内可逐笔撤销")
-                                        if (bill.feeParentKey == null) DestructiveButton(text = "删除账单", busy = deleting, busyLabel = "正在删除…",
+                                        if (bill.feeParentKey == null) DestructiveButton(text = "删除账单", enabled = !deleting,
                                             modifier = Modifier.fillMaxWidth(), onClick = {
                                                 deleting = true
-                                                deleteError = null
-                                                BillWriter.deleteUndoably(app, billId) { message ->
-                                                    deleting = false
-                                                    deleteError = message
-                                                }
                                             })
                                     }
                                 }
                             }
                         }
                     }
-                    if (bill != null && bill.type in listOf("EXPENSE", "INCOME")) item("share") {
-                        InsetGroup {
-                            ListRow(title = if (sharing) "正在启动分享…" else "分享至 iCost", subtitle = shareMessage,
-                                onClick = if (sharing) null else { {
-                                    sharing = true; shareMessage = null
-                                    navigationScope.launch {
-                                        try {
-                                            val current = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { dao.byId(billId) }
-                                                ?: error("账单已不存在，无法分享")
-                                            val launched = io.github.mymoney.export.CostShare.shareBills(app, listOf(BillWriter.toDraft(current))) != null
-                                            shareMessage = if (launched) "已发起分享，请在目标 App 确认导入" else "分享未启动，可重试"
-                                            current.recognitionId?.let { io.github.mymoney.data.RecognitionStore.markShare(it, launched) }
-                                        } catch (failure: Exception) {
-                                            shareMessage = failure.message ?: "分享失败，可重试"
-                                        } finally { sharing = false }
-                                    }
-                                } })
+                    if (detail && bill != null && deletedSnapshot == null && bill.feeParentKey == null) item("detail-actions") {
+                        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(AbSpacing.m)) {
+                            InsetGroup { ListRow(title = "修改", chevron = true, onClick = { beginEdit() }) }
+                            DestructiveButton("删除账单", onClick = { deleting = true }, modifier = Modifier.fillMaxWidth())
                         }
                     }
                     if (deleteError != null) item("delete-error") {
@@ -242,7 +232,8 @@ fun BillActionsHost(
                 }
             }
         }
-        if (linkConfirm && bill != null) {
+        if (deleting && deletedSnapshot == null) DeleteBillDialog(billId, origin = "bill_detail", onDismiss = { deleting = false }, onDeleted = { deleting = false; close() })
+        if (linkConfirm && bill != null && deletedSnapshot == null) {
             val linkedAccount = assetAccounts.firstOrNull { it.id == bill.accountId }
                 ?: assetAccounts.firstOrNull { it.name == bill.account }
             androidx.compose.material3.AlertDialog(onDismissRequest = { if (!linking) linkConfirm = false },
@@ -258,38 +249,12 @@ fun BillActionsHost(
                 dismissButton = { TextButton(enabled = !linking, onClick = { linkConfirm = false }) { Text("取消") } })
         }
         parentId?.let { id -> BillActionsHost(id, onClose = { parentId = null }) }
-        if (editing && bill != null) {
-            if (bill.type == "TRANSFER") AssetTransferScreen(original = bill, onBack = { editing = false })
+        if (editing && bill != null && deletedSnapshot == null) {
+            if (editorWasTransfer) AssetTransferScreen(original = bill, onBack = { editing = false })
             else BillEditorDialog(original = bill, newSource = bill.sourcePkg, newTime = bill.timeMillis,
-                sourceAmountBounds = amountBounds, onClose = { editing = false })
+                sourceAmountBounds = amountBounds?.takeIf { it.top >= 0 && it.height > 0 }, sourceAmountFontSize = amountFont, onClose = { editing = false })
         }
     }
-    }
-}
-
-/** Place this in the screen's bottom overlay, outside its LazyColumn. Uses Writer's deadlines. */
-@Composable
-fun BillUndoStack() {
-    val app = LocalContext.current.applicationContext
-    val items by BillWriter.pendingUndo.collectAsStateWithLifecycle()
-    val inFlight = remember { mutableStateMapOf<Long, Boolean>() }
-    Column(Modifier.fillMaxWidth().heightIn(max = 240.dp).verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        items.forEach { item ->
-            key(item.bill.id) {
-                Snackbar(action = {
-                    TextButton(enabled = inFlight[item.bill.id] != true, onClick = {
-                        inFlight[item.bill.id] = true
-                        BillWriter.undoDelete(app, item.bill.id) { result ->
-                            inFlight.remove(item.bill.id)
-                            Toast.makeText(app, result.fold({ "已撤销删除" }, { it.message ?: "撤销失败" }), Toast.LENGTH_SHORT).show()
-                        }
-                    }) { Text("撤销") }
-                }, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
-                    Text("已删除 ${item.bill.note?.takeIf { it.isNotBlank() } ?: item.bill.merchant?.takeIf { it.isNotBlank() } ?: formatAmount(item.bill.priceCents)}")
-                }
-            }
-        }
     }
 }
 

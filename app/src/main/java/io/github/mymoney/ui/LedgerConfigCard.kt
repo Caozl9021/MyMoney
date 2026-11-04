@@ -140,7 +140,7 @@ fun LedgerConfigPage(
                             EmptyState(
                                 icon = AbIcons.Tag,
                                 title = "还没有分类",
-                                message = "在下面添加一个分类名，它必须和 iCost 里的名字一致。",
+                                message = "在下面添加分类名称，用于本地账单归类与统计。",
                             )
                         } else {
                             groups.forEachIndexed { index, group ->
@@ -500,7 +500,7 @@ internal fun RestoreLedgerDefaultsDialog(onDismiss: () -> Unit, onConfirm: () ->
         onDismissRequest = onDismiss,
         title = { Text("恢复默认清单？") },
         text = { Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-            Text("将替换全部支出分类、收入分类和账户候选清单；同名归档账户会恢复为候选。账户余额、资产流水、账单、识别历史、备注模板、识别设置和权限均保留。")
+            Text("将替换全部支出分类、收入分类和账户候选清单；同名归档账户会恢复为候选。账户余额、资产流水、账单、记录历史、备注模板、识别设置和权限均保留。")
             if (errorMessage != null) InlineMessage(errorMessage, isError = true, announce = true)
         } },
         confirmButton = { androidx.compose.material3.TextButton(onClick = onConfirm) { Text("恢复默认清单") } },
@@ -571,7 +571,7 @@ private fun RestoreCategoriesDefaultsDialog(onDismiss: () -> Unit, onConfirm: ()
         title = { Text("恢复默认分类？") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-                Text("将替换全部支出分类、收入分类和二级分类。账户清单、账户余额、资产流水、账单、识别历史、备注模板和识别设置保留。")
+                Text("将替换全部支出分类、收入分类和二级分类。账户清单、账户余额、资产流水、账单、记录历史、备注模板和识别设置保留。")
                 if (errorMessage != null) InlineMessage(errorMessage, isError = true, announce = true)
             }
         },

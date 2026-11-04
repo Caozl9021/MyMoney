@@ -19,7 +19,7 @@
 
 ```bash
 python3 billkit/rules/generate.py
-python3 billkit/rules/package.py --output-dir dist/releases/rules-v1.3.0
+python3 billkit/rules/package.py
 ./gradlew :billkit:testDebugUnitTest :billkit:validateRulePackage \
   -PrulePackage="$PWD/dist/releases/rules-v1.3.0/MyMoney-rules-1.3.0.mymoney-rules.zip"
 ```
@@ -136,3 +136,5 @@ App有效应用范围固定两家，旧白名单/短信偏好只保留兼容值�
 每模板必须有经真实NotificationParser执行的正反例，样本声明provenance/evidence/templateId/observation/expectCents；未命中以null预期。失败/其他资金方向/不可信信封/金额上限由宿主固定控制，奖励金额不参与付款提取。先留样确认真实元数据，再补渠道哈希和锚定正文/奖励尾句、自检，再递增packageVersion打包。未来同能力规则Release无需构建APK；新增宿主语法能力仍需App升级，不能通过任意文本放宽。
 
 本包14条JS规则保持原语义；17条通知正反例加原131条，合计148条自检。保留个人规则、按稳定ID启停；原子持久化成功后发布模板快照。旧App对未知能力/新成员拒绝导入，不声称向旧App热修复。CI触发已覆盖通知源码和配置资产，不自动远程发布。
+
+日常打包默认创建 `dist/rules/<packageVersion>/<run-id>/`，重复输出不覆盖。`--output-dir` 仅用于明确指定候选/发布目录；目录规则见 [打包文件存放规则](../../docs/PACKAGING.md)。CI 的发布目录继续使用 `dist/releases/rules-v<版本>/upload/`。

@@ -47,7 +47,7 @@ class LedgerListCodecTest {
         assertTrue(partial.ledger!!.hasIncome)
         assertEquals(partial, Backup.decode(Backup.encode(partial)))
         assertNull(Backup.decode("""{"format":1,"bills":[]}""").ledger)
-        assertEquals(8, Backup.FORMAT)
+        assertEquals(9, Backup.FORMAT)
         assertNull(empty.assets)
         assertNull(partial.assets)
         assertTrue(Backup.encode(empty).contains("\"format\":${Backup.FORMAT}"))

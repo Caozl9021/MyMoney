@@ -242,11 +242,11 @@ fun HomeScreen(
             }
             homeCardItem(key = "history") {
                 InsetGroup {
-                    ListRow(title = "识别历史",
+                    ListRow(title = "记录历史",
                         subtitle = when {
                             historyError != null -> "读取失败 · 可重试"
                             !historyReady -> "正在读取记录…"
-                            else -> "全部 ${history.size} 条 · 含已记账与已忽略"
+                            else -> "查看识别记录与删除记录"
                         },
                         chevron = true, onClick = { historyFilter = "ALL"; historyOpen = true })
                 }
@@ -259,8 +259,6 @@ fun HomeScreen(
             }
 
         }
-        Box(Modifier.align(Alignment.BottomCenter).padding(horizontal = AbSpacing.page)
-            .padding(bottom = padding.calculateBottomPadding())) { BillUndoStack() }
         }
     }
     if (healthDetails) AlertDialog(

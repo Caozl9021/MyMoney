@@ -20,7 +20,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import android.content.Intent
-import io.github.mymoney.export.CostShare
 import com.example.billkit.BillDraft
 import com.example.billkit.BillType
 
@@ -120,12 +119,8 @@ class ConfirmActivity : ComponentActivity() {
                             title = ConfirmFeedback.saved(result.inserted),
                             detail = ConfirmFeedback.resultDetail(result),
                             canView = result.bill != null,
-                            sharing = operation.sharing,
-                            shareMessage = operation.shareMessage,
                             onDismiss = { finish() },
                             onView = { result.bill?.let { BillResultActivity.open(this@ConfirmActivity, it.id) } },
-                            onShare = if (result.bill != null && result.bill.type != BillType.REFUND.name)
-                                ({ operation.share(this@ConfirmActivity, draft.historyId) }) else null,
                         )
                     } else ConfirmSheet(
                         draft = operation.edited ?: draft,
@@ -174,7 +169,7 @@ class ConfirmActivity : ComponentActivity() {
                 val record = raw.historyId?.let { RecognitionStore.find(it) } ?: if (raw.historyId == null) RecognitionStore.record(raw) else null
                 if (generation != bindingGeneration) return@launch
                 if (record == null || record.status == RecognitionStatus.IGNORED) {
-                    Toast.makeText(applicationContext, "该识别记录已处理或不存在，请在识别历史查看", Toast.LENGTH_LONG).show()
+                    Toast.makeText(applicationContext, "该识别记录已处理或不存在，请在记录历史查看", Toast.LENGTH_LONG).show()
                     finish()
                 } else {
                     val restored = record.toDraft()
@@ -191,7 +186,7 @@ class ConfirmActivity : ComponentActivity() {
                 }
             } catch (error: Exception) {
                 if (generation == bindingGeneration) {
-                    Toast.makeText(applicationContext, error.message ?: "识别历史读取失败，请重试", Toast.LENGTH_LONG).show()
+                    Toast.makeText(applicationContext, error.message ?: "记录历史读取失败，请重试", Toast.LENGTH_LONG).show()
                     finish()
                 }
             }
@@ -256,10 +251,6 @@ class ConfirmSaveOperation : ViewModel() {
 
     var result by mutableStateOf<BillWriter.SaveResult?>(null)
         private set
-    var sharing by mutableStateOf(false)
-        private set
-    var shareMessage by mutableStateOf<String?>(null)
-        private set
 
     fun restoreResult(stored: BillWriter.SaveResult) {
         if (result == null) result = stored
@@ -282,32 +273,5 @@ class ConfirmSaveOperation : ViewModel() {
                 error = it.message ?: "保存失败，请重试"
             },
         )
-    }
-
-    fun share(context: android.content.Context, historyId: String?) {
-        val stored = result ?: return
-        val bill = stored.bill ?: return
-        if (sharing || bill.type == BillType.REFUND.name) return
-        sharing = true
-        shareMessage = null
-        val app = context.applicationContext
-        viewModelScope.launch {
-            try {
-                val current = withContext(Dispatchers.IO) { AppDb.get(app).bills().byId(bill.id) }
-                if (onStored == null) return@launch
-                if (current == null) {
-                    result = stored.copy(bill = null)
-                    shareMessage = "本地记录已处理，但关联账单已删除，无法分享"
-                } else {
-                    val launched = runCatching { CostShare.shareBills(app, listOf(BillWriter.toDraft(current)), onlyTarget = true) }.getOrNull() != null
-                    val marked = runCatching { historyId?.let { RecognitionStore.markShare(it, launched) } }.isSuccess
-                    shareMessage = ConfirmFeedback.shared(stored.inserted, launched) + if (marked) "" else "；分享状态保存失败"
-                }
-            } catch (failure: Exception) {
-                shareMessage = "已保存到本地，分享失败，可重试"
-            } finally {
-                sharing = false
-            }
-        }
     }
 }

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- 家庭同步允许局域网明文 HTTP，但应用层只放行 RFC1918 私网地址；公网地址仍要求 HTTPS。 -->
+    <!-- 家庭同步允许局域网明文 HTTP，但应用层只放行 RFC1918/回环地址及固定 Tailscale 端点 100.65.248.62:18080；公网地址仍要求 HTTPS。 -->
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />

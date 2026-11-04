@@ -102,6 +102,7 @@ tmp/
 !/docs/QIANJI_IMPORT.md
 !/docs/LSP_MODULE.md
 !/docs/VERSIONING.md
+!/docs/PACKAGING.md
 
 # 内部规划、交付快照、验证记录与交接文档
 openspec/

@@ -78,11 +78,11 @@ docker compose exec home-sync python -m app.cli pair-code
 
 ## M4 手动账本快照
 
-App 配对后可主动“立即备份”、查看家庭备份、下载并预览后选择合并或覆盖。不会自动上传、自动恢复或删除历史备份。App 保留规则/备注配置、权限及配对状态，恢复前将本机账本保存至私有目录；私有快照随卸载消失，应另行导出长期保管。主账本仍为 Room9、JSON8。
+App 配对后可主动“立即备份”、查看家庭备份、下载并预览后选择合并或覆盖。不会自动上传、自动恢复或删除历史备份。App 保留规则/备注配置、权限及配对状态，恢复前将本机账本保存至私有目录；私有快照随卸载消失，应另行导出长期保管。App 1.8.0起主账本为Room10、JSON9；旧JSON8继续可读，删除日志只读且恢复时合并保留。
 
 容器内备份路径固定为 `/data/backups`，`.env` 的 `MYMONEY_BACKUP_DIR` 仅指定宿主 bind mount 源。升级须 `docker compose up -d --build --force-recreate`，不需要新增表或迁移。宿主目录需允许容器写入。反向代理须允许至多 200MiB 请求体，并设置足够上传超时；不要记录 Authorization 或请求正文。
 
-上传：`PUT /v1/backups/{uuid}`，Bearer 鉴权，原始 `application/json`、Content-Length、`X-Content-SHA256`、`X-App-Version`、`X-Space-Epoch`；仅接受未压缩 JSON8，最多 200MiB。服务核对实际长度、SHA、格式、实际账单数，从内容读取快照时间。服务只做结构校验，客户端下载后仍须完整解码和关联校验。只有 `.part` 写入并 fsync、UUID 完整文件原子落盘、PG 索引提交后才返回成功。相同 UUID/摘要重传幂等，异内容 409；服务不可达或磁盘失败不会删除旧快照。
+上传：`PUT /v1/backups/{uuid}`，Bearer 鉴权，原始 `application/json`、Content-Length、`X-Content-SHA256`、`X-App-Version`、`X-Space-Epoch`；接受未压缩 JSON8/JSON9（格式9包含经校验的只读删除日志），最多 200MiB。服务核对实际长度、SHA、格式、实际账单数，从内容读取快照时间。服务只做结构校验，客户端下载后仍须完整解码和关联校验。只有 `.part` 写入并 fsync、UUID 完整文件原子落盘、PG 索引提交后才返回成功。相同 UUID/摘要重传幂等，异内容 409；服务不可达或磁盘失败不会删除旧快照。
 
 `GET /v1/backups?offset=0&limit=50` 返回本空间元数据（`id,deviceId,deviceName,appVersion,backupSchema,sha256,sizeBytes,billCount,snapshotAt,uploadedAt`）、hasMore、nextOffset。`GET /v1/backups/{uuid}` 鉴权下载完整 JSON，服务先核对文件长度及 SHA；设备撤销后所有备份接口拒绝。未提供 HTTP 删除接口，首期默认保留全部历史。
 
@@ -102,3 +102,21 @@ docker compose exec -T home-sync python -m app.cli backup-audit
 4. 旧空间设备令牌和备份索引由 PG 恢复；若 PG 与文件卷不匹配，下载会报文件不可用，不能声明恢复成功。保留原始备份与恢复前数据直到用户验收。另一磁盘/主机上的副本才覆盖宿主磁盘故障风险。
 
 构建通过仓库内 `server/constraints.txt` 固定 M4 已验证的 Python3.12/Linux 运行依赖版本；更新依赖时应重新执行隔离协议/备份测试再更新约束。不将本机路径或认证配置加入约束文件。
+
+## 固定 Tailscale 端点
+
+App 1.7.3/129 增加 `http://100.65.248.62:18080` 精确 HTTP 例外，用于配对、规则同步及账本备份。请在 App 服务地址栏填写完整地址；该例外不覆盖其他 Tailscale IP 或端口。服务所在设备与手机仍需通过 Tailscale 互通，服务实际监听端口为 18080 且防火墙允许访问。原私网 HTTP 与 HTTPS 仍可用。
+
+## 从JSON8服务升级到1.8.0的JSON9兼容服务
+
+在仓库已更新到包含JSON9服务实现后，于 `deploy/home-sync/` 执行：
+
+```bash
+docker compose build home-sync
+docker compose up -d --force-recreate home-sync
+curl --fail http://127.0.0.1:18080/health
+```
+
+上面的18080是自定义端口示例，应以现有 `.env` 的 `MYMONEY_PORT` 为准；不要重建或覆盖 `.env`。先build时旧容器继续服务，up阶段短暂重启。此次不需要运行Alembic迁移，沿用现有数据库、备份bind mount与已配对设备令牌；不要执行 `down -v`。
+
+`/health`返回ok只说明服务启动，不能单独证明支持JSON9；升级后在App的家庭备份中执行一次“立即备份”，再查看/下载预览，确认新格式可往返。旧JSON8备份仍可下载。服务更新不会主动恢复、合并或删除账单。

@@ -16,12 +16,20 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
+// Kotlin String.isBlank whitespace, also used for statistics' fallback labels.
+private const val GROUP_BLANK_CHARS = "char(9,10,11,12,13,28,29,30,31,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288)"
+private const val CATEGORY_GROUP_SQL = "CASE WHEN trim(COALESCE(category, ''), " + GROUP_BLANK_CHARS + ") = '' THEN '未分类' ELSE category END"
+private const val ACCOUNT_VALUE_SQL = "COALESCE((SELECT name FROM asset_accounts WHERE id = bills.accountId), account)"
+private const val ACCOUNT_GROUP_SQL = "CASE WHEN trim(COALESCE(" + ACCOUNT_VALUE_SQL + ", ''), " + GROUP_BLANK_CHARS + ") = '' THEN '未知账户' ELSE " + ACCOUNT_VALUE_SQL + " END"
+
 /** Kept in one constant so the visible window and complete totals cannot drift apart. */
 private const val FILTERED_LEDGER_WHERE = """
     WHERE (COALESCE(merchant, '') LIKE :pattern ESCAPE '\' OR COALESCE(note, '') LIKE :pattern ESCAPE '\')
       AND timeMillis >= :from AND timeMillis < :to
       AND (:category IS NULL OR COALESCE(category, '') = :category)
       AND (:type IS NULL OR type = :type)
+      AND (:statisticsCategory IS NULL OR (""" + CATEGORY_GROUP_SQL + """) = :statisticsCategory)
+      AND (:statisticsAccount IS NULL OR (""" + ACCOUNT_GROUP_SQL + """) = :statisticsAccount)
 """
 
 /**
@@ -75,6 +83,7 @@ interface BillDao {
     @Query("SELECT * FROM bills " + FILTERED_LEDGER_WHERE + " ORDER BY timeMillis DESC, id DESC LIMIT :limit")
     fun observeFilteredWindow(
         pattern: String, from: Long, to: Long, category: String?, type: String?, limit: Int,
+        statisticsCategory: String? = null, statisticsAccount: String? = null,
     ): Flow<List<BillEntity>>
 
     @Query("""
@@ -86,6 +95,7 @@ interface BillDao {
     """ + FILTERED_LEDGER_WHERE)
     fun observeFilteredSummary(
         pattern: String, from: Long, to: Long, category: String?, type: String?,
+        statisticsCategory: String? = null, statisticsAccount: String? = null,
     ): Flow<BillQuerySummary>
 
     /** Includes historical categories and folds SQL NULL into the unclassified empty value. */
@@ -207,9 +217,10 @@ interface BillDao {
     suspend fun delete(id: Long)
 }
 
-@Database(entities = [BillEntity::class, RecognitionEntity::class, AssetAccount::class, AssetEntry::class, AssetMeta::class, CaptureAlias::class, CaptureEvidence::class, CaptureDelivery::class, ImportIdentity::class, RuleModelEntity::class, AppDataEntity::class], version = 9, exportSchema = false)
+@Database(entities = [BillEntity::class, RecognitionEntity::class, AssetAccount::class, AssetEntry::class, AssetMeta::class, CaptureAlias::class, CaptureEvidence::class, CaptureDelivery::class, ImportIdentity::class, RuleModelEntity::class, AppDataEntity::class, BillDeletionLog::class], version = 10, exportSchema = false)
 abstract class AppDb : RoomDatabase() {
 
+    abstract fun deletions(): BillDeletionDao
     abstract fun bills(): BillDao
     abstract fun recognitions(): RecognitionDao
     abstract fun assets(): AssetDao
@@ -329,12 +340,24 @@ abstract class AppDb : RoomDatabase() {
             }
         }
 
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""CREATE TABLE IF NOT EXISTS bill_deletion_log (
+                    eventId TEXT NOT NULL PRIMARY KEY, deletedAt INTEGER NOT NULL, origin TEXT NOT NULL,
+                    principalId INTEGER NOT NULL, recognitionId TEXT, groupId TEXT NOT NULL,
+                    snapshotVersion INTEGER NOT NULL, snapshotJson TEXT NOT NULL)""")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_bill_deletion_log_deletedAt ON bill_deletion_log(deletedAt)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_bill_deletion_log_principalId ON bill_deletion_log(principalId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_bill_deletion_log_recognitionId ON bill_deletion_log(recognitionId)")
+            }
+        }
+
         fun get(context: Context): AppDb = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext,
                 AppDb::class.java,
                 "mymoney.db",
-            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9).build().also { instance = it }
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10).build().also { instance = it }
         }
     }
 }

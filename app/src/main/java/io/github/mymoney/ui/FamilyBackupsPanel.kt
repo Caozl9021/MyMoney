@@ -76,7 +76,7 @@ internal fun FamilyBackupsPanel() {
     }
 
     InsetGroup {
-        ListRow(title = "账本快照备份", subtitle = "手动保存完整账本到家庭服务，包含资产、流水与识别历史。不会自动备份或清理历史。")
+        ListRow(title = "账本快照备份", subtitle = "手动保存完整账本到家庭服务，包含资产、流水与记录历史。不会自动备份或清理历史。")
         ListRow(title = "本机最近成功备份", subtitle = lastBackup, dividerAbove = true)
     }
     PrimaryButton(
@@ -130,7 +130,7 @@ internal fun FamilyBackupsPanel() {
     if (current != null && mode == null) AlertDialog(
         onDismissRequest = { if (!busy) preview = null },
         title = { Text("账本恢复预览") },
-        text = { Column(Modifier.verticalScroll(rememberScrollState())) { Text("来源：${current.entry.deviceName}\n日期：${backupDate(current.entry.snapshotAt)}\n账单 ${current.snapshot.bills.size} 笔，识别历史 ${current.snapshot.history.orEmpty().size} 条，资产账户 ${current.snapshot.assets?.accounts.orEmpty().size} 个。\n\n合并会跳过已有账单；覆盖会替换当前账本。恢复前将保存本机快照。当前规则、分类与备注设置、设备权限及家庭连接默认保留。")
+        text = { Column(Modifier.verticalScroll(rememberScrollState())) { Text("来源：${current.entry.deviceName}\n日期：${backupDate(current.entry.snapshotAt)}\n账单 ${current.snapshot.bills.size} 笔，识别记录 ${current.snapshot.history.orEmpty().size} 条、删除记录 ${current.snapshot.deletions.orEmpty().size} 条，资产账户 ${current.snapshot.assets?.accounts.orEmpty().size} 个。\n\n合并会跳过已有账单；覆盖会替换当前账本。恢复前将保存本机快照。当前规则、分类与备注设置、设备权限及家庭连接默认保留。")
             if (current.snapshot.ledger != null) Row {
                 Checkbox(checked = restoreConfiguration, onCheckedChange = { restoreConfiguration = it })
                 Text("同时恢复分类、记账周期和备注配置；备注规则会作为本机修改参与家庭同步。")
@@ -147,7 +147,7 @@ internal fun FamilyBackupsPanel() {
         onDismissRequest = { if (!busy) mode = null },
         title = { Text(if (selected == BackupStore.Mode.REPLACE) "确认覆盖本机账本？" else "确认合并账本？") },
         text = { Text((if (selected == BackupStore.Mode.REPLACE)
-            "将用所选快照替换当前账单、资产与识别历史。先保存本机恢复前快照；保存失败将停止恢复。请确认来源和日期正确。"
+            "将用所选快照替换当前账单、资产与识别记录；删除日志按事件合并，保留本机日志。先保存本机恢复前快照；保存失败将停止恢复。请确认来源和日期正确。"
             else "将按账单与资产身份合并；冲突时停止并保留当前账本。先保存本机恢复前快照。") +
             if (restoreConfiguration) "\n已选择恢复个人配置；备注配置会参与家庭同步。设备权限与家庭连接保留。" else "") },
         confirmButton = { TextButton(enabled = !busy, onClick = { runOperation {

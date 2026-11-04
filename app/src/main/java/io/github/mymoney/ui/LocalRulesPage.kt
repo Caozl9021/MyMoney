@@ -154,11 +154,11 @@ internal fun RulesActionDialog(state: RulesSectionsState) {
     }
     val impact = when (action) {
         RuleBulkAction.IMPORT -> "替换当前导入规则，后续识别立即使用新规则；文件有误保留现有规则。" +
-            "不修改账单、识别历史、已学习规则和餐段设置。"
+            "不修改账单、记录历史、已学习规则和餐段设置。"
         RuleBulkAction.RESET -> "移除全部导入规则覆盖，重新使用随应用提供的规则。" +
-            "保留账单、识别历史、已学习规则和餐段设置；移除的导入覆盖不能直接撤销。"
+            "保留账单、记录历史、已学习规则和餐段设置；移除的导入覆盖不能直接撤销。"
         RuleBulkAction.CLEAR_STATS -> "清除最近7天按日期、应用和结果记录的识别次数。" +
-            "保留账单、识别历史、规则和诊断样本。此操作不可撤销。"
+            "保留账单、记录历史、规则和诊断样本。此操作不可撤销。"
     }
     AlertDialog(
         onDismissRequest = state.dismissAction,

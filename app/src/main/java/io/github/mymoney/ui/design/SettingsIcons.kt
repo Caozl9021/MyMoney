@@ -43,7 +43,7 @@ internal fun SettingsIconBadge(title: String, fallback: ImageVector, size: Dp = 
         "资产", "识别通道", "导出到 iCost", "页面诊断" -> colors.blue
         "备注", "备注模板", "确认卡" -> colors.yellow
         "自动记账", "通知模板" -> colors.pink
-        "识别历史", "学习记忆", "外观", "分类预设" -> colors.violet
+        "记录历史", "学习记忆", "外观", "分类预设" -> colors.violet
         "备份", "完整备份与恢复", "权限与后台运行", "规则文件" -> colors.teal
         "导出", "导入导出", "迁移与备份", "钱迹账单", "应用与通道", "识别统计" -> colors.green
         else -> colors.indigo
@@ -55,7 +55,7 @@ internal fun SettingsIconBadge(title: String, fallback: ImageVector, size: Dp = 
         "资产" -> "account_balance_wallet"
         "备注", "备注模板", "备注建议", "确认卡", "规则文件", "导入说明" -> "receipt_long"
         "自动记账" -> "bolt"
-        "识别历史" -> "work_history"
+        "记录历史" -> "work_history"
         "备份", "完整备份与恢复", "权限与后台运行" -> "shield"
         "应用与通道", "识别通道", "页面诊断" -> "smartphone"
         "记账周期" -> "work_history"

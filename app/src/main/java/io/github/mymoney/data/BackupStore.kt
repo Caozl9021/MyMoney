@@ -76,8 +76,10 @@ object BackupStore {
     /** Shared production reader used by isolated consistency verification. */
     internal suspend fun readDatabaseSnapshot(db: AppDb, config: ExportConfiguration): Backup.Snapshot {
         var importRows = emptyList<ImportIdentity>()
+        var deletionRows = emptyList<BillDeletionLog>()
         val (data, captureRows) = db.withTransaction {
             importRows = db.imports().all()
+            deletionRows = db.deletions().allOnce()
             Triple(db.bills().allOnce(), db.recognitions().allOnce(), AssetSnapshot(db.assets().accounts(), db.assets().entries())) to
                 CaptureSnapshot(db.capture().aliases(), db.capture().exportEvidence(), db.capture().deliveries())
         }
@@ -110,6 +112,7 @@ object BackupStore {
             },
             history = historyRows,
             imports = importRows,
+            deletions = deletionRows,
             capture = CaptureMetadataCodec.portable(captureRows),
             assets = assetRows,
             ledger = Backup.Ledger(
@@ -228,11 +231,14 @@ object BackupStore {
     internal suspend fun restoreDatabase(db: AppDb, snapshot: Backup.Snapshot, mode: Mode,
         journalConfiguration: Boolean = true, requireRuleRepository: Boolean = false): Pair<Int, Int> {
         Backup.validateAssetBills(snapshot.bills, snapshot.assets)
+        snapshot.deletions?.let(Backup::validateDeletionLogs)
         snapshot.assets?.let(AssetBackupCodec::validate)
         snapshot.capture?.let { CaptureMetadataCodec.validate(it,
             snapshot.history ?: throw IllegalArgumentException("采集元数据缺少history")) }
         return db.withTransaction {
                 val historyDao = db.recognitions()
+                val localDeletions = db.deletions().allOnce()
+                val targetDeletions = Backup.mergeDeletionLogs(localDeletions, snapshot.deletions.orEmpty())
                 val assetDao = db.assets()
                 val localAssetSnapshot = AssetSnapshot(assetDao.accounts(), assetDao.entries())
                 val existingBills = db.bills().allOnce()
@@ -359,6 +365,8 @@ object BackupStore {
                     }
                     merged.deliveries.filterNot { it.recognitionId in deliveryIds }.forEach { captureDao.putDelivery(it) }
                 }
+                val localDeletionIds = localDeletions.map { it.eventId }.toSet()
+                targetDeletions.filterNot { it.eventId in localDeletionIds }.forEach { db.deletions().insert(it) }
                 // Validate the merged effective postings as a whole, not just each input.
                 // Distinct event UUIDs must not double-post the same stable bill key.
                 Backup.validateAssetBills(db.bills().allOnce().map(::assetBillModel),

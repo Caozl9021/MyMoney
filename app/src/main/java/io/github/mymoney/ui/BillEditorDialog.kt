@@ -12,6 +12,10 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Text
@@ -36,7 +40,7 @@ import com.example.billkit.BillType
 
 /** Same-window editor preserves the amount trajectory; the shell hides its sibling dock while open. */
 @Composable
-fun BillEditorDialog(original: BillEntity?, newSource: String, newTime: Long, sourceAmountBounds: Rect? = null, onClose: () -> Unit) {
+fun BillEditorDialog(original: BillEntity?, newSource: String, newTime: Long, sourceAmountBounds: Rect? = null, sourceAmountFontSize: androidx.compose.ui.unit.TextUnit? = null, onClose: () -> Unit) {
     val context = LocalContext.current
     val app = context.applicationContext
     val haptic = rememberAbHaptic()
@@ -51,34 +55,93 @@ fun BillEditorDialog(original: BillEntity?, newSource: String, newTime: Long, so
     val operation = remember(operationKey) { EditorSaveOperations.getOrPut(operationKey) { EditorSaveOperation() } }
     val saving = operation.saving
     val error = operation.error
-    LaunchedEffect(operation.completed) {
-        if (operation.completed) {
-            onClose()
-        }
-    }
     DisposableEffect(operationKey, haptic) {
         val feedbackHaptic: () -> Unit = { haptic.confirm() }
         operation.onStored = feedbackHaptic
         onDispose {
             if (operation.onStored === feedbackHaptic) operation.onStored = null
-            if (!operation.saving) EditorSaveOperations.remove(operationKey)
+            if (!operation.saving && !operation.completed && operation.exitRequested == null) EditorSaveOperations.remove(operationKey)
         }
     }
     val reduceMotion = LocalReduceMotion.current
-    val p = LocalAbPalette.current
-    var target by remember { mutableStateOf<Rect?>(null) }
+    // The sheet stays in its final geometry while a single overlay moves from the source.
+    // This avoids measuring a target which is itself travelling in a second animation.
+    val source = remember(original?.id) { sourceAmountBounds?.takeIf { it.width > 0 && it.height > 0 && it.top >= 0 } }
+    val shared = original != null && source != null && !reduceMotion
+    var exiting by remember(original?.id) { mutableStateOf(false) }
+    var reverseDraft by remember(original?.id) { mutableStateOf<BillDraft?>(null) }
+    var currentTarget by remember(original?.id) { mutableStateOf<Rect?>(null) }
+    var reverseSource by remember(original?.id) { mutableStateOf<Rect?>(null) }
+    var reverseTarget by remember(original?.id) { mutableStateOf<Rect?>(null) }
+    var reverseSourceFont by remember(original?.id) { mutableStateOf<androidx.compose.ui.unit.TextUnit?>(null) }
+    var target by remember(original?.id) { mutableStateOf<Rect?>(null) }
+    var targetFont by remember(original?.id) { mutableStateOf<androidx.compose.ui.unit.TextUnit?>(null) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val sourceFont = remember(original?.id) { sourceAmountFontSize ?: AbType.amountEntry.fontSize / density.fontScale.coerceAtLeast(1f) }
     var hostOrigin by remember { mutableStateOf(Offset.Zero) }
-    val progress = remember { Animatable(if (reduceMotion || sourceAmountBounds == null) 1f else 0f) }
-    LaunchedEffect(target != null, reduceMotion) {
-        if (reduceMotion) progress.snapTo(1f)
-        else if (target != null) progress.animateTo(1f, tween(380))
+    var interrupted by remember(original?.id) { mutableStateOf(false) }
+    val progress = remember(original?.id) { Animatable(if (shared) 0f else 1f) }
+    LaunchedEffect(target, targetFont, reduceMotion, interrupted, exiting) {
+        if (exiting) return@LaunchedEffect
+        if (!shared || interrupted) progress.snapTo(1f)
+        else if (target != null && targetFont != null) progress.animateTo(1f, tween(320, easing = androidx.compose.animation.core.FastOutSlowInEasing))
     }
 
+    val transitionScope = rememberCoroutineScope()
+    val latestClose by rememberUpdatedState(onClose)
+    val latestOriginal by rememberUpdatedState(original)
+    val latestSource by rememberUpdatedState(sourceAmountBounds)
+    val latestSourceFont by rememberUpdatedState(sourceAmountFontSize)
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    fun leave(saved: Boolean) {
+        if (exiting) return
+        exiting = true
+        operation.exitRequested = saved
+        reverseDraft = if (saved) operation.savedDraft ?: draft else draft
+        reverseTarget = currentTarget ?: target
+        transitionScope.launch {
+            // Let the committed Room row update the hidden summary before measuring the return point.
+            if (saved && original != null) {
+                val stored = operation.savedDraft
+                kotlinx.coroutines.withTimeoutOrNull(500) {
+                    androidx.compose.runtime.snapshotFlow { latestOriginal?.let { row -> stored == null || (row.priceCents == stored.priceCents && row.type == stored.type.name) } == true }
+                        .first { it }
+                }
+                androidx.compose.runtime.withFrameNanos { }; androidx.compose.runtime.withFrameNanos { }
+            }
+            reverseSource = latestSource?.takeIf { it.top >= 0 && it.height > 0 } ?: source
+            reverseSourceFont = latestSourceFont ?: sourceFont
+            progress.snapTo(1f)
+            progress.animateTo(0f, tween(if (reduceMotion) 0 else 280, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+            focus.clearFocus(force = true)
+            keyboard?.hide()
+            EditorSaveOperations.remove(operationKey)
+            latestClose()
+        }
+    }
+    LaunchedEffect(operation.completed) { if (operation.completed || operation.exitRequested != null) leave(saved = operation.completed) }
+    val displayedProgress = if (!exiting && (interrupted || reduceMotion)) 1f else progress.value
+    val trajectorySource = if (exiting) reverseSource else source
+    val trajectoryTarget = if (exiting) reverseTarget else target
+    val hasMovingAmount = !reduceMotion && trajectorySource != null && (shared || exiting)
     Box(Modifier.fillMaxSize().onGloballyPositioned { hostOrigin = it.boundsInRoot().topLeft }) {
         ConfirmSheet(
             draft = draft,
-            amountVisibility = progress.value >= 1f,
-            onAmountBounds = { target = it },
+            amountVisibility = displayedProgress >= 1f || !hasMovingAmount,
+            onAmountBounds = { next ->
+                currentTarget = next
+                val previous = target
+                if (previous == null) target = next
+                else if (!exiting && progress.value < 1f && previous != next) interrupted = true
+            },
+            onAmountFontSize = { size ->
+                if (!exiting && targetFont != null && targetFont != size && progress.value < 1f) interrupted = true
+                targetFont = size
+            },
+            sharedAmountProgress = if (original != null || exiting) displayedProgress else null,
+            managedEditorExit = true,
+            editorExiting = exiting,
             editableDetails = true,
             saveLabel = if (original == null) "记一笔" else "保存修改",
             ignoreLabel = "取消",
@@ -96,6 +159,7 @@ fun BillEditorDialog(original: BillEntity?, newSource: String, newTime: Long, so
                         operation.saving = false
                         result.fold(
                             onSuccess = {
+                                operation.savedDraft = edited
                                 operation.onStored?.invoke()
                                 operation.completed = true
                             },
@@ -108,20 +172,17 @@ fun BillEditorDialog(original: BillEntity?, newSource: String, newTime: Long, so
                 }
             },
             onImport = {},
-            onIgnore = { if (!operation.saving) onClose() },
+            onIgnore = { if (!operation.saving) leave(saved = false) },
         )
-        val destination = target
-        if (sourceAmountBounds != null && destination != null && progress.value < 1f) {
-            val fraction = progress.value
-            val x = sourceAmountBounds.left + (destination.left - sourceAmountBounds.left) * fraction - hostOrigin.x
-            val y = sourceAmountBounds.top + (destination.top - sourceAmountBounds.top) * fraction - hostOrigin.y
-            Text(formatAmount(draft.priceCents),
-                style = AbType.amountRow.copy(fontSize = lerp(AbType.amountRow.fontSize, AbType.amountEntry.fontSize, fraction)),
-                color = amountTint(p, draft.type.name),
-                maxLines = 1,
-                modifier = Modifier.graphicsLayer { translationX = x; translationY = y }
-                    .clearAndSetSemantics {},
-            )
+        if (hasMovingAmount && trajectorySource != null && displayedProgress < 1f) {
+            val destination = trajectoryTarget ?: trajectorySource
+            val fraction = displayedProgress
+            val x = trajectorySource.left + (destination.left - trajectorySource.left) * fraction - hostOrigin.x
+            val y = trajectorySource.top + (destination.top - trajectorySource.top) * fraction - hostOrigin.y
+            val shownDraft = reverseDraft ?: draft
+            BillAmountDisplay(shownDraft.priceCents, shownDraft.type.name,
+                modifier = Modifier.graphicsLayer { translationX = x; translationY = y }.clearAndSetSemantics {},
+                amountFontSize = lerp(if (exiting) reverseSourceFont ?: sourceFont else sourceFont, targetFont ?: sourceFont, fraction))
         }
     }
 }
@@ -131,6 +192,8 @@ private class EditorSaveOperation {
     var saving by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
     var completed by mutableStateOf(false)
+    var savedDraft: BillDraft? = null
+    var exitRequested: Boolean? = null
     var onStored: (() -> Unit)? = null
 }
 private val EditorSaveOperations = mutableMapOf<String, EditorSaveOperation>()

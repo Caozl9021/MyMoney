@@ -68,63 +68,15 @@ echo "🔨 构建主 App (Release，包含内置 LSP 增强)..."
 
 APP_DEBUG="app/build/outputs/apk/debug/app-debug.apk"
 APP_RELEASE="app/build/outputs/apk/release/app-release.apk"
-BRANCH_TAG="$(git branch --show-current)"
-BRANCH_TAG="${BRANCH_TAG//\//-}"
-BRANCH_TAG="${BRANCH_TAG:-detached}"
-DIST_DEBUG="dist/MyMoney-${VERSION_NAME}-${BRANCH_TAG}-debug.apk"
-DIST_RELEASE="dist/MyMoney-${VERSION_NAME}-${BRANCH_TAG}-release.apk"
-
-# 复制 + 核对版本（aapt2 读到的不一致就报错，不静默通过）
-echo ""
-echo "📦 复制产物到 dist/ 并核对版本..."
-
-AAPT2="${ANDROID_HOME:-$HOME/Android/Sdk}/build-tools/35.0.0/aapt2"
-check_version() {
-    local apk="$1"
-    if [ ! -x "$AAPT2" ]; then
-        echo "⚠️  未找到 aapt2，跳过版本核对：$apk"
-        return 0
-    fi
-    local badging
-    badging=$("$AAPT2" dump badging "$apk" 2>/dev/null | head -1)
-    if ! echo "$badging" | grep -q "versionName='$VERSION_NAME'" ||
-        ! echo "$badging" | grep -q "versionCode='$VERSION_CODE'"; then
-        echo "❌ $apk 的实际版本与 gradle 不一致："
-        echo "   $badging"
-        exit 1
-    fi
-    echo "   ✓ $(basename "$apk") = $VERSION_NAME ($VERSION_CODE)"
-}
-
-for pair in "$APP_DEBUG:$DIST_DEBUG" "$APP_RELEASE:$DIST_RELEASE"; do
-    src="${pair%%:*}"
-    dst="${pair##*:}"
-    if [ ! -f "$src" ]; then
-        echo "❌ 缺少产物：$src"
-        exit 1
-    fi
-    cp "$src" "$dst"
-    check_version "$dst"
-done
-
-# 正式 Release 的 app-update.json：从最终签名 APK 读取真实版本/签名/摘要。
-echo ""
-echo "🧾 生成 App 更新清单..."
+# 每次收集创建独立目录，APK包内版本/签名/摘要核对通过才更新最新指针。
 NOTES_ARGS=()
-if [ -f "dist/RELEASE_NOTES-v${VERSION_NAME}.md" ]; then
-    NOTES_ARGS=(--notes-file "dist/RELEASE_NOTES-v${VERSION_NAME}.md")
+if [ -f "dist/notes/v${VERSION_NAME}/RELEASE_NOTES-v${VERSION_NAME}.md" ]; then
+    NOTES_ARGS=(--notes "dist/notes/v${VERSION_NAME}/RELEASE_NOTES-v${VERSION_NAME}.md")
 fi
-python3 tools/release/generate-app-update.py \
-    --apk "$DIST_RELEASE" \
-    --output "dist/app-update.json" \
-    "${NOTES_ARGS[@]}"
-cp "dist/app-update.json" "dist/MyMoney-${VERSION_NAME}-app-update.json"
-
-echo ""
-echo "=========================================="
-echo "📊 构建产物："
-echo "=========================================="
-ls -lh dist/ | grep "MyMoney"
+python3 tools/release/collect-app-build.py \
+    --release "$APP_RELEASE" --debug "$APP_DEBUG" \
+    --expected-version "$VERSION_NAME" --expected-code "$VERSION_CODE" "${NOTES_ARGS[@]}"
+echo "最新产物位置：dist/latest-app.json"
 
 echo ""
 echo "=========================================="

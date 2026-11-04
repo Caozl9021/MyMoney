@@ -81,7 +81,7 @@ def test_invalid_uploads_never_create_ready_index(client):
     assert c.put(f"/v1/backups/{backup_id}", content=raw, headers=bad).status_code == 413
     bad = dict(h, **{"X-Space-Epoch": str(uuid4())})
     assert c.put(f"/v1/backups/{backup_id}", content=raw, headers=bad).status_code == 409
-    for data in (b'{}', raw.replace(b'"format": 8', b'"format": 9'), raw_snapshot([{"p": -1}]), b'{'):
+    for data in (b'{}', raw.replace(b'"format": 8', b'"format": 10'), raw_snapshot([{"p": -1}]), b'{'):
         assert c.put(f"/v1/backups/{backup_id}", content=data, headers=headers(pair, data)).status_code == 422
     assert c.get("/v1/backups", headers=h).json()["items"] == []
     assert not list(directory.rglob("*.part")) and not list(directory.rglob("*.json"))
@@ -186,3 +186,28 @@ def test_restart_and_read_only_audit(client):
     assert len(audit["orphanFiles"]) == 1 and len(audit["partialFiles"]) == 1
     assert audit["missingFiles"] == [] and audit["corruptFiles"] == []
     assert orphan.is_file() and partial.is_file()
+
+
+def test_json9_audit_logs_upload_with_actual_schema_without_counting_deleted_bills(client):
+    c, pair, directory = client
+    principal = {"id": 41, "priceCents": 1234, "type": "EXPENSE", "timeMillis": 1793520000000,
+                 "sourcePkg": "simulation", "strategy": "test", "fingerprint": "deleted-only",
+                 "createdAt": 1793520000000, "assetKey": "deleted-key", "assetLinked": False,
+                 "transferFeeCents": 0, "account": "冻结账户", "note": "原备注"}
+    event = {"eventId": str(uuid4()), "deletedAt": 1793520000001, "origin": "detail", "principalId": 41,
+             "recognitionId": None, "groupId": "deleted-key", "snapshotVersion": 1,
+             "snapshotJson": json.dumps({"bills": [principal]}, ensure_ascii=False)}
+    raw = json.dumps({"kind": "MyMoneyBackup", "format": 9, "exportedAt": 1793520000002,
+                      "bills": [], "deletions": [event]}, ensure_ascii=False).encode()
+    h = headers(pair, raw)
+    backup_id = uuid4()
+    response = c.put(f"/v1/backups/{backup_id}", content=raw, headers=h)
+    assert response.status_code == 200, response.text
+    row = response.json()
+    assert row["backupSchema"] == 9 and row["billCount"] == 0
+    assert c.put(f"/v1/backups/{backup_id}", content=raw, headers=h).json() == row
+    assert c.get(f"/v1/backups/{backup_id}", headers=h).content == raw
+    malformed = raw.replace(b'"snapshotVersion": 1', b'"snapshotVersion": 2')
+    assert c.put(f"/v1/backups/{uuid4()}", content=malformed, headers=headers(pair, malformed)).status_code == 422
+    assert len(c.get("/v1/backups", headers=h).json()["items"]) == 1
+    assert not list(directory.rglob("*.part"))

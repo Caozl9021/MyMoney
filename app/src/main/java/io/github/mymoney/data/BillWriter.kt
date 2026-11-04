@@ -3,9 +3,6 @@ package io.github.mymoney.data
 import android.content.Context
 import androidx.room.withTransaction
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -63,7 +60,7 @@ object BillWriter {
                         val history = draft.historyId?.let { id ->
                             db.recognitions().byId(id) ?: error("识别记录不存在，请从历史重新打开")
                         }
-                        require(history?.reviewOf == null) { "请先在识别历史核对是否为独立交易" }
+                        require(history?.reviewOf == null) { "请先在记录历史核对是否为独立交易" }
                         if (history?.status == RecognitionStatus.RECORDED) {
                             // A deleted association is deliberately not resurrected or guessed by amount.
                             SaveResult(false, history.billId?.let { dao.byId(it) })
@@ -137,12 +134,14 @@ object BillWriter {
         }
     }
 
-    data class UndoDeletion(val bill: BillEntity, val expiresAt: Long, val relatedBills: List<BillEntity> = emptyList())
-    private val undoItems = MutableStateFlow<List<UndoDeletion>>(emptyList())
-    val pendingUndo = undoItems.asStateFlow()
+    /** Capture the entire current group shown by the confirmation dialog. */
+    suspend fun deletionPreview(context: Context, id: Long): List<BillEntity> = withContext(Dispatchers.IO) {
+        val db = AppDb.get(context.applicationContext)
+        db.withTransaction { deletionPreviewInTransaction(db, id) }
+    }
 
-    /** 先真实删除，再在进程内提供5秒撤销；多笔独立过期，无延迟提交丢失风险。 */
-    fun deleteUndoably(context: Context, id: Long, onError: (String) -> Unit) {
+    /** Only a confirmed snapshot can delete; a failed transaction leaves every table unchanged. */
+    fun deleteConfirmed(context: Context, expected: List<BillEntity>, origin: String, onDone: (Result<Unit>) -> Unit) {
         val app = context.applicationContext
         scope.launch {
             val result = runCatching {
@@ -150,36 +149,39 @@ object BillWriter {
                 AssetStore.awaitReady()
                 writeLock.withLock {
                     val db = AppDb.get(app)
-                    val deleted = db.withTransaction { deleteGroupInTransaction(db, id) }
-                    if (deleted.isNotEmpty()) {
-                        undoItems.value = undoItems.value + UndoDeletion(deleted.first(), System.currentTimeMillis() + 5_000, deleted.drop(1))
-                        io.github.mymoney.systems.SystemIntegration.refresh(app)
-                    }
+                    db.withTransaction { deleteConfirmedInTransaction(db, expected, origin) }
                 }
-            }
-            result.exceptionOrNull()?.let { error ->
-                withContext(Dispatchers.Main) { onError(error.message ?: "删除失败，请重试") }
-            }
-            delay(5_000)
-            writeLock.withLock { undoItems.value = undoItems.value.filter { it.expiresAt > System.currentTimeMillis() } }
-        }
-    }
-
-    fun undoDelete(context: Context, id: Long, onDone: (Result<Unit>) -> Unit) {
-        val app = context.applicationContext
-        scope.launch {
-            val result = runCatching {
-                writeLock.withLock {
-                    val item = undoItems.value.firstOrNull { it.bill.id == id }
-                    check(item != null && System.currentTimeMillis() <= item.expiresAt) { "撤销时间已过" }
-                    val db = AppDb.get(app)
-                    db.withTransaction { restoreGroupInTransaction(db, listOf(item.bill) + item.relatedBills) }
-                    undoItems.value = undoItems.value.filterNot { it.bill.id == id }
-                }
+                Unit
             }
             if (result.isSuccess) io.github.mymoney.systems.SystemIntegration.refresh(app)
             withContext(Dispatchers.Main) { onDone(result) }
         }
+    }
+
+    internal suspend fun deletionPreviewInTransaction(db: AppDb, id: Long): List<BillEntity> {
+        val principal = db.bills().byId(id) ?: return emptyList()
+        require(principal.feeParentKey == null) { "手续费请从原转账一同删除" }
+        val rows = listOf(principal) + if (principal.assetKey.isNotBlank())
+            db.bills().allOnce().filter { it.feeParentKey == principal.assetKey }.sortedBy { it.id } else emptyList()
+        val accounts = db.assets().accounts().associateBy { it.id }
+        return rows.map { row -> row.copy(
+            account = row.accountId?.let { accounts[it]?.name } ?: row.account,
+            transferAccount = row.transferAccountId?.let { accounts[it]?.name } ?: row.transferAccount,
+        ) }
+    }
+
+    /** Caller owns the Room transaction; used by isolated transaction/rollback tests too. */
+    internal suspend fun deleteConfirmedInTransaction(db: AppDb, expected: List<BillEntity>, origin: String) {
+        require(expected.isNotEmpty()) { "账单已不存在，请返回列表" }
+        val id = expected.first().id
+        val current = deletionPreviewInTransaction(db, id)
+        if (current.isEmpty()) {
+            check(db.deletions().latestForPrincipal(id) != null) { "账单已不存在，请返回列表" }
+            return // An already committed retry must not log or reverse balances again.
+        }
+        check(current == expected) { "账单内容已变化，请重新确认删除" }
+        db.deletions().insert(BillDeletionCodec.create(current, origin))
+        deleteGroupInTransaction(db, id)
     }
 
     /** Explicitly include an older ordinary bill once. TRANSFER requires its two endpoints. */
