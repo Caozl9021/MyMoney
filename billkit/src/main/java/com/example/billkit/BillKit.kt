@@ -11,6 +11,8 @@ data class BillKitConfig(
     val minIntervalMs: Long = 1_500L,
     /** 同指纹在这个窗口内不重复回调（防重复弹窗/重复入账） */
     val dedupeWindowMs: Long = 90_000L,
+    /** Host explicitly reports leaving a detail; that next visit may confirm the same bill again. */
+    val confirmOnRevisit: Boolean = false,
 )
 
 /** 宿主实现的落点：落自己的库、发通知、导出 CSV、分享到别的 App…… */
@@ -39,10 +41,25 @@ object BillKit {
     @Volatile
     private var sink: BillSink? = null
 
-    private val lastSeen = LinkedHashMap<String, Long>()
+    private data class Reservation(val atMillis: Long, val owner: BillDraft)
+    private val lastSeen = LinkedHashMap<String, Reservation>()
     private var lastAcceptedAt = 0L
     private var pageSessionProvider: ((UiSnapshot) -> String)? = null
     private var lastDraftToken: String? = null
+    private var visitedDraft: BillDraft? = null
+    private var visitToken = java.util.UUID.randomUUID().toString()
+
+    /** Do not call for own confirmation UI, loading nodes or ordinary content redraws. */
+    @Synchronized
+    fun endPageVisit() {
+        if (!config.confirmOnRevisit) return
+        visitedDraft = null
+        visitToken = java.util.UUID.randomUUID().toString()
+        lastDraftPage = null
+        lastDraftToken = null
+        lastSeen.clear()
+        lastAcceptedAt = 0L
+    }
 
     /**
      * 最近一次出草稿的那一屏（包名 + 有序文本，不含时间）。
@@ -74,6 +91,8 @@ object BillKit {
 
     @Synchronized
     fun reset() {
+        visitedDraft = null
+        visitToken = java.util.UUID.randomUUID().toString()
         lastSeen.clear()
         lastAcceptedAt = 0L
         lastDraftPage = null
@@ -91,7 +110,8 @@ object BillKit {
     private fun dispatch(outcome: BillPipeline.Outcome, snapshot: UiSnapshot, now: Long) {
         // Keep diagnostics for direct callers offering an unknown package; only accepted
         // capture sources participate in durable page continuity.
-        val sessionId = if (isAccepted(snapshot.packageName)) pageSessionProvider?.invoke(snapshot) else null
+        val sessionId = if (!config.confirmOnRevisit && isAccepted(snapshot.packageName))
+            pageSessionProvider?.invoke(snapshot) else null
         val page = listOf(snapshot.packageName, snapshot.items)
         if (page != lastDraftPage) lastDraftPage = null
         when (outcome) {
@@ -100,7 +120,17 @@ object BillKit {
             }
 
             is BillPipeline.Outcome.Draft -> {
-                val draft = outcome.draft.copy(captureSessionId = sessionId, captureConfigurationToken = snapshot.configurationToken, pageObservationId = snapshot.pageObservationId)
+                if (config.confirmOnRevisit) {
+                    val previous = visitedDraft
+                    val next = outcome.draft
+                    val differentDetail = previous != null && (previous.sourcePkg != next.sourcePkg ||
+                        previous.type != next.type || previous.priceCents != next.priceCents ||
+                        (previous.transactionKey != null && next.transactionKey != null && previous.transactionKey != next.transactionKey) ||
+                        (previous.hasExplicitTime && next.hasExplicitTime && previous.timeMillis != next.timeMillis))
+                    if (differentDetail) endPageVisit()
+                    visitedDraft = next
+                }
+                val draft = outcome.draft.copy(captureSessionId = if (config.confirmOnRevisit) visitToken else sessionId, captureConfigurationToken = snapshot.configurationToken, pageObservationId = snapshot.pageObservationId)
                 val dedupeKey = deliveryKey(draft)
                 if (page == lastDraftPage) {
                     DebugBus.publish(snapshot, snapshot.diagnostic("skip:same-page"))
@@ -119,7 +149,7 @@ object BillKit {
                 }
                 lastDraftPage = page
                 lastAcceptedAt = now
-                lastSeen[dedupeKey] = now
+                lastSeen[dedupeKey] = Reservation(now, draft)
                 lastDraftToken = dedupeKey
                 prune(now)
 
@@ -146,15 +176,17 @@ object BillKit {
     @Synchronized
     fun retryFailedDraft(draft: BillDraft) {
         val token = deliveryKey(draft)
+        // An asynchronous rejection from an older observation/visit must not cancel
+        // a newer reservation of the same transaction. Keep the ordinary throttle.
+        if (lastSeen[token]?.owner != draft) return
         lastSeen.remove(token)
-        if (lastDraftToken == token) {
-            lastDraftPage = null
-            lastDraftToken = null
-        }
+        if (lastDraftToken == token) lastDraftPage = null
+        // Keep the last accepted identity: clearing it would let the same strong order
+        // look like a different transaction and bypass minIntervalMs on immediate retry.
     }
 
     private fun deliveryKey(draft: BillDraft): String = when {
-        pageSessionProvider == null -> draft.fingerprint // preserve standalone library compatibility
+        !config.confirmOnRevisit && pageSessionProvider == null -> draft.fingerprint // preserve standalone library compatibility
         draft.transactionKey != null -> "order:${draft.sourcePkg}:${draft.type.name}:${draft.transactionKey}"
         draft.hasExplicitTime -> listOf(draft.sourcePkg, draft.type.name, draft.priceCents,
             draft.timeMillis, draft.method).joinToString("|")
@@ -162,13 +194,13 @@ object BillKit {
     }
 
     private fun isDuplicate(fingerprint: String, now: Long): Boolean {
-        val seenAt = lastSeen[fingerprint] ?: return false
+        val seenAt = lastSeen[fingerprint]?.atMillis ?: return false
         return now - seenAt < config.dedupeWindowMs
     }
 
     private fun prune(now: Long) {
         if (lastSeen.size < 64) return
-        val expired = lastSeen.filterValues { now - it > config.dedupeWindowMs }.keys
+        val expired = lastSeen.filterValues { now - it.atMillis > config.dedupeWindowMs }.keys
         expired.forEach { lastSeen.remove(it) }
     }
 }

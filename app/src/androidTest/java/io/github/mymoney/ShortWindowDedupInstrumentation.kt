@@ -57,8 +57,10 @@ class ShortWindowDedupInstrumentation : Instrumentation() {
             val page = (com.example.billkit.BillPipeline().process(snapshot, at) as com.example.billkit.BillPipeline.Outcome.Draft).draft
             check(page.type == BillType.EXPENSE && page.merchant == null)
             val second = accept(db, input("PAGE", "transfer-page", 20_000, page))
-            check(second.row.id == first.row.id && !second.created && !second.deliverable)
-            check(db.recognitions().allOnce() == listOf(recorded))
+            check(second.row.id != first.row.id && second.created && second.deliverable)
+            check(second.decision == "repeat-confirmation" && second.row.identityKey.startsWith("repeat:"))
+            check(second.row.reviewOf == null && db.recognitions().byId(first.row.id) == recorded)
+            check(db.recognitions().allOnce().size == 2)
         }
         test("late_hook_enriches_open_card_but_not_touched_fields") { db ->
             val first = accept(db, input("PAGE", "page"))
@@ -143,14 +145,18 @@ class ShortWindowDedupInstrumentation : Instrumentation() {
             check(c.created && c.reviewReason == CaptureReviewPolicy.AMBIGUOUS_CROSS_SOURCE && c.row.reviewOf != null)
         }
         for (status in listOf(RecognitionStatus.RECORDED, RecognitionStatus.IGNORED)) {
-            test("${status}_adds_only_evidence_and_alias_including_later_order_conflict") { db ->
+            test("${status}_new_observation_gets_repeat_confirmation_and_keeps_old_row") { db ->
                 val a = accept(db, input("PAGE", "first"))
                 val terminal = a.row.copy(status = status, note = "手工备注", merchant = "手工商户")
                 db.recognitions().update(terminal)
                 val b = accept(db, input("HOOK", "second", 7000, base.copy(transactionKey = "late-order")))
-                check(b.row == terminal && !b.created && !b.deliverable)
+                check(b.row.id != terminal.id && b.created && b.deliverable)
+                check(b.decision == "repeat-confirmation" && b.row.identityKey.startsWith("repeat:"))
+                check(b.row.status == RecognitionStatus.PENDING && b.row.reviewOf == null)
+                check(b.row.note == terminal.note && b.row.merchant == terminal.merchant)
                 val c = accept(db, input("NOTIFICATION", "third", 9000, base.copy(transactionKey = "another-order")))
                 check(c.created && c.row.reviewOf == null && c.row.id != a.row.id)
+                check(c.row.id != b.row.id && c.decision == "new" && !c.row.identityKey.startsWith("repeat:"))
                 check(db.recognitions().byId(a.row.id) == terminal && db.bills().allOnce().isEmpty())
             }
         }
@@ -171,11 +177,15 @@ class ShortWindowDedupInstrumentation : Instrumentation() {
                 if (state != null) db.capture().putDelivery(CaptureDelivery(a.row.id, state, "first-attempt", at))
                 val b = accept(db, input("HOOK", "second", 7000))
                 val retry = CaptureShortWindowPolicy.retryableDelivery(state)
-                check(b.deliverable == retry && b.row.id == a.row.id)
+                if (state == CaptureDeliveryState.ACKNOWLEDGED) {
+                    check(b.created && b.deliverable && b.row.id != a.row.id)
+                    check(b.decision == "repeat-confirmation" && b.row.identityKey.startsWith("repeat:"))
+                    check(db.recognitions().byId(a.row.id) == a.row)
+                } else check(b.deliverable == retry && b.row.id == a.row.id)
                 val claims = coroutineScope { (0..7).map { index -> async {
-                    db.withTransaction { CaptureCoordinator.claimInTransaction(db, a.row.id, "retry-$index") }
+                    db.withTransaction { CaptureCoordinator.claimInTransaction(db, b.row.id, "retry-$index") }
                 } }.awaitAll() }
-                check(claims.count { it } == if (retry) 1 else 0)
+                check(claims.count { it } == if (retry || state == CaptureDeliveryState.ACKNOWLEDGED) 1 else 0)
             }
         }
         test("concurrent_three_channels_one_row_and_one_claim") { db ->

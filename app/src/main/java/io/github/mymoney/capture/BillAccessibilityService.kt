@@ -106,8 +106,11 @@ class BillAccessibilityService : AccessibilityService() {
             // Own confirmation UI may cover an accepted detail without changing its transaction.
             val ownConfirmation = pkg == packageName &&
                 (event.className?.toString() == "io.github.mymoney.ui.ConfirmActivity" ||
-                    io.github.mymoney.overlay.ConfirmOverlay.isShowing())
+                    io.github.mymoney.overlay.ConfirmOverlay.isShowing() ||
+                    io.github.mymoney.data.CaptureEditLocks.hasActiveEditor())
             if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && !ownConfirmation) {
+                // IME/system windows over an open card are not a new detail visit.
+                if (!io.github.mymoney.data.CaptureEditLocks.hasActiveEditor()) BillKit.endPageVisit()
                 clearPending()
                 invalidateObservations()
             }
@@ -181,6 +184,8 @@ class BillAccessibilityService : AccessibilityService() {
         root.recycle()
         val admission = PageCaptureEligibility.evaluate(snapshot)
         if (!admission.allowed) {
+            if (admission.scene == PageCaptureEligibility.Scene.OTHER ||
+                admission.scene == PageCaptureEligibility.Scene.PAYMENT_RESULT) BillKit.endPageVisit()
             invalidateObservations()
             clearPending()
             DebugBus.publish(snapshot, "skip:scene:${admission.reason}")

@@ -24,9 +24,7 @@ object CaptureCoordinator {
     data class Accepted(val row: RecognitionEntity, val created: Boolean, val decision: String,
         val reviewReason: String? = null, val reviewSuppressed: Boolean = false,
         /** Merged pending rows may retry delivery only when no successful/uncertain claim exists. */
-        val deliverable: Boolean = created,
-        /** 记账前查账本命中的疑似重复（仅提示，不阻断；由用户在卡上拍板保存/忽略）。 */
-        val duplicateSuspected: List<io.github.mymoney.data.DuplicateProbe.Hit> = emptyList())
+        val deliverable: Boolean = created)
 
     suspend fun accept(context: Context, input: Input, allowed: () -> Boolean = { true }): Accepted? = lock.withLock {
         if (!allowed()) return@withLock null
@@ -48,14 +46,38 @@ object CaptureCoordinator {
         val reviewSlot = input.reviewSlotKey?.takeIf { input.source == "NOTIFICATION" && it.isNotBlank() }
             ?.let { "review-slot:" + CaptureMergePolicy.digest(it) }
         val strong = CaptureMergePolicy.strongAlias(draft)
+        val stableIdentity = if ((input.source == "PAGE" && draft.hasExplicitTime) || strong != null) "identity:" + RecognitionIdentity.key(draft) else null
+        val timeIdentity = if (input.source == "PAGE" && draft.hasExplicitTime)
+            RecognitionIdentity.key(draft.copy(transactionKey = null)) else null
+        val timeRow = timeIdentity?.let { key ->
+            val id = dao.alias("identity:" + key)?.recognitionId
+                ?: dao.alias("obs:" + CaptureMergePolicy.digest("page:" + key))?.recognitionId
+            id?.let { db.recognitions().byId(it) } ?: db.recognitions().byIdentity(key)
+        }?.takeUnless { CaptureShortWindowPolicy.differentTransaction(it, draft, dao.transactionAliases(it.id)) }
         val strongRow = strong?.let { dao.alias(it)?.recognitionId }?.let { db.recognitions().byId(it) }
-            ?: if (strong != null) db.recognitions().byIdentity(RecognitionIdentity.key(draft)) else null
+            ?: stableIdentity?.let { dao.alias(it)?.recognitionId }?.let { db.recognitions().byId(it) }
+            ?: (if (stableIdentity != null) db.recognitions().byIdentity(RecognitionIdentity.key(draft)) else null)
+            ?: (if (input.source == "PAGE") dao.alias("obs:" + CaptureMergePolicy.digest("page:" + RecognitionIdentity.key(draft)))
+                ?.recognitionId?.let { db.recognitions().byId(it) } else null)
+            ?: timeRow
         val observedRow = dao.alias(observation)?.recognitionId?.let { db.recognitions().byId(it) }
         // An explicit distinct transaction wins over notification-key reuse or amount similarity.
         val distinctStrong = observedRow?.let {
             CaptureShortWindowPolicy.differentTransaction(it, draft, dao.transactionAliases(it.id))
         } == true
-        var matched = if (strongRow != null && observedRow?.reviewOf == strongRow.id) observedRow
+        // A later source belongs to the open confirmation, including a repeated round whose
+        // strong transaction aliases deliberately remain owned by the original record.
+        val activeFamilyEditor = strongRow?.let { original ->
+            val rootId = dao.alias("repeat-parent:" + original.id)?.recognitionId ?: original.id
+            CaptureEditLocks.activeIds().firstOrNull { id ->
+                id == rootId || dao.alias("repeat-parent:" + id)?.recognitionId == rootId
+            }?.let { db.recognitions().byId(it) }?.takeIf {
+                it.status == RecognitionStatus.PENDING && it.priceCents == draft.priceCents &&
+                    it.type == draft.type.name &&
+                    !CaptureShortWindowPolicy.differentTransaction(it, draft, dao.transactionAliases(it.id))
+            }
+        }
+        var matched = activeFamilyEditor ?: if (strongRow != null && observedRow?.reviewOf == strongRow.id) observedRow
             else strongRow ?: observedRow?.takeUnless { distinctStrong }
         // A repeated callback for the same observation instance with the same amount is the same
         // draft, even when a strong alias points at another row: never append a second record just
@@ -135,6 +157,15 @@ object CaptureCoordinator {
         val reviewSuppressed = review != null &&
             CaptureReviewPolicy.suppresses(CaptureReviewPolicy.isWeakGuess(reviewReason), reviewPresented)
         val reviewLink = if (reviewSuppressed) review else null
+        // A fresh observation is a new user decision, even for a known transaction.
+        // Never reopen the old terminal row or steal its transaction alias. The observation
+        // owns a separate pending confirmation so explicit save can really add another bill.
+        val repeatParent = matched?.takeIf {
+            observedRow == null && !reviewSuppressed && !CaptureEditLocks.contains(it.id) &&
+                (it.status != RecognitionStatus.PENDING ||
+                    dao.delivery(it.id)?.state == CaptureDeliveryState.ACKNOWLEDGED)
+        }
+        if (repeatParent != null) matched = null
         val created = matched == null
         val row = if (matched != null) {
             CaptureMergePolicy.enrich(matched, draft, CaptureEditLocks.contains(matched.id),
@@ -142,25 +173,41 @@ object CaptureCoordinator {
                 if (it != matched) db.recognitions().update(it.copy(updatedAt = input.receivedAt))
             }
         } else {
-            val identity = if (reviewLink == null && strong != null) RecognitionIdentity.key(draft)
-                else "capture:" + UUID.randomUUID().toString()
-            RecognitionEntity.fromDraft(draft.copy(historyId = null), identity, input.receivedAt)
-                .copy(reviewOf = reviewLink?.id).also { db.recognitions().insert(it) }
+            val identity = when {
+                repeatParent != null -> "repeat:" + UUID.randomUUID().toString()
+                reviewLink == null && strong != null -> RecognitionIdentity.key(draft)
+                else -> "capture:" + UUID.randomUUID().toString()
+            }
+            val confirmation = repeatParent?.let {
+                CaptureMergePolicy.enrich(it.copy(status = RecognitionStatus.PENDING), draft, false)
+                    .toDraft().copy(captureSessionId = draft.captureSessionId)
+            } ?: draft
+            RecognitionEntity.fromDraft(confirmation.copy(historyId = null), identity, input.receivedAt)
+                .copy(reviewOf = reviewLink?.id, protectedFields = repeatParent?.protectedFields ?: 0L)
+                .also { db.recognitions().insert(it) }
         }
         // A candidate that never reached the screen stays an independent pending row: this one is
         // presented normally, and the evidence below records that the pair may be the same bill.
         val decision = when {
             reviewSuppressed -> "needs-review"
+            repeatParent != null -> "repeat-confirmation"
             created -> "new"
             else -> "linked"
         }
         // A conflicting alias remains attached to its original record; evidence explains the review.
         if (dao.alias(observation) == null) dao.putAlias(CaptureAlias(observation, row.id))
-        if (strong != null && dao.alias(strong) == null && reviewLink == null) dao.putAlias(CaptureAlias(strong, row.id))
+        val identityOwner = repeatParent?.let { dao.alias("repeat-parent:" + it.id)?.recognitionId ?: it.id }
+            ?: dao.alias("repeat-parent:" + row.id)?.recognitionId ?: row.id
+        if (repeatParent != null) dao.putAlias(CaptureAlias("repeat-parent:" + row.id, identityOwner))
+        if (strong != null && dao.alias(strong) == null && reviewLink == null)
+            dao.putAlias(CaptureAlias(strong, identityOwner))
+        if (stableIdentity != null && dao.alias(stableIdentity) == null && reviewLink == null)
+            dao.putAlias(CaptureAlias(stableIdentity, identityOwner))
         if (reviewSlot != null && created) dao.putReviewSlot(CaptureAlias(reviewSlot, row.id))
         dao.putEvidence(CaptureEvidence(eventId, row.id, input.source, draft.sourcePkg,
             input.receivedAt, decision, buildString {
                 append("trace=").append(CaptureMergePolicy.digest(input.traceId).take(16))
+                if (repeatParent != null) append(";repeatOf=").append(repeatParent.id)
                 if (reviewReason != null) append(";review=").append(reviewReason)
                     .append(";reviewOf=").append(if (reviewSuppressed) "presented" else "not-presented")
                 if (shortWindowMerged) append(";merge=").append(CaptureShortWindowPolicy.RULE)
@@ -174,12 +221,8 @@ object CaptureCoordinator {
             CaptureShortWindowPolicy.retryableDelivery(dao.delivery(row.id)?.state)
         val deliverable = if (created) row.status == RecognitionStatus.PENDING
             else shortWindowMerged && retryable || (!shortWindowMerged && !reviewSuppressed && retryable)
-        // 记账前查账本：仅对「要新入账」的识别记录做，拿时间+金额+账户对照账单库，命中只提示不阻断。
-        // 合并进已存在记录（linked）的不再查，避免把已知同一笔再标重复。
-        val duplicateSuspected = if (created && reviewLink == null)
-            runCatching { io.github.mymoney.data.DuplicateProbe.findSuspects(db, draft) }.getOrDefault(emptyList())
-        else emptyList()
-        return Accepted(row, created, decision, reviewReason, reviewSuppressed, deliverable, duplicateSuspected)
+        // The shared confirmation card probes the ledger once when it is displayed.
+        return Accepted(row, created, decision, reviewReason, reviewSuppressed, deliverable)
     }
 
     data class OcrSupplementResult(val row: RecognitionEntity, val outcome: String, val changedFields: List<String> = emptyList()) {

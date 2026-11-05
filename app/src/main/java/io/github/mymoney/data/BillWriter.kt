@@ -45,46 +45,7 @@ object BillWriter {
                 val result = writeLock.withLock {
                     val db = AppDb.get(app)
                     db.withTransaction {
-                        val dao = db.bills()
-                        val history = draft.historyId?.let { id ->
-                            db.recognitions().byId(id) ?: error("识别记录不存在，请从历史重新打开")
-                        }
-                        require(history == null || history.status == RecognitionStatus.RECORDED || draft.captureVersion == null ||
-                            CaptureMergePolicy.version(history) == draft.captureVersion) { "识别信息已更新，请核对卡片后再次保存" }
-                        require(history?.reviewOf == null) { "请先在记录历史核对是否为独立交易" }
-                        if (history?.status == RecognitionStatus.RECORDED) {
-                            // A deleted association is deliberately not resurrected or guessed by amount.
-                            SaveResult(false, history.billId?.let { dao.byId(it) })
-                        } else {
-                            // 只保留「同一次识别」的幂等：同 historyId 的重试/重复提交不会插第二条。
-                            // 不再按「指纹 + 10 分钟窗」在保存时默默跳过——疑似重复只在弹卡前提示，
-                            // 用户点保存就入账（口径见 DuplicateProbe / ConfirmSheet 的（可能重复）提示）。
-                            var existing = if (history != null) dao.byRecognitionId(history.id) else null
-                            if (history != null && existing != null && existing.recognitionId == null) {
-                                existing = existing.copy(recognitionId = history.id)
-                                dao.update(existing)
-                            }
-                            val inserted = existing == null
-                            val bill = existing ?: if (draft.type == BillType.TRANSFER) {
-                                saveTransferDraftInTransaction(db, draft, null, history?.id ?: draft.sourcePkg + "|" + draft.fingerprint)
-                            } else BillEntity(priceCents = draft.priceCents, type = draft.type.name,
-                                timeMillis = draft.timeMillis, merchant = draft.merchant, method = draft.method,
-                                orderTail = draft.orderTail, sourcePkg = draft.sourcePkg, strategy = draft.strategy,
-                                fingerprint = draft.fingerprint, createdAt = System.currentTimeMillis(),
-                                category = draft.category, subCategory = draft.subCategory,
-                                account = draft.account, note = draft.note, productName = draft.productName, productSource = draft.productSource,
-    noteOrigin = draft.noteOrigin, noteTemplateSnapshot = draft.noteTemplateSnapshot, recognitionId = history?.id).let {
-                                    val linked = AssetStore.syncBill(db, null, it)!!
-                                    linked.copy(id = dao.insert(linked))
-                                }
-                            history?.let {
-                                db.recognitions().update(RecognitionEntity.fromDraft(draft.copy(historyId = it.id), it.identityKey, it.recognizedAt)
-                                    .copy(status = RecognitionStatus.RECORDED, billId = bill.id,
-                                        updatedAt = System.currentTimeMillis(), shareState = it.shareState,
-                                        protectedFields = it.protectedFields or draft.captureTouchedFields or CaptureFields.changed(it.toDraft(), draft), reviewOf = it.reviewOf))
-                            }
-                            SaveResult(inserted, bill)
-                        }
+                        saveInTransaction(db, draft)
                     }
                 }
                 if (result.inserted) io.github.mymoney.systems.SystemIntegration.refresh(app)
@@ -94,6 +55,51 @@ object BillWriter {
             } catch (error: Exception) {
                 withContext(Dispatchers.Main) { onError?.invoke(error) }
             }
+        }
+    }
+
+    /** Caller owns transaction; shared by production and isolated Room regression tests. */
+    internal suspend fun saveInTransaction(db: AppDb, draft: BillDraft): SaveResult {
+        require(draft.priceCents > 0L) { "账单金额必须大于0" }
+        val dao = db.bills()
+        val history = draft.historyId?.let { id ->
+            db.recognitions().byId(id) ?: error("识别记录不存在，请从历史重新打开")
+        }
+        require(history == null || history.status == RecognitionStatus.RECORDED || draft.captureVersion == null ||
+            CaptureMergePolicy.version(history) == draft.captureVersion) { "识别信息已更新，请核对卡片后再次保存" }
+        require(history?.reviewOf == null) { "请先在记录历史核对是否为独立交易" }
+        return if (history?.status == RecognitionStatus.RECORDED) {
+            // A deleted association is deliberately not resurrected or guessed by amount.
+            SaveResult(false, history.billId?.let { dao.byId(it) })
+        } else {
+            // 只保留「同一次识别」的幂等：同 historyId 的重试/重复提交不会插第二条。
+            // 不再按「指纹 + 10 分钟窗」在保存时默默跳过——疑似重复只在弹卡前提示，
+            // 用户点保存就入账（口径见 DuplicateProbe / ConfirmSheet 的（可能重复）提示）。
+            var existing = if (history != null) dao.byRecognitionId(history.id) else null
+            if (history != null && existing != null && existing.recognitionId == null) {
+                existing = existing.copy(recognitionId = history.id)
+                dao.update(existing)
+            }
+            val inserted = existing == null
+            val bill = existing ?: if (draft.type == BillType.TRANSFER) {
+                saveTransferDraftInTransaction(db, draft, null, history?.id ?: draft.sourcePkg + "|" + draft.fingerprint)
+            } else BillEntity(priceCents = draft.priceCents, type = draft.type.name,
+                timeMillis = draft.timeMillis, merchant = draft.merchant, method = draft.method,
+                orderTail = draft.orderTail, sourcePkg = draft.sourcePkg, strategy = draft.strategy,
+                fingerprint = draft.fingerprint, createdAt = System.currentTimeMillis(),
+                category = draft.category, subCategory = draft.subCategory,
+                account = draft.account, note = draft.note, productName = draft.productName, productSource = draft.productSource,
+    noteOrigin = draft.noteOrigin, noteTemplateSnapshot = draft.noteTemplateSnapshot, recognitionId = history?.id).let {
+                    val linked = AssetStore.syncBill(db, null, it)!!
+                    linked.copy(id = dao.insert(linked))
+                }
+            history?.let {
+                db.recognitions().update(RecognitionEntity.fromDraft(draft.copy(historyId = it.id), it.identityKey, it.recognizedAt)
+                    .copy(status = RecognitionStatus.RECORDED, billId = bill.id,
+                        updatedAt = System.currentTimeMillis(), shareState = it.shareState,
+                        protectedFields = it.protectedFields or draft.captureTouchedFields or CaptureFields.changed(it.toDraft(), draft), reviewOf = it.reviewOf))
+            }
+            SaveResult(inserted, bill)
         }
     }
 

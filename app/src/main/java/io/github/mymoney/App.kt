@@ -7,7 +7,6 @@ import io.github.mymoney.data.CategorySuggester
 import io.github.mymoney.data.LedgerConfig
 import io.github.mymoney.data.NoteTemplate
 import io.github.mymoney.data.RecognitionStore
-import io.github.mymoney.capture.PageSessionStore
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import io.github.mymoney.data.Settings
@@ -64,7 +63,7 @@ class App : Application() {
                     fun allowed(): Boolean = settings.enabled && settings.pageEnabled && draft.sourcePkg in settings.whitelist &&
                         token == io.github.mymoney.capture.NotificationIngress.configurationToken(this@App) &&
                         io.github.mymoney.capture.BillAccessibilityService.instance?.isObservationCurrent(draft.pageObservationId) == true
-                    if (!allowed()) continue
+                    if (!allowed()) { BillKit.retryFailedDraft(draft); continue }
                     val suggestion = io.github.mymoney.data.SpecCategoryStore.fill(this@App, draft,
                         CategorySuggester.suggest(draft, candidates = io.github.mymoney.data.ExternalRuleStore.candidates()))
                     val named = draft.copy(category = suggestion.category, subCategory = suggestion.subCategory, account = suggestion.account)
@@ -74,13 +73,17 @@ class App : Application() {
                     val enriched = io.github.mymoney.data.NoteFillStore.prepare(accounted)
                     val accepted = io.github.mymoney.capture.CaptureCoordinator.accept(this@App,
                         io.github.mymoney.capture.CaptureCoordinator.Input(enriched, "PAGE",
-                            "page:" + io.github.mymoney.data.RecognitionIdentity.key(enriched), receivedAt = receivedAt), allowed = { allowed() }) ?: continue
+                            "page-visit:" + enriched.captureSessionId, receivedAt = receivedAt), allowed = { allowed() })
+                    if (accepted == null) { BillKit.retryFailedDraft(draft); continue }
                     enriched.pageObservationId?.let { observation ->
                         io.github.mymoney.ocr.PageOcrAssist.bind(observation, accepted.row.id, enriched,
-                            "page:" + io.github.mymoney.data.RecognitionIdentity.key(enriched))
+                            "page-visit:" + enriched.captureSessionId)
                     }
                     val delivery = io.github.mymoney.capture.CaptureCoordinator.deliver(this@App, accepted) { allowed() }
+                    if (delivery == "pending-source-disabled" || delivery == "pending-locked")
+                        BillKit.retryFailedDraft(draft)
                     if (DebugBus.state.value == diagnostic) DebugBus.annotateOutcome(buildString {
+                        if (accepted.decision == "repeat-confirmation") append(" → repeat-confirmation（再次确认）")
                         append(" → ").append(delivery)
                         suggestion.categoryHit?.let { append(" 分类依据：").append(it.explanation) }
                         suggestion.accountHit?.let { append(" 账户依据：").append(it.explanation) }
@@ -98,12 +101,10 @@ class App : Application() {
                 }
             }
         }
-        val pageSessions = PageSessionStore(this)
         BillKit.install(
             config = settings.toKitConfig(),
             sink = { draft -> check(deliveries.trySend(PageDelivery(draft, DebugBus.state.value,
                 draft.captureConfigurationToken ?: "missing-capture-token", System.currentTimeMillis())).isSuccess) },
-            pageSessionProvider = pageSessions::sessionFor,
         )
 
         CaptureModeManager.reconcile(this)

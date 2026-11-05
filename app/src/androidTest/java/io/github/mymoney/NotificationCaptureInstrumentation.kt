@@ -74,14 +74,16 @@ class NotificationCaptureInstrumentation : Instrumentation() {
                     check(db.bills().allOnce().isEmpty())
                 }
 
-                test("synthetic_delivered_candidate_merges_without_second_delivery") { db ->
+                test("synthetic_new_observation_after_presented_candidate_gets_repeat_confirmation") { db ->
                     val first = accept(db, input("PAGE", "page-shown", draft(null).copy(captureSessionId = "page-shown")))
                     db.capture().putDelivery(CaptureDelivery(first.row.id, CaptureDeliveryState.ACKNOWLEDGED,
                         "attempt-shown", 1_700_000_000_500L))
                     val second = accept(db, input("NOTIFICATION", "notification-repeated", draft(null)))
-                    check(!second.created && second.row.id == first.row.id && !second.deliverable)
-                    check(second.decision == "linked" && second.row.reviewOf == null)
-                    check(db.recognitions().allOnce().size == 1)
+                    check(second.created && second.row.id != first.row.id && second.deliverable)
+                    check(second.decision == "repeat-confirmation" && second.row.reviewOf == null)
+                    check(second.row.identityKey.startsWith("repeat:"))
+                    check(db.recognitions().byId(first.row.id) == first.row)
+                    check(db.recognitions().allOnce().size == 2)
                 }
 
                 test("synthetic_weak_notification_then_strong_page_merges") { db ->
@@ -129,7 +131,10 @@ class NotificationCaptureInstrumentation : Instrumentation() {
                             protectedFields = CaptureFields.ALL)
                         db.withTransaction { db.recognitions().update(protected) }
                         val later = accept(db, input("NOTIFICATION", "notification-$index", draft("order-$index").copy(merchant = "不得覆盖", note = "不得覆盖")))
-                        check(!later.created && later.row == protected)
+                        check(later.created && later.deliverable && later.row.id != protected.id)
+                        check(later.decision == "repeat-confirmation" && later.row.identityKey.startsWith("repeat:"))
+                        check(later.row.merchant == protected.merchant && later.row.note == protected.note)
+                        check(later.row.status == RecognitionStatus.PENDING && later.row.reviewOf == null)
                         check(db.recognitions().byId(protected.id) == protected)
                     }
                     check(db.bills().allOnce().isEmpty() && db.assets().entries().isEmpty())
@@ -278,15 +283,17 @@ class NotificationCaptureInstrumentation : Instrumentation() {
                     check(db.capture().deliveries().isEmpty())
                 }
 
-                test("synthetic_spec_dedup_merge_suppresses_when_target_presented") { db ->
+                test("synthetic_spec_new_observation_after_presented_target_gets_repeat_confirmation") { db ->
                     val hook = accept(db, input("PAGE", "wechat-wcdb", dedupDraft()))
                     db.withTransaction { db.capture().putDelivery(CaptureDelivery(hook.row.id,
                         CaptureDeliveryState.ACKNOWLEDGED, "attempt-shown", 1_700_000_000_500L)) }
                     val notice = accept(db, input("NOTIFICATION", "wechat-notice", dedupDraft()))
-                    check(!notice.created && notice.row.id == hook.row.id)
-                    // 已经弹过卡了，第二条来源不再重复弹。
-                    check(!notice.deliverable)
-                    check(db.recognitions().allOnce().size == 1)
+                    check(notice.created && notice.row.id != hook.row.id)
+                    // I阶段：新的观察关联已呈现同笔，也交用户确认，不改原记录。
+                    check(notice.deliverable && notice.decision == "repeat-confirmation")
+                    check(notice.row.identityKey.startsWith("repeat:") && notice.row.reviewOf == null)
+                    check(db.recognitions().byId(hook.row.id) == hook.row)
+                    check(db.recognitions().allOnce().size == 2)
                 }
 
                 test("synthetic_spec_dedup_real_order_id_wins_over_amount_time") { db ->

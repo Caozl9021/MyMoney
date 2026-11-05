@@ -223,6 +223,7 @@ class Settings(context: Context) {
     fun toKitConfig(): BillKitConfig = BillKitConfig(
         acceptedPackages = whitelist,
         minIntervalMs = minIntervalMs,
+        confirmOnRevisit = true,
     )
 
     companion object {

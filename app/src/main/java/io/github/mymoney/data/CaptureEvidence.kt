@@ -84,6 +84,8 @@ object CaptureEditLocks {
     @Synchronized fun acquire(id: String) { editors[id] = (editors[id] ?: 0) + 1 }
     @Synchronized fun release(id: String) { val n = (editors[id] ?: 1) - 1; if (n <= 0) { editors.remove(id); touched.remove(id) } else editors[id] = n }
     @Synchronized fun contains(id: String) = (editors[id] ?: 0) > 0
+    @Synchronized fun hasActiveEditor() = editors.isNotEmpty()
+    @Synchronized fun activeIds(): Set<String> = editors.keys.toSet()
 }
 
 object CaptureMergePolicy {

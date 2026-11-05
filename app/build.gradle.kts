@@ -18,7 +18,7 @@ android {
         targetSdk = 35
         testInstrumentationRunner = providers.gradleProperty("mymoneyTestRunner")
             .getOrElse("io.github.mymoney.HistoryInstrumentation")
-        versionCode = 143
+        versionCode = 145
         versionName = "1.9.0"
     }
 

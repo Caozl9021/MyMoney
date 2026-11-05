@@ -162,22 +162,18 @@ fun ConfirmSheet(
     onAmountBounds: ((androidx.compose.ui.geometry.Rect) -> Unit)? = null,
     onPickerBackHandler: (((() -> Boolean)?) -> Unit)? = null,
     noteSuggestions: (current: BillDraft) -> List<NoteSuggester.Suggestion> = { emptyList() },
-    duplicateSuspected: List<io.github.mymoney.data.DuplicateProbe.Hit> = emptyList(),
 ) {
-    // 记账前「查账本」的疑似重复：所有宿主（悬浮卡/Activity/编辑器）都在这里统一核算，
-    // 重开卡片会重新对照一次当前账单库。调用方也可传 duplicateSuspected 覆盖（测试用）。
+    // 所有宿主统一在卡片中查账本；重开卡片重新对照，不在采集事务里重复查询。
     val context = androidx.compose.ui.platform.LocalContext.current
-    var probedDuplicates by remember(draft.historyId, draft.priceCents, draft.timeMillis, draft.account) {
-        mutableStateOf(duplicateSuspected)
+    var effectiveDuplicates by remember(draft.historyId, draft.priceCents, draft.timeMillis, draft.account) {
+        mutableStateOf<List<io.github.mymoney.data.DuplicateProbe.Hit>>(emptyList())
     }
     LaunchedEffect(draft.historyId, draft.priceCents, draft.timeMillis, draft.type, draft.account) {
-        if (duplicateSuspected.isNotEmpty()) return@LaunchedEffect
-        probedDuplicates = runCatching {
+        effectiveDuplicates = runCatching {
             val db = io.github.mymoney.data.AppDb.get(context.applicationContext)
             io.github.mymoney.data.DuplicateProbe.findSuspects(db, draft)
         }.getOrDefault(emptyList())
     }
-    val effectiveDuplicates = if (duplicateSuspected.isNotEmpty()) duplicateSuspected else probedDuplicates
     val p = LocalAbPalette.current
     DisposableEffect(draft.historyId) {
         val id = draft.historyId

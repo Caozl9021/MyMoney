@@ -22,6 +22,7 @@
     <instrumentation android:name="io.github.mymoney.HookUnbindInstrumentation" android:targetPackage="io.github.mymoney" />
     <instrumentation android:name="io.github.mymoney.ChannelPlanInstrumentation" android:targetPackage="io.github.mymoney" />
     <instrumentation android:name="io.github.mymoney.ConfigurationMigrationInstrumentation" android:targetPackage="io.github.mymoney" />
+    <instrumentation android:name="io.github.mymoney.RepeatConfirmationInstrumentation" android:targetPackage="io.github.mymoney" />
     <instrumentation android:name="io.github.mymoney.ShortWindowDedupInstrumentation" android:targetPackage="io.github.mymoney" />
     <instrumentation android:name="io.github.mymoney.NotificationCaptureInstrumentation" android:targetPackage="io.github.mymoney" />
     <instrumentation android:name="io.github.mymoney.BillDeletionInstrumentation" android:targetPackage="io.github.mymoney" />

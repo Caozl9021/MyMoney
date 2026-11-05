@@ -60,3 +60,7 @@ python3 billkit/rules/package.py
 - 不自动清理旧包或按数量删除。清理前先列候选、确认备份和复用依赖，再按用户授权执行。
 
 2026-11-05同步：当前最近成功候选为1.9.0/143，路径以latest-app.json为准；143为pending_acceptance。当前用户验收见ACCEPTANCE.md，本次文档更新不修改候选APK、清单或历史发布快照。
+
+2026-11-05 I阶段：最近成功候选更新为1.9.0/144（pending_acceptance），目录dist/app/1.9.0-144/20261105-191359-zfq8ntqp；稳定快照deliverables/1.9.0/build-144。143及历史发布快照保持，144未发布。
+
+2026-11-05 J阶段：最近候选1.9.0/145（pending_acceptance），dist/app/1.9.0-145/20261105-194517-raocg8et；稳定快照deliverables/1.9.0/build-145，旧候选/发布快照保持，145未发布。
