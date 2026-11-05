@@ -36,6 +36,39 @@ jobs:
           ls "${ANDROID_HOME}/platforms" 2>/dev/null || echo "!! platforms 目录不存在"
           ls "${ANDROID_HOME}/build-tools" 2>/dev/null || echo "!! build-tools 目录不存在"
 
+      # ocr-research/v6/generated/ 整个被 .gitignore 忽略，其中的 *-dual.aar 不随仓库分发。
+      # app/build.gradle.kts 直接引用这两个 dual AAR，全新 checkout 里没有会构建失败。
+      # 这里只用仓库已跟踪的 runtime/*-{arm64-v8a,x86_64}.aar 就地合并出 dual（复刻 prepare.py 的
+      # 合并逻辑，确定性 ZIP、不联网、不碰模型），保证 CI 自洽。
+      - name: Reconstruct dual runtime AARs
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile, ZipInfo, ZIP_DEFLATED
+          import hashlib
+          root = Path('ocr-research/v6')
+          for prefix in ('onnxruntime-reduced', 'opencv-minimal'):
+              entries = {}
+              for abi in ('arm64-v8a', 'x86_64'):
+                  with ZipFile(root / 'runtime' / (prefix + '-' + abi + '.aar')) as z:
+                      for name in z.namelist():
+                          if name.endswith('/'):
+                              continue
+                          blob = z.read(name)
+                          if name in entries and entries[name] != blob:
+                              raise SystemExit('ABI AAR shared content differs: ' + name)
+                          entries[name] = blob
+              target = root / 'generated/runtime' / (prefix + '-dual.aar')
+              target.parent.mkdir(parents=True, exist_ok=True)
+              with ZipFile(target, 'w', compression=ZIP_DEFLATED, compresslevel=9) as archive:
+                  for name, blob in sorted(entries.items()):
+                      info = ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+                      info.compress_type = ZIP_DEFLATED
+                      info.external_attr = 0o644 << 16
+                      archive.writestr(info, blob, compress_type=ZIP_DEFLATED, compresslevel=9)
+              print('reconstructed', prefix + '-dual.aar', hashlib.sha256(target.read_bytes()).hexdigest())
+          PY
+
       - uses: gradle/actions/setup-gradle@v4
 
       # 仓库里没有签名配置，CI 只验证「能编译、单测能过」，不产出可分发的包。
