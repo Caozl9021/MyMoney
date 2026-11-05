@@ -4,7 +4,7 @@ LSP 模块内置在主 APK 里（入口 `assets/xposed_init`），不需要单�
 
 ## 使用与状态
 
-入口：设置 → 自动记账 → Root 模式 → LSPosed 模块。在管理器启用 My Money，作用域只需微信、支付宝；系统框架不属于当前推荐作用域。交易采集开关与全局自动记账开关分别保留；打开管理器不自动启用模块或改作用域。
+入口：设置 → 自动记账 → 识别方式与增强 → 凭证采集 / LSPosed 模块。在管理器启用 My Money，作用域只需微信、支付宝；系统框架不属于当前推荐作用域。交易采集开关与全局自动记账开关分别保留；打开管理器不自动启用模块或改作用域。
 
 - **打开管理器**：先尝试独立管理器，再在确认 lspd 运行后使用标准寄生入口；必要的固定 Root 启动回退在后台有超时，仅点击时执行。
 - **重启微信与支付宝**：只在点击后检查 Root 和两个目标的启动入口，结束/重开可能中断未完成操作。按目标显示缺失/停止失败/启动未确认，完成后尝试回到本页并重新检测；不重启手机或其他模块作用域。
@@ -18,3 +18,5 @@ LSP 模块内置在主 APK 里（入口 `assets/xposed_init`），不需要单�
 - 加载状态与真实交易识别是两件事：模块加载成功不代表后续每一笔支付都能识别。
 
 源码入口：`lsp/LsposedManagerLauncher`、`lsp/ScopeAppRestarter`、`lsp/ScopeRestartPolicy`、`xposed/MyMoneyXposedModule`、`xposed/TargetHookProbe`；加载状态由 `capture/HookTargetMonitor`、`HookTargetRegistry` 维护。
+
+G阶段只限制普通PAGE路径为交易详情，没有关闭高级凭证增强；模块加载/凭证到达/草稿生成/实际可见卡是不同事实。当前143候选与未测矩阵见[范围](PROJECT_SCOPE.md)，不要按旧Root/无障碍互斥模式配置。

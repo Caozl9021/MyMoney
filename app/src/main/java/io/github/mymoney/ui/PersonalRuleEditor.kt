@@ -103,7 +103,7 @@ internal fun PersonalRuleEditor(id: String, initial: PersonalRule?, records: Lis
                         }
                         InputRow("包含文字",keyword,{keyword=it.take(80)},placeholder="例如：美团金融还款",dividerAbove=true)
                     } }
-                    item { GroupFooter("匹配页面、标题、说明或商户中的文字；只处理成功且金额明确的交易。默认用于支付页面，需要开启页面辅助；转账等特殊交易仍由内置规则处理。") }
+                    item { GroupFooter("匹配页面、标题、说明或商户中的文字；只处理成功且金额明确的交易。页面规则仅用于交易详情，需要开启页面识别；转账等特殊交易仍由内置规则处理。") }
                     item { InsetGroup {
                         ListRow(title="更多条件",subtitle="识别来源、金额位置与固定商户",chevron=true,onClick={more=!more})
                         if(more) {

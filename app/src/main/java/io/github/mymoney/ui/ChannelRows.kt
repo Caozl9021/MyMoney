@@ -26,9 +26,9 @@ internal fun ChannelRows(
         channelList(showsHook).forEachIndexed { index, channel ->
             when (channel) {
                 CaptureChannel.NOTIFICATION -> ListRow(
-                    title = "通知识别",
+                    title = "通知监听",
                     subtitle = notificationRowStatus(state),
-                    leading = { SettingsIconBadge("通知识别", AbIcons.Note) },
+                    leading = { SettingsIconBadge("通知监听", AbIcons.Note) },
                     dividerAbove = index > 0,
                     trailing = { AbSwitch(state.notificationsEnabled) { CaptureModeManager.setNotificationEnabled(context, it) } },
                     onClick = {
@@ -46,15 +46,15 @@ internal fun ChannelRows(
                 )
                 CaptureChannel.SMS -> Unit // Legacy enum only; self has no SMS row.
                 CaptureChannel.PAGE -> ListRow(
-                    title = "页面辅助",
+                    title = "页面识别",
                     subtitle = when {
-                        !state.pageEnabled -> "已关闭"
+                        !state.pageEnabled -> "已关闭 · 打开交易详情时自动识别"
                         !state.accessibilityAuthorized -> "还差无障碍授权 · 点击开启"
                         !state.accessibilityBound -> "已授权但未连接 · 点击重新开启"
                         !state.enabled -> "已开启 · 自动记账已暂停"
-                        else -> "已就绪 · 识别支付结果和账单页面"
+                        else -> "已就绪 · 详情自动识别，付款成功页不识别"
                     },
-                    leading = { SettingsIconBadge("页面辅助", AbIcons.Accessibility) }, dividerAbove = index > 0,
+                    leading = { SettingsIconBadge("页面识别", AbIcons.Accessibility) }, dividerAbove = index > 0,
                     trailing = { AbSwitch(state.pageEnabled) { CaptureModeManager.setPageEnabled(context, it) } },
                     onClick = {
                         if (state.pageEnabled && !state.accessibilityBound) onAction(CaptureAction.ACCESSIBILITY)

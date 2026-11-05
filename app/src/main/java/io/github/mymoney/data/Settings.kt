@@ -154,7 +154,7 @@ class Settings(context: Context) {
     fun useRecommendedOrdinarySources() {
         captureEdit {
             putBoolean(KEY_NOTIFICATION_CAPTURE_ENABLED, true)
-            putBoolean(KEY_PAGE_FALLBACK_ENABLED, true)
+            putBoolean(KEY_PAGE_FALLBACK_ENABLED, pageEnabled)
         }
     }
 
@@ -164,6 +164,10 @@ class Settings(context: Context) {
      * 存 key 的集合而不是一个布尔：以后多一类提示不用再加一个偏好，删掉某一类也不用迁移。
      * 这是纯界面状态，写进去不该让已排队的识别工作作废，所以走 [uiEdit]。
      */
+    var pageRecognitionScopeNoticeSeen: Boolean
+        get() = prefs.getBoolean("page_detail_scope_notice_seen", false)
+        set(value) = uiEdit { putBoolean("page_detail_scope_notice_seen", value) }
+
     var dismissedCapabilityNotices: Set<String>
         get() = prefs.getStringSet(KEY_DISMISSED_CAPABILITY_NOTICES, null)?.toSet() ?: emptySet()
         set(value) = uiEdit { putStringSet(KEY_DISMISSED_CAPABILITY_NOTICES, value.toSet()) }

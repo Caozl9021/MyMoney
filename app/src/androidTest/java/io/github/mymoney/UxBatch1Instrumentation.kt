@@ -166,11 +166,14 @@ class UxBatch1Instrumentation : Instrumentation() {
                     check(db.bills().allOnce().size == beforeRetry)
                     check(db.recognitions().byId(input.historyId!!)!!.status == RecognitionStatus.RECORDED)
                 }
-                test("legacy_no_history_fingerprint_duplicate_returns_original_entity") {
+                test("legacy_no_history_same_fingerprint_saves_again_no_silent_skip") {
+                    // E 阶段起：保存时不再按「指纹 + 10 分钟窗」默默跳过；疑似重复只在弹卡前提示，
+                    // 用户点保存就入账。无 historyId 的同指纹草稿现在会各插一条（不再被静默吞掉）。
                     val input = draft("legacy").copy(transactionKey = null, hasExplicitTime = false, captureSessionId = null)
                     val first = save(input)
-                    val duplicate = save(input.copy(merchant = "unsaved legacy synthetic edit", note = "unsaved"))
-                    check(first.inserted && !duplicate.inserted && duplicate.bill == first.bill)
+                    val second = save(input.copy(merchant = "second legacy synthetic edit", note = "second"))
+                    check(first.inserted && second.inserted)
+                    check(first.bill?.id != null && second.bill?.id != null && first.bill!!.id != second.bill!!.id)
                     check(first.bill?.recognitionId == null)
                 }
                 test("boolean_api_remains_true_for_insert_false_for_duplicate") {

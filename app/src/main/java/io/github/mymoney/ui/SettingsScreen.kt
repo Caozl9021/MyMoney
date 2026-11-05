@@ -1156,7 +1156,7 @@ private fun HelpPage(
             InsetGroup {
                 ListRow(title = "识别后需要确认", subtitle = "确认保存后才写入账本；关闭弹卡后可在待确认中处理。")
                 InsetDivider()
-                ListRow(title = "页面没有识别到？", subtitle = "先检查自动记账里的应用清单和权限，再打开支付结果或账单详情。仍有问题时先保存该页诊断样本，再切换页面。")
+                ListRow(title = "页面没有识别到？", subtitle = "先检查自动记账里的应用清单和权限，再打开交易详情（付款成功页由通知监听处理）。仍有问题时先保存该页诊断样本，再切换页面。")
                 InsetDivider()
                 ListRow(title = "诊断样本分享前请检查", subtitle = "页面文字可能含商户、订单等信息，请先脱敏。")
             }

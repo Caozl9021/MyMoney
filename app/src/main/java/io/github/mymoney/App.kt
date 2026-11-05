@@ -62,7 +62,8 @@ class App : Application() {
             for ((draft, diagnostic, token, receivedAt) in deliveries) {
                 try {
                     fun allowed(): Boolean = settings.enabled && settings.pageEnabled && draft.sourcePkg in settings.whitelist &&
-                        token == io.github.mymoney.capture.NotificationIngress.configurationToken(this@App)
+                        token == io.github.mymoney.capture.NotificationIngress.configurationToken(this@App) &&
+                        io.github.mymoney.capture.BillAccessibilityService.instance?.isObservationCurrent(draft.pageObservationId) == true
                     if (!allowed()) continue
                     val suggestion = io.github.mymoney.data.SpecCategoryStore.fill(this@App, draft,
                         CategorySuggester.suggest(draft, candidates = io.github.mymoney.data.ExternalRuleStore.candidates()))

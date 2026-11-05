@@ -210,6 +210,20 @@ interface BillDao {
     @Query("SELECT * FROM bills WHERE recognitionId = :id LIMIT 1")
     suspend fun byRecognitionId(id: String): BillEntity?
 
+    /**
+     * 记账前「查账本」用：[timeMillis] 有索引，先用 ±windowMs 时间窗把候选压到极小集合，
+     * 再在内存里按账户模糊匹配（金额相等 + 类型相同）。LIMIT 兜底：个别时间字段脏或批量
+     * 导入同秒大量记录时不至于把窗撑爆；超上限按时间最近取，够用户判断。
+     */
+    @Query("""
+        SELECT * FROM bills
+        WHERE priceCents = :cents AND type = :type
+          AND timeMillis BETWEEN :lo AND :hi
+        ORDER BY ABS(timeMillis - :center) ASC, id DESC
+        LIMIT :limit
+    """)
+    suspend fun duplicateCandidates(cents: Long, type: String, lo: Long, hi: Long, center: Long, limit: Int): List<BillEntity>
+
     @Query("DELETE FROM bills")
     suspend fun deleteAll()
 

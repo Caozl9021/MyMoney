@@ -24,7 +24,9 @@ object CaptureCoordinator {
     data class Accepted(val row: RecognitionEntity, val created: Boolean, val decision: String,
         val reviewReason: String? = null, val reviewSuppressed: Boolean = false,
         /** Merged pending rows may retry delivery only when no successful/uncertain claim exists. */
-        val deliverable: Boolean = created)
+        val deliverable: Boolean = created,
+        /** 记账前查账本命中的疑似重复（仅提示，不阻断；由用户在卡上拍板保存/忽略）。 */
+        val duplicateSuspected: List<io.github.mymoney.data.DuplicateProbe.Hit> = emptyList())
 
     suspend fun accept(context: Context, input: Input, allowed: () -> Boolean = { true }): Accepted? = lock.withLock {
         if (!allowed()) return@withLock null
@@ -164,9 +166,20 @@ object CaptureCoordinator {
                 if (shortWindowMerged) append(";merge=").append(CaptureShortWindowPolicy.RULE)
                     .append(";intervalMs=").append(mergeIntervalMs).append(";main=").append(row.id)
             }))
-        val deliverable = created || (shortWindowMerged && row.status == RecognitionStatus.PENDING &&
-            CaptureShortWindowPolicy.retryableDelivery(dao.delivery(row.id)?.state))
-        return Accepted(row, created, decision, reviewReason, reviewSuppressed, deliverable)
+        // 是否允许这次投递：
+        //  - 新建（created）→ 投；
+        //  - 合并进已存在记录（linked）：**只有原记录从没被 ACKNOWLEDGED（从没上过屏）且仍 PENDING 才补投**。
+        //    已经上过屏（ACKNOWLEDGED）的才压制，避免同一笔弹两次；但绝不把「从没弹过」的真实付款永久吞掉。
+        val retryable = row.status == RecognitionStatus.PENDING &&
+            CaptureShortWindowPolicy.retryableDelivery(dao.delivery(row.id)?.state)
+        val deliverable = if (created) row.status == RecognitionStatus.PENDING
+            else shortWindowMerged && retryable || (!shortWindowMerged && !reviewSuppressed && retryable)
+        // 记账前查账本：仅对「要新入账」的识别记录做，拿时间+金额+账户对照账单库，命中只提示不阻断。
+        // 合并进已存在记录（linked）的不再查，避免把已知同一笔再标重复。
+        val duplicateSuspected = if (created && reviewLink == null)
+            runCatching { io.github.mymoney.data.DuplicateProbe.findSuspects(db, draft) }.getOrDefault(emptyList())
+        else emptyList()
+        return Accepted(row, created, decision, reviewReason, reviewSuppressed, deliverable, duplicateSuspected)
     }
 
     data class OcrSupplementResult(val row: RecognitionEntity, val outcome: String, val changedFields: List<String> = emptyList()) {
@@ -237,7 +250,11 @@ object CaptureCoordinator {
     /** A persistent claim is at-most-once for automatic UI, not an exactly-once OS transaction. */
     suspend fun deliver(context: Context, accepted: Accepted, allowed: () -> Boolean): String {
         val row = accepted.row
-        if (!accepted.deliverable || row.reviewOf != null || row.status != RecognitionStatus.PENDING) return accepted.decision
+        if (!accepted.deliverable || row.reviewOf != null || row.status != RecognitionStatus.PENDING)
+            // 不投递时区分原因，避免 linked 把人误导成「已记过、什么都没发生」：
+            //  - 已入账/已核对：直接返回原决策；
+            //  - 已存在但这次不再弹：写成「已存在记录，未重复弹卡」。
+            return if (accepted.decision == "linked") "linked-existing" else accepted.decision
         val db = AppDb.get(context)
         val attempt = UUID.randomUUID().toString()
         val claimed = db.withTransaction { claimInTransaction(db, row.id, attempt) }

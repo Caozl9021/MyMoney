@@ -13,9 +13,13 @@ public class PaymentFixtureActivity extends Activity {
   if (getIntent().getBooleanExtra("secure",false))getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
   LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(Color.WHITE);
   String status=getIntent().getStringExtra("status");if(status==null)status="支付成功";
-  add(root,"OCR模拟页 · 无真实交易",16);add(root,status,28);
+  boolean result="result".equals(getIntent().getStringExtra("scene"));
+  add(root,"OCR模拟页 · 无真实交易",16);
+  if(!result) { add(root,getPackageName().equals("com.tencent.mm")?"交易详情":"账单详情",22);add(root,"当前状态",16); }
+  add(root,status,28);
   String tag=getIntent().getStringExtra("tag");if(tag==null)tag="SIM-OCR-DEFAULT";add(root,"¥3.50",56);
   add(root,"商户名称："+tag,20);
+  if(!result) { add(root,"支付时间：2026-11-05 12:34:56",16);add(root,"交易单号："+tag,16); }
   View pixels=new View(this) {
    Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);
    @Override public void onDraw(Canvas c) {

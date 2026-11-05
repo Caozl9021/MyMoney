@@ -12,7 +12,7 @@ import org.junit.Test
 
 /** F16/F9: the same screen offered again (confirm card closed, page refocused) is not a new bill. */
 class SamePageTest {
-    private val minimal = listOf("支付成功", "测试商户（*某）", "¥0.01", "完成")
+    private val minimal = listOf("交易详情", "当前状态", "支付成功", "¥0.01", "支付时间", "未显示", "支付方式", "零钱")
     private val drafts = mutableListOf<BillDraft>()
     private val t0 = 1_792_713_659_000L // hh:mm:59
 
@@ -24,7 +24,7 @@ class SamePageTest {
 
     @After fun tearDown() { BillKit.reset(); DebugBus.clear() }
 
-    @Test fun `same minimal page re-offered across minute and beyond dedupe window is skipped`() {
+    @Test fun `same detail page re-offered across minute and beyond dedupe window is skipped`() {
         install()
         offer(minimal, t0)
         offer(minimal, t0 + 2_000)                  // next minute: old code produced a second draft
@@ -33,7 +33,7 @@ class SamePageTest {
         assertEquals(1, drafts.size)
     }
 
-    @Test fun `a different screen in between allows the same success page as a new bill`() {
+    @Test fun `a different screen in between allows the same detail page as a new bill`() {
         install()
         offer(minimal, t0)
         offer(listOf("向商家付钱", "测试商户（*某）", "请输入金额"), t0 + 5_000)

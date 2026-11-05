@@ -162,7 +162,22 @@ fun ConfirmSheet(
     onAmountBounds: ((androidx.compose.ui.geometry.Rect) -> Unit)? = null,
     onPickerBackHandler: (((() -> Boolean)?) -> Unit)? = null,
     noteSuggestions: (current: BillDraft) -> List<NoteSuggester.Suggestion> = { emptyList() },
+    duplicateSuspected: List<io.github.mymoney.data.DuplicateProbe.Hit> = emptyList(),
 ) {
+    // 记账前「查账本」的疑似重复：所有宿主（悬浮卡/Activity/编辑器）都在这里统一核算，
+    // 重开卡片会重新对照一次当前账单库。调用方也可传 duplicateSuspected 覆盖（测试用）。
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var probedDuplicates by remember(draft.historyId, draft.priceCents, draft.timeMillis, draft.account) {
+        mutableStateOf(duplicateSuspected)
+    }
+    LaunchedEffect(draft.historyId, draft.priceCents, draft.timeMillis, draft.type, draft.account) {
+        if (duplicateSuspected.isNotEmpty()) return@LaunchedEffect
+        probedDuplicates = runCatching {
+            val db = io.github.mymoney.data.AppDb.get(context.applicationContext)
+            io.github.mymoney.data.DuplicateProbe.findSuspects(db, draft)
+        }.getOrDefault(emptyList())
+    }
+    val effectiveDuplicates = if (duplicateSuspected.isNotEmpty()) duplicateSuspected else probedDuplicates
     val p = LocalAbPalette.current
     DisposableEffect(draft.historyId) {
         val id = draft.historyId
@@ -431,59 +446,65 @@ fun ConfirmSheet(
                     Modifier.verticalScroll(rememberScrollState()).padding(bottom = AbSpacing.l),
                     verticalArrangement = Arrangement.spacedBy(AbSpacing.s),
                 ) {
-                    // ---- 金额 ----
-                    Row(
-                        Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xl)
-                            .onGloballyPositioned { onAmountBounds?.invoke(it.boundsInRoot()) }
-                            .graphicsLayer { alpha = if (amountVisibility) 1f else 0f },
-                        verticalAlignment = Alignment.CenterVertically,
+                    // Keep the label attached to the amount, independently of the form row gaps.
+                    Column(
+                        Modifier.padding(bottom = if (effectiveDuplicates.isNotEmpty()) AbSpacing.xs else 0.dp),
+                        verticalArrangement = Arrangement.spacedBy(if (effectiveDuplicates.isNotEmpty()) 0.dp else AbSpacing.s),
                     ) {
-                        Text("¥", style = AbType.amountTitle, color = amountTint(p, type.name), modifier = Modifier.padding(end = 6.dp))
-                        val preferredAmountStyle = AbType.amountEntry.copy(color = amountTint(p, type.name),
-                            fontSize = AbType.amountEntry.fontSize / density.fontScale.coerceAtLeast(1f))
-                        val naturalWidth = amountMeasurer.measure(amount.text.ifBlank { "0.00" }, preferredAmountStyle, maxLines = 1, softWrap = false).size.width
-                        val fit = if (amountWidth > 0) ((amountWidth - 2f) / naturalWidth.coerceAtLeast(1)).coerceIn(0.1f, 1f) else 1f
-                        val amountStyle = preferredAmountStyle.copy(fontSize = preferredAmountStyle.fontSize * fit)
-                        SideEffect { if (amountWidth > 0) onAmountFontSize?.invoke(amountStyle.fontSize) }
-                        BasicTextField(
-                            value = amount,
-                            onValueChange = { next ->
-                                if (next.text != amount.text) touch(io.github.mymoney.data.CaptureFields.AMOUNT)
-                                undo = null
-                                amount = if (forceSelectAll) {
-                                    forceSelectAll = false
-                                    next.copy(selection = TextRange(0, next.text.length))
-                                } else next
-                                importError = null
-                            },
-                            singleLine = true,
-                            enabled = !locked,
-                            textStyle = amountStyle,
-                            cursorBrush = SolidColor(p.accent),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                            modifier = Modifier.weight(1f).onSizeChanged { amountWidth = it.width }.focusRequester(amountFocus)
-                                .onFocusChanged { state ->
-                                    // 只在第一次获得焦点时全选；之后再点保留光标位置，不丢已输入内容
-                                    if (state.isFocused && selectAllOnFocus) {
-                                        selectAllOnFocus = false
-                                        forceSelectAll = true
-                                        amount = amount.copy(selection = TextRange(0, amount.text.length))
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xl)
+                                .onGloballyPositioned { onAmountBounds?.invoke(it.boundsInRoot()) }
+                                .graphicsLayer { alpha = if (amountVisibility) 1f else 0f },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("¥", style = AbType.amountTitle, color = amountTint(p, type.name), modifier = Modifier.padding(end = 6.dp))
+                            val preferredAmountStyle = AbType.amountEntry.copy(color = amountTint(p, type.name),
+                                fontSize = AbType.amountEntry.fontSize / density.fontScale.coerceAtLeast(1f))
+                            val naturalWidth = amountMeasurer.measure(amount.text.ifBlank { "0.00" }, preferredAmountStyle, maxLines = 1, softWrap = false).size.width
+                            val fit = if (amountWidth > 0) ((amountWidth - 2f) / naturalWidth.coerceAtLeast(1)).coerceIn(0.1f, 1f) else 1f
+                            val amountStyle = preferredAmountStyle.copy(fontSize = preferredAmountStyle.fontSize * fit)
+                            SideEffect { if (amountWidth > 0) onAmountFontSize?.invoke(amountStyle.fontSize) }
+                            BasicTextField(
+                                value = amount,
+                                onValueChange = { next ->
+                                    if (next.text != amount.text) touch(io.github.mymoney.data.CaptureFields.AMOUNT)
+                                    undo = null
+                                    amount = if (forceSelectAll) {
+                                        forceSelectAll = false
+                                        next.copy(selection = TextRange(0, next.text.length))
+                                    } else next
+                                    importError = null
+                                },
+                                singleLine = true,
+                                enabled = !locked,
+                                textStyle = amountStyle,
+                                cursorBrush = SolidColor(p.accent),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                modifier = Modifier.weight(1f).onSizeChanged { amountWidth = it.width }.focusRequester(amountFocus)
+                                    .onFocusChanged { state ->
+                                        // 只在第一次获得焦点时全选；之后再点保留光标位置，不丢已输入内容
+                                        if (state.isFocused && selectAllOnFocus) {
+                                            selectAllOnFocus = false
+                                            forceSelectAll = true
+                                            amount = amount.copy(selection = TextRange(0, amount.text.length))
+                                        }
                                     }
-                                }
-                                .semantics { contentDescription = "${typeLabel(type)}金额"; if (amountInvalid) error("请输入大于0且不超过一百万元的金额") },
-                            decorationBox = { inner ->
-                                Box(contentAlignment = Alignment.CenterStart) {
-                                    if (amount.text.isEmpty()) Text("0.00", style = amountStyle.copy(color = p.tertiaryLabel))
-                                    inner()
-                                }
-                            },
-                        )
-                        Box(Modifier.heightIn(min = 48.dp).widthIn(min = 48.dp)
-                            .clickable(enabled = !locked) { ignore() }.semantics { role = Role.Button; contentDescription = if (editableDetails) "取消编辑" else "忽略，可在记录历史重新打开" },
-                            contentAlignment = Alignment.Center) { Text(ignoreLabel, style = AbType.footnote, color = p.secondaryLabel) }
+                                    .semantics { contentDescription = "${typeLabel(type)}金额"; if (amountInvalid) error("请输入大于0且不超过一百万元的金额") },
+                                decorationBox = { inner ->
+                                    Box(contentAlignment = Alignment.CenterStart) {
+                                        if (amount.text.isEmpty()) Text("0.00", style = amountStyle.copy(color = p.tertiaryLabel))
+                                        inner()
+                                    }
+                                },
+                            )
+                            Box(Modifier.heightIn(min = 48.dp).widthIn(min = 48.dp)
+                                .clickable(enabled = !locked) { ignore() }.semantics { role = Role.Button; contentDescription = if (editableDetails) "取消编辑" else "忽略，可在记录历史重新打开" },
+                                contentAlignment = Alignment.Center) { Text(ignoreLabel, style = AbType.footnote, color = p.secondaryLabel) }
+                        }
+                        if (amountInvalid) Text("请输入有效金额", color = p.red, style = AbType.caption1,
+                            modifier = Modifier.padding(horizontal = AbSpacing.xl).semantics { liveRegion = LiveRegionMode.Polite; error("金额无效") })
+                        if (effectiveDuplicates.isNotEmpty()) DuplicateSuspectedNotice()
                     }
-                    if (amountInvalid) Text("请输入有效金额", color = p.red, style = AbType.caption1,
-                        modifier = Modifier.padding(horizontal = AbSpacing.xl).semantics { liveRegion = LiveRegionMode.Polite; error("金额无效") })
                     Segmented(
                         options = BillType.entries.map(::typeLabel), selected = BillType.entries.indexOf(type), enabled = !locked,
                         onSelect = { index ->
@@ -819,6 +840,18 @@ private fun CompactNoteField(value: String, enabled: Boolean, onChange: (String)
             if (value.isEmpty()) Text("备注（可选）", style = AbType.body, color = p.tertiaryLabel)
             inner()
         } },
+    )
+}
+
+@Composable
+private fun DuplicateSuspectedNotice() {
+    val p = LocalAbPalette.current
+    Text(
+        "（可能重复）",
+        Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xl)
+            .semantics { liveRegion = LiveRegionMode.Polite },
+        style = AbType.footnote,
+        color = p.red,
     )
 }
 

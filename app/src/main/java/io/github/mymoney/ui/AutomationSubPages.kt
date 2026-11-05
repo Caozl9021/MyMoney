@@ -26,7 +26,15 @@ internal fun RecognitionSettingsPage(showsHook: Boolean, showsRoot: Boolean,
     snapshot: CaptureModeStateSnapshot, autoConfirm: Boolean, onBack: () -> Unit,
     onAction: (CaptureAction) -> Unit, onOpenHook: () -> Unit,
     onPermissions: () -> Unit, onRootStatus: () -> Unit) {
+    val context = LocalContext.current
+    val settings = remember(context) { Settings(context) }
+    var scopeNoticeSeen by remember { mutableStateOf(settings.pageRecognitionScopeNoticeSeen) }
     SettingsContentPage("识别方式与增强", onBack) {
+        if (!scopeNoticeSeen) InsetGroup {
+            ListRow(title = "页面识别范围调整",
+                subtitle = "打开交易详情时自动识别；付款成功页由通知监听处理。点击知道了。",
+                onClick = { settings.pageRecognitionScopeNoticeSeen = true; scopeNoticeSeen = true })
+        }
         ChannelRows(state = snapshot, showsHook = showsHook, onAction = onAction, onOpenHook = onOpenHook)
         ScreenTextConsentRow()
         val overlay = autoConfirm && !snapshot.overlayAllowed

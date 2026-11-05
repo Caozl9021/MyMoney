@@ -57,6 +57,15 @@ object AmountParser {
         """原价|原金额|订单编?号|交易单号|转账单号|商户单号|流水号|积分|卡号|尾号|余额|可用|额度"""
     )
 
+    /**
+     * 附属扣减/补贴行：详情页里「闪购支付红包 -0.60」「优惠 -2.00」「立减」这类行带金额，
+     * 但不是本次实付。只在裸金额兜底那一步跳过它们，避免主金额+附属金额两个裸数字被判成"无主金额"。
+     * 注意不能塞进 excludedRe——微信红包收入页的「红包 ¥6.66」是实付金额，走带标签/带符号兜底。
+     */
+    private val discountLineRe = Regex(
+        """红包|优惠|立减|折扣|抵扣|补贴|满减|返现"""
+    )
+
     private val timePatterns: List<Regex> = listOf(
         Regex("""(\d{4})年(\d{1,2})月(\d{1,2})日\s*(\d{1,2})[:点时](\d{2})(?:[:分](\d{2}))?"""),
         Regex("""(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})\s*(\d{1,2}):(\d{2})(?::(\d{2}))?"""),
@@ -143,7 +152,19 @@ object AmountParser {
         if (moneyHits != null) return moneyHits.copy(source = "money-symbol")
 
         // 4) 全屏只有一个"看起来像钱"的裸金额（微信交易详情就是这种：-3.50）
-        val bareHits = candidates(items) { line ->
+        //    但要先跳过“红包/优惠/立减/折扣/抵扣/补贴”这类附属扣减行，否则详情页一旦
+        //    出现「闪购支付红包 -0.60」这种行就会有两个裸金额、误判为无主金额而整体跳过。
+        //    注意：支付宝详情页把「闪购支付红包」和「-0.60」拆成两行，所以要同时跳过
+        //    标签行本身，以及"紧跟在红包/优惠标签行后面"的纯金额行。
+        val discounted = HashSet<Int>()
+        for (i in items.indices) {
+            if (discountLineRe.containsMatchIn(items[i])) {
+                discounted.add(i)
+                // 标签行后面若紧跟一个纯金额行（-0.60 / ¥0.60），也一并视为附属
+                if (bareRe.matches(items.getOrNull(i + 1)?.trim().orEmpty())) discounted.add(i + 1)
+            }
+        }
+        val bareHits = candidates(items.filterIndexed { idx, _ -> idx !in discounted }) { line ->
             bareRe.find(line)?.let { it.groupValues[2] to signOf(it.groupValues[1]) }
         }
         if (bareHits != null) return bareHits.copy(source = "bare-unique")

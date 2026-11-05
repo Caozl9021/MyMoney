@@ -106,9 +106,9 @@ internal val CaptureHealthInput.recognitionReady: Boolean
 internal fun captureHealth(input: CaptureHealthInput): CaptureHealth = with(input) {
     // 凭证通道不需要选模式，所以只开了它也算「设置过」——不能一边采着一边要求用户去选模式。
     // 一条通道都没配过。以前这里要求用户先选「普通模式 / Root 模式」，现在没有这个选择了：
-    // 需要的是把通知识别打开，所以直接指向自动记账页。
+    // 需要的是把通知监听打开，所以直接指向自动记账页。
     if (mode == null && !pageEnabled && !notificationsEnabled && !hookEnabled) return CaptureHealth(CaptureHealthKind.MODE_REQUIRED,
-        "尚未开启自动记账", "打开通知识别后，麦米会在收到微信、支付宝交易通知时生成草稿。",
+        "尚未开启自动记账", "打开通知监听后，麦米会在收到微信、支付宝交易通知时生成草稿。",
         listOf(CaptureAction.OPEN_AUTOMATION))
     if (!enabled) return CaptureHealth(CaptureHealthKind.PAUSED, "自动记账已暂停",
         "已保留通道设置与推荐配置。", listOf(CaptureAction.RESUME))
@@ -134,7 +134,7 @@ internal fun captureHealth(input: CaptureHealthInput): CaptureHealth = with(inpu
             !accessibilityAuthorized -> add(CaptureHealth(CaptureHealthKind.ACCESSIBILITY_DISABLED,
                 "尚未就绪 · 还差无障碍授权", "无障碍服务未授权，请在系统设置中开启 麦米。", listOf(CaptureAction.ACCESSIBILITY)))
             !accessibilityBound -> add(CaptureHealth(CaptureHealthKind.ACCESSIBILITY_UNBOUND,
-                "尚未就绪 · 页面辅助尚未连接", "无障碍已授权但服务未连接，请在系统设置中重新开启 麦米。", listOf(CaptureAction.ACCESSIBILITY)))
+                "尚未就绪 · 页面识别尚未连接", "无障碍已授权但服务未连接，请在系统设置中重新开启 麦米。", listOf(CaptureAction.ACCESSIBILITY)))
         }
         if (hookEnabled && !hookReady) add(CaptureHealth(CaptureHealthKind.HOOK_UNCONFIRMED,
             "尚未确认应用模块加载", "请在 LSPosed 设置中检测微信、支付宝的模块加载状态。", listOf(CaptureAction.LSP)))
@@ -150,8 +150,8 @@ internal fun captureHealth(input: CaptureHealthInput): CaptureHealth = with(inpu
         "尚未就绪 · 识别来源已关闭", "请在识别设置或更多设置中开启至少一种识别方式。", listOf(CaptureAction.OPEN_AUTOMATION))
 
     val sources = buildList {
-        if (notificationReady) add(if (notificationPlan == NotificationPath.DUMPSYS) "Root 通知识别" else "通知识别")
-        if (pageReady) add("页面辅助")
+        if (notificationReady) add(if (notificationPlan == NotificationPath.DUMPSYS) "Root 通知监听" else "通知监听")
+        if (pageReady) add("页面识别")
         if (lspReady) add("LSPosed 采集")
     }.joinToString("、")
     if (!autoConfirm) return CaptureHealth(CaptureHealthKind.PENDING_MODE, "已开启 · 待确认模式",

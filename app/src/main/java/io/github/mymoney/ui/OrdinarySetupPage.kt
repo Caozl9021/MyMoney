@@ -36,7 +36,7 @@ import io.github.mymoney.ui.design.*
  * 首次配置的引导页：把通知与页面两条通道各自的系统授权补齐。
  *
  * 它不问「用哪种方式」——阶段 4 之后不存在这个选择，谁在跑由各自的可用性决定。
- * 也因此这里不再有 `mode != ROOT` 的守卫：root 用户照样可能想用通知使用权和页面辅助。
+ * 也因此这里不再有 `mode != ROOT` 的守卫：root 用户照样可能想用通知使用权和页面识别。
  */
 @Composable
 internal fun OrdinarySetupPage(onBack: () -> Unit, onBackground: () -> Unit,
@@ -108,10 +108,10 @@ internal fun OrdinarySetupPage(onBack: () -> Unit, onBackground: () -> Unit,
             GroupFooter(when {
                 state.canStart -> "已有识别方式就绪，可直接开始；其他方式可按需补充。"
                 state.sourceReady -> "识别方式已就绪，推荐开启确认卡；也可先用待确认。"
-                else -> "推荐依次开启通知、页面辅助和确认卡。可跳过部分步骤，覆盖随已开方式变化。"
+                else -> "推荐先开启通知监听和确认卡；页面识别可按需开启，只识别交易详情。"
             })
             InsetGroup {
-                ListRow(title = "读取交易通知", subtitle = when {
+                ListRow(title = "通知监听", subtitle = when {
                     !input.notificationsEnabled -> "未开启 · 点击设置"
                     input.notificationPlan == io.github.mymoney.data.NotificationPath.DUMPSYS ->
                         if (input.rootNotificationReady) "已就绪 · 通过 Root 读取通知栏"
@@ -119,15 +119,15 @@ internal fun OrdinarySetupPage(onBack: () -> Unit, onBackground: () -> Unit,
                     !input.notificationAuthorized -> "待授权 · 读取所选应用的交易提醒"
                     !input.notificationBound -> "已授权，监听尚未连接 · 点击重新连接"
                     else -> "已就绪 · 通知监听已连接"
-                }, leading = { SettingsIconBadge("读取交易通知", AbIcons.Note) },
+                }, leading = { SettingsIconBadge("通知监听", AbIcons.Note) },
                     trailing = { AbSwitch(input.notificationsEnabled) { notification(it) } },
                     onClick = if (launching || state.notificationReady) null else ({ notification(true) }))
-                ListRow(title = "识别支付页面", subtitle = when {
+                ListRow(title = "页面识别", subtitle = when {
                     !input.pageEnabled -> "未开启 · 点击设置"
-                    !input.accessibilityAuthorized -> "待授权 · 辅助识别支付结果和账单页面"
+                    !input.accessibilityAuthorized -> "待授权 · 辅助打开交易详情时自动识别"
                     !input.accessibilityBound -> "已授权，服务尚未连接 · 点击重新开启"
                     else -> "已就绪 · 无障碍服务已连接"
-                }, leading = { SettingsIconBadge("识别支付页面", AbIcons.Accessibility) }, dividerAbove = true,
+                }, leading = { SettingsIconBadge("页面识别", AbIcons.Accessibility) }, dividerAbove = true,
                     trailing = { AbSwitch(input.pageEnabled) { page(it) } },
                     onClick = if (launching || state.pageReady) null else ({ page(true) }))
                 ListRow(title = "显示悬浮确认卡", subtitle = when {
@@ -143,9 +143,9 @@ internal fun OrdinarySetupPage(onBack: () -> Unit, onBackground: () -> Unit,
             val action = state.nextAction
             val primaryAction = if (state.canStart) null else action
             PrimaryButton(when (primaryAction) {
-                CaptureAction.NOTIFICATION_ACCESS -> "开启通知识别"
+                CaptureAction.NOTIFICATION_ACCESS -> "开启通知监听"
                 CaptureAction.NOTIFICATION_RECONNECT -> "重新连接通知监听"
-                CaptureAction.ACCESSIBILITY -> "开启页面辅助"
+                CaptureAction.ACCESSIBILITY -> "开启页面识别"
                 CaptureAction.OVERLAY -> "允许悬浮确认卡"
                 CaptureAction.ROOT_STATUS -> "查看 Root 状态"
                 else -> if (state.canStart) {
@@ -166,7 +166,7 @@ internal fun OrdinarySetupPage(onBack: () -> Unit, onBackground: () -> Unit,
                 TextButton(onClick = {
                     source(action != CaptureAction.ACCESSIBILITY, false)
                 }, enabled = !launching, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (action == CaptureAction.ACCESSIBILITY) "暂不开启页面辅助" else "暂不开启通知识别", color = p.secondaryLabel)
+                    Text(if (action == CaptureAction.ACCESSIBILITY) "暂不开启页面识别" else "暂不开启通知监听", color = p.secondaryLabel)
                 }
             }
             if (input.autoConfirm && !input.overlayAllowed) {

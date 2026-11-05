@@ -114,7 +114,7 @@ private fun pageVerdict(input: CaptureHealthInput, whitelisted: Boolean): Channe
     return when {
         !whitelisted -> ChannelVerdict(false, ChannelReason.NOT_WHITELISTED, "未选择该应用，不会读取它的页面")
         !input.enabled -> ChannelVerdict(false, ChannelReason.GLOBAL_PAUSED, "自动识别已暂停，恢复后继续")
-        !input.pageEnabled -> ChannelVerdict(false, ChannelReason.PAGE_DISABLED, "页面辅助未启用")
+        !input.pageEnabled -> ChannelVerdict(false, ChannelReason.PAGE_DISABLED, "页面识别未启用")
         !input.accessibilityAuthorized ->
             ChannelVerdict(false, ChannelReason.PAGE_UNAUTHORIZED, "无障碍服务未授权，请在系统设置中开启 麦米")
         !input.accessibilityBound ->

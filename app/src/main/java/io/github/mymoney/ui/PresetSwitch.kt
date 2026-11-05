@@ -14,7 +14,7 @@ import io.github.mymoney.ui.design.*
  * 「推荐配置」：一键把几条通道的开关设成一组常见组合。
  *
  * 它**不是**模式选择。阶段 4 之前这里叫「使用方式」，选的是一组互斥能力——选了 Root 就没有
- * 页面辅助，选了普通就用不了凭证采集。现在它只写开关，写完谁在跑仍由各自可用性决定；
+ * 页面识别，选了普通就用不了凭证采集。现在它只写开关，写完谁在跑仍由各自可用性决定；
  * 用户随时可以在下面的通道行里单独改，预设不会把他锁住。
  *
  * 只在设备真有 root 时才渲染（见 [DeviceCapabilities]）——没有 root 的机器上「Root 增强」
@@ -37,10 +37,10 @@ internal fun PresetSwitch(
             )
             Text(
                 if (mode == CaptureMode.ROOT) {
-                    if (lspInstalled) "通知 + 凭证采集；页面辅助在通道里单独开。"
+                    if (lspInstalled) "通知 + 凭证采集；页面识别在通道里单独开。"
                     else "通知 + Root 读通知兜底；装了 LSPosed 后还能开凭证采集。"
                 } else {
-                    "通知 + 页面辅助。"
+                    "通知监听；页面识别可按需开启。"
                 },
                 style = AbType.footnote, color = p.secondaryLabel,
             )

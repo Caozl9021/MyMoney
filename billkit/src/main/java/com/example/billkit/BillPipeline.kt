@@ -22,6 +22,13 @@ class BillPipeline(
         return processNormalized(snapshot.copy(items = PaymentResultParser.normalize(snapshot.items)), now)
     }
 
+    /** Every automatic page rule (including personal/external rules) passes this gate first. */
+    fun processForCapture(snapshot: UiSnapshot, now: Long = System.currentTimeMillis()): Outcome {
+        val admission = PageCaptureEligibility.evaluate(snapshot)
+        if (!admission.allowed) return Outcome.Skipped("scene:${admission.reason}")
+        return process(snapshot, now)
+    }
+
     private fun processNormalized(snapshot: UiSnapshot, now: Long): Outcome {
         com.example.billkit.spec.PersonalPageRules.match(snapshot, now)?.let { return it }
         val match = classifier.classify(snapshot)
@@ -66,6 +73,7 @@ class BillPipeline(
             merchant = fields.merchant
                 ?: FieldExtractor.merchantFromRemark(snapshot.items)
                 ?: fields.counterParty
+                ?: FieldExtractor.merchantBelowAmount(snapshot.items)
                 ?: FieldExtractor.merchantAboveAmount(snapshot.items),
             method = fields.method,
             orderTail = FieldExtractor.orderIdTail(fields.orderId),

@@ -62,21 +62,23 @@ class CaptureLimitsTest {
         try {
             BillKit.install(BillKitConfig(minIntervalMs = 1500), sink = {})
             BillKit.offer(UiSnapshot("test", null, listOf("not a bill"), truncated = true), now = 10000)
-            assertEquals("skip:not-a-bill-page [截断]", DebugBus.state.value?.outcome)
-            val bill = Samples.snapshot(Packages.WECHAT, Samples.wechatQrPay).copy(truncated = true)
+            assertEquals("skip:scene:unsupported-package [截断]", DebugBus.state.value?.outcome)
+            val bill = Samples.snapshot(Packages.WECHAT, Samples.wechatQrPay)
+            assertTrue(BillKit.offer(bill.copy(truncated = true), now = 9999) is BillPipeline.Outcome.Skipped)
+            assertEquals("skip:scene:incomplete-page [截断]", DebugBus.state.value?.outcome)
             assertTrue(BillKit.offer(bill, now = 10000) is BillPipeline.Outcome.Draft)
             assertTrue(DebugBus.state.value!!.outcome.startsWith("draft:"))
-            assertTrue(DebugBus.state.value!!.outcome.endsWith(" [截断]"))
+            assertFalse(DebugBus.state.value!!.outcome.endsWith(" [截断]"))
             // The identical screen offered again is recognised as the same page first.
             BillKit.offer(bill, now = 10001)
-            assertEquals("skip:same-page [截断]", DebugBus.state.value?.outcome)
+            assertEquals("skip:same-page", DebugBus.state.value?.outcome)
             // A page without an explicit independent transaction ID is still throttled.
-            val other = Samples.snapshot(Packages.WECHAT, Samples.wechatBill.filterNot { it == "交易单号" || it == "4200001234202410211234567890" }).copy(truncated = true)
+            val other = Samples.snapshot(Packages.WECHAT, listOf("交易详情") + Samples.wechatBill.filterNot { it == "交易单号" || it == "4200001234202410211234567890" })
             BillKit.offer(other, now = 10002)
-            assertEquals("skip:throttled [截断]", DebugBus.state.value?.outcome)
+            assertEquals("skip:throttled", DebugBus.state.value?.outcome)
             // Leaving the page ends the session; the 90s fingerprint window still catches the same bill.
             BillKit.offer(bill, now = 12000)
-            assertEquals("skip:duplicate [截断]", DebugBus.state.value?.outcome)
+            assertEquals("skip:duplicate", DebugBus.state.value?.outcome)
         } finally {
             BillKit.reset()
             DebugBus.clear()

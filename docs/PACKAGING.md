@@ -58,3 +58,5 @@ python3 billkit/rules/package.py
 - `archive/legacy-root/app-update.json` 是原根目录重复清单，仅供追溯，不用于新发布。
 - `.stfolder/` 为 Syncthing 标记，保持原位。根目录不再散放 APK、ZIP、版本清单或发布草稿。
 - 不自动清理旧包或按数量删除。清理前先列候选、确认备份和复用依赖，再按用户授权执行。
+
+2026-11-05同步：当前最近成功候选为1.9.0/143，路径以latest-app.json为准；143为pending_acceptance。当前用户验收见ACCEPTANCE.md，本次文档更新不修改候选APK、清单或历史发布快照。

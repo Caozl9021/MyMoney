@@ -3,6 +3,8 @@ package io.github.mymoney.capture
 import android.accessibilityservice.AccessibilityService
 import android.content.Intent
 import android.os.Build
+import com.example.billkit.PageCaptureEligibility
+import com.example.billkit.DebugBus
 import com.example.billkit.BillPipeline
 import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,6 +52,15 @@ class BillAccessibilityService : AccessibilityService() {
     private var pendingToken: String? = null
 
     private val schedule = AccessibilityCaptureSchedule()
+    private val observations = PageObservationScope()
+
+    fun isObservationCurrent(id: String?): Boolean = ::settings.isInitialized && settings.pageActive &&
+        (getSystemService(KEYGUARD_SERVICE) as? android.app.KeyguardManager)?.isKeyguardLocked != true && observations.allows(id)
+
+    private fun invalidateObservations() {
+        observations.clear()
+        io.github.mymoney.ocr.PageOcrAssist.cancelAll()
+    }
 
     private val captureTask = Runnable { captureAndOffer() }
 
@@ -73,9 +84,11 @@ class BillAccessibilityService : AccessibilityService() {
         val enabled = settings.pageActive
         if (!enabled || pendingPackage?.let { it !in settings.whitelist } == true) {
             clearPending()
+            invalidateObservations()
         }
         val info = serviceInfo ?: return
-        info.packageNames = if (enabled) settings.whitelist.toTypedArray() else null
+        // Observe foreign window transitions to invalidate leases; never read their content.
+        info.packageNames = null
         info.eventTypes = if (enabled) AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED else 0
         info.notificationTimeout = 300
@@ -86,14 +99,17 @@ class BillAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
         if (!::settings.isInitialized) return
-        if (!settings.pageActive) { clearPending(); return }
+        if (!settings.pageActive) { clearPending(); invalidateObservations(); return }
 
         val pkg = event.packageName?.toString() ?: return
         if (!BillKit.isAccepted(pkg) || pkg == packageName) {
-            // Foreign content updates can come from a background app/SystemUI.
-            // Only a window transition is evidence that we left the pending page.
-            if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && pendingPackage != pkg) {
+            // Own confirmation UI may cover an accepted detail without changing its transaction.
+            val ownConfirmation = pkg == packageName &&
+                (event.className?.toString() == "io.github.mymoney.ui.ConfirmActivity" ||
+                    io.github.mymoney.overlay.ConfirmOverlay.isShowing())
+            if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && !ownConfirmation) {
                 clearPending()
+                invalidateObservations()
             }
             return
         }
@@ -105,6 +121,8 @@ class BillAccessibilityService : AccessibilityService() {
         }
         val token = NotificationIngress.configurationToken(this)
         if (pendingPackage != pkg || pendingToken != token) clearPending()
+        // A queued snapshot may not outlive a new target-window/content observation.
+        invalidateObservations()
         pendingToken = token
         pendingPackage = pkg
         // A content event often identifies a TextView, not the hosting Activity.
@@ -129,7 +147,7 @@ class BillAccessibilityService : AccessibilityService() {
     }
 
     private fun captureAndOffer() {
-        if (!settings.pageActive) { clearPending(); return }
+        if (!settings.pageActive) { clearPending(); invalidateObservations(); return }
         val pkg = pendingPackage ?: return
         val token = pendingToken ?: return
         if (token != NotificationIngress.configurationToken(this)) { clearPending(); return }
@@ -138,6 +156,8 @@ class BillAccessibilityService : AccessibilityService() {
         // 事件到了但无障碍树还没建好（支付宝这类自绘/WebView 页面很常见）：
         // 轻量重试一次，别把这一屏直接丢掉。
         if (root == null || root.packageName?.toString() != pkg) {
+            root?.recycle()
+            invalidateObservations()
             val retryAt = schedule.retry(SystemClock.uptimeMillis())
             if (retryAt != null) postCaptureAt(retryAt) else {
                 Log.i(TAG, "无障碍根节点不可用，跳过本次采集: $pkg")
@@ -157,12 +177,33 @@ class BillAccessibilityService : AccessibilityService() {
             pageObservationId = UUID.randomUUID().toString(),
         )
 
+        val windowId = root.windowId
+        root.recycle()
+        val admission = PageCaptureEligibility.evaluate(snapshot)
+        if (!admission.allowed) {
+            invalidateObservations()
+            clearPending()
+            DebugBus.publish(snapshot, "skip:scene:${admission.reason}")
+            return
+        }
+        val candidate = BillPipeline().processForCapture(snapshot)
+        if (candidate !is BillPipeline.Outcome.Draft) {
+            invalidateObservations()
+            clearPending()
+            DebugBus.publish(snapshot, "skip:detail-not-recognized")
+            return
+        }
+        val draft = candidate.draft
+        val detailKey = listOf(pkg, windowId, draft.transactionKey ?: listOf(
+            draft.type, draft.priceCents, if (draft.hasExplicitTime) draft.timeMillis else snapshot.items,
+            draft.method).toString()).joinToString("|")
+        observations.observe(snapshot.pageObservationId!!, detailKey)
+
         // Nodes establish a payment before any pixels are requested. OCR never discovers safety.
         if (Build.VERSION.SDK_INT >= 30 && io.github.mymoney.ocr.OcrPreferences(this).enabled &&
-            !collected.truncated && safeOcrWindow(pkg, root.windowId)) {
-            val result = BillPipeline().process(snapshot)
+            !collected.truncated && safeOcrWindow(pkg, windowId)) {
+            val result = candidate
             if (result is BillPipeline.Outcome.Draft) {
-                val windowId = root.windowId
                 io.github.mymoney.ocr.PageOcrAssist.request(this, snapshot, result.draft, windowId) {
                     safeOcrWindow(pkg, windowId, snapshot.items)
                 }
@@ -170,7 +211,8 @@ class BillAccessibilityService : AccessibilityService() {
         }
         clearPending()
         worker.execute {
-            if (settings.pageActive && token == NotificationIngress.configurationToken(this)) {
+            if (settings.pageActive && token == NotificationIngress.configurationToken(this) &&
+                observations.allows(snapshot.pageObservationId)) {
                 BillKit.offer(snapshot)
             }
         }
@@ -202,18 +244,19 @@ class BillAccessibilityService : AccessibilityService() {
     }
 
     override fun onInterrupt() {
-        io.github.mymoney.ocr.PageOcrAssist.cancelAll()
+        invalidateObservations()
         clearPending()
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
-        io.github.mymoney.ocr.PageOcrAssist.cancelAll()
+        invalidateObservations()
+        clearPending()
         if (instance === this) { instance = null; mutableBound.value = false }
         return super.onUnbind(intent)
     }
 
     override fun onDestroy() {
-        io.github.mymoney.ocr.PageOcrAssist.cancelAll()
+        invalidateObservations()
         clearPending()
         worker.shutdownNow()
         if (instance === this) { instance = null; mutableBound.value = false }

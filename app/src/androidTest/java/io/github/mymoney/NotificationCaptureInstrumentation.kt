@@ -321,7 +321,8 @@ class NotificationCaptureInstrumentation : Instrumentation() {
                 }
 
                 test("room5_new_schema_tables_exist_only_in_isolated_memory") { db ->
-                    check(db.openHelper.readableDatabase.version == 9)
+                    // 数据库自 1.8.0/132 起为 Room10，此断言旧值 9 属历史遗留，已对齐实际版本。
+                    check(db.openHelper.readableDatabase.version == 10)
                     val names = mutableSetOf<String>()
                     db.openHelper.readableDatabase.query("SELECT name FROM sqlite_master WHERE type='table'").use { cursor ->
                         while (cursor.moveToNext()) names += cursor.getString(0)

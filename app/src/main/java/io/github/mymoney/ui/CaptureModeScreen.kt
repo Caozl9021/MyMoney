@@ -25,7 +25,7 @@ import io.github.mymoney.ui.design.PrimaryButton
  * 首次启动的引导页。**只问一件事：要不要开始自动记账。**
  *
  * 以前这一页让用户在「普通模式 / Root 模式」里二选一，等于开局就要他回答一个自己无从判断的问题，
- * 而且选错就要在设置里改回来。现在没有这个选择了：一键把通知与页面两条通道打开，再按步骤补授权。
+ * 而且选错就要在设置里改回来。现在没有这个选择了：先配置通知监听，再按需开启页面识别。
  * 需要 Root 才有意义的东西（凭证采集、Root 读通知兜底）在设备真有 root 时自己会出现在设置里，
  * 不需要用户在这一页做决定。
  */
@@ -47,17 +47,17 @@ fun CaptureModeScreen(onOrdinarySetup: () -> Unit) {
             Text("开启自动记账", style = AbType.largeTitle, color = p.label)
             Text(
                 "麦米从微信、支付宝的交易通知里读出金额和商户，生成草稿等你确认后再记账。" +
-                    "没有通知时，页面辅助可以补上。",
+                    "打开交易详情时，也可通过页面识别自动生成草稿。付款成功页由通知监听处理。",
                 style = AbType.subhead, color = p.secondaryLabel,
             )
             Text(
-                "接下来会依次帮你打开通知使用权和页面辅助所需的系统权限；任何一步都可以先跳过，" +
+                "先配置通知监听；页面识别可以之后按需开启。授权步骤都可以先跳过，" +
                     "之后在设置里补。",
                 style = AbType.footnote, color = p.secondaryLabel,
             )
-            PrimaryButton("一键开启", {
-                // 只是把两条通道打开，不是选模式：写完谁在跑仍由各自的可用性决定。
-                CaptureModeManager.applyPreset(context, CaptureMode.ACCESSIBILITY, lspInstalled = false)
+            PrimaryButton("开始设置", {
+                // 新安装准备暂停态通知配置；旧安装保留来源选择。
+                CaptureModeManager.prepareOrdinarySetup(context)
                 onOrdinarySetup()
             }, Modifier.fillMaxWidth())
         }

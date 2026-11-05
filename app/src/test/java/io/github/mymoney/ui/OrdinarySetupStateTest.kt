@@ -12,11 +12,12 @@ class OrdinarySetupStateTest {
         notificationsEnabled = true, notificationAuthorized = true, notificationBound = true,
         notificationPlan = NotificationPath.LISTENER)
 
-    @Test fun newConfigurationIsOnePausedSnapshotWithBothRecommendedSources() {
+    @Test fun newConfigurationStartsPausedWithNotificationAndOptionalPage() {
         val next = CaptureModePolicy.prepareOrdinary(CaptureModeState())
         assertEquals(CaptureMode.ACCESSIBILITY, next.mode)
         assertFalse(next.enabled)
-        assertTrue(next.notificationsEnabled && next.pageEnabled)
+        assertTrue(next.notificationsEnabled)
+        assertFalse(next.pageEnabled)
         assertFalse(next.pageActive || next.notificationActive)
     }
 

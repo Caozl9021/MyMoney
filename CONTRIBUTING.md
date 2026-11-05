@@ -24,16 +24,18 @@ echo "sdk.dir=$HOME/Android/Sdk" > local.properties
 
 release 签名从仓库外的 `~/.mymoney-keys/keystore.properties` 读取。文件不存在时 `assembleRelease` 会产出 unsigned 包，**这不影响你本地调试**，但请不要把它当作可分发产物。fork 自行构建的包签名与官方包不同，无法覆盖安装。
 
-构建时需要访问 `https://api.xposed.info/` 拉取 `de.robv.android.xposed:api:82`（`compileOnly`，不进 APK）。如果该仓库不可用，可以先把这一行注释掉，只构建不涉及 LSP 的部分。
+构建时需要访问 `https://api.xposed.info/` 拉取 `de.robv.android.xposed:api:82`（`compileOnly`，不进 APK）。依赖不可达时应修复仓库访问或使用已核验缓存，不通过注释依赖冒称完整构建。
 
 ## 代码约定
 
 1. **金额一律以分（Long）存储。** 两位小数输入用 `Locale.US` 解析，`19.99` 必须是 `1999` 分，不能变成 `1998`。
 2. **失败、取消、进行中的状态不得入账。** 只有用户点「记一笔」并且真实写库成功，才算记录。
-3. **不引入网络。** 项目不声明 `INTERNET` 权限。任何需要联网的功能都不会被接受。
-4. **不读写第三方 App 的私有数据。** 不 Hook 微信/支付宝的 Flutter/Dart 层，不做截图 OCR，不自动点击对方的确认按钮。
+3. **识别保持本地。** App已有INTERNET供主动更新和可选家庭同步/备份；不上传原始支付通知/页面或截图，不新增云端识别。
+4. **不读写第三方 App 的私有数据。** 不 Hook 微信/支付宝的 Flutter/Dart 层。OCR仅按已同意的详情Q1门槛，不能在付款结果页自动截图；不自动点击对方的支付/确认按钮。
 5. **不猜。** 缺字段就留空并保留原始诊断，不要补成看起来合理的事实。
 6. 面向用户的文案用中文；代码注释沿用现有风格，解释「为什么」而不是「做了什么」。
+
+当前基线1.9.0/143、Room10/JSON9；先遵守[OpenSpec约定](AGENTS.md)并保护已有未提交工作。普通页面规则只能处理合格详情，通知规则走独立门禁；只读预览不代表允许实际自动投递。UI重复标签单行且到类型滑块12dp，见[组件约束](docs/UI_COMPONENTS.md)。
 
 ## 加一条识别规则
 
@@ -41,7 +43,7 @@ release 签名从仓库外的 `~/.mymoney-keys/keystore.properties` 读取。文
 
 1. 在 `billkit/rules/src/` 下找到对应渠道的文件（`wechat-data.js`、`alipay-data.js`、`wechat-transfer.js`、`wechat-redpackage.js`、`notice.js`）。
 2. 按现有结构新增规则，写明 `require` / `anyOf` / `exclude` 条件与 `strategy`。
-3. 在 `billkit/src/test/resources/spec/samples.json` 增加正例与反例样本。**样本必须是合成的**，不要提交真实账单。
+3. 在 `billkit/src/test/resources/spec/samples.json` 增加正例与反例样本。样本应为合成或获授权且充分脱敏的稳定fixture，明确标注来源；不要提交原始真实账单。
 4. 跑 `./gradlew :billkit:testDebugUnitTest`，确认 `coverage.json` 与实际规则一致。
 
 ## 提交 Pull Request

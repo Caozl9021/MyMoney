@@ -76,7 +76,7 @@ internal fun AutomationPage(
                 InsetGroup {
                     ListRow(
                         title = "识别方式与增强",
-                        subtitle = if (showsLsp) "通知识别、页面辅助与凭证采集" else "通知识别、页面辅助",
+                        subtitle = if (showsLsp) "通知监听、页面识别与凭证采集" else "通知监听、页面识别",
                         leading = { SettingsIconBadge("识别设置", AbIcons.Filter) },
                         chevron = true, onClick = { onNavigate(Route.SOURCES) })
 
@@ -85,7 +85,7 @@ internal fun AutomationPage(
             item {
                 InsetGroup {
                     ListRow(title = "识别后弹出确认卡",
-                        subtitle = if (autoConfirm) "核对后保存到账本" else "不弹卡，稍后到待确认中处理",
+                        subtitle = if (autoConfirm) "通知监听和页面识别均适用，核对后保存" else "两种方式均不弹卡，稍后到待确认中处理",
                         leading = { SettingsIconBadge("确认卡", AbIcons.Note) },
                         trailing = { AbSwitch(autoConfirm, onToggleConfirm) },
                         onClick = { onToggleConfirm(!autoConfirm) })

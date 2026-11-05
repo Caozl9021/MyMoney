@@ -79,7 +79,7 @@ object CaptureModePolicy {
     /** Only a genuinely new configuration receives defaults; existing choices are immutable here. */
     fun prepareOrdinary(current: CaptureModeState): CaptureModeState =
         if (current.configured) current else current.copy(mode = CaptureMode.ACCESSIBILITY,
-            enabled = false, notificationsEnabled = true, pageEnabled = true)
+            enabled = false, notificationsEnabled = true, pageEnabled = false)
 
     fun migrate(stored: String?, legacyRoot: Boolean, accessibilityConfigured: Boolean): CaptureMode? =
         CaptureMode.entries.firstOrNull { it.name == stored }

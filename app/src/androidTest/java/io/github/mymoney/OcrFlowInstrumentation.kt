@@ -29,12 +29,15 @@ import java.util.UUID
  * Never grants permissions, installs packages, saves bills, or clears production preferences.
  */
 class OcrFlowInstrumentation : Instrumentation() {
+    private var fixturePackage = "com.tencent.mm"
     private var admitted = false
     private var originalPageSessionWasEmpty = false
     private val results = mutableListOf<String>()
     private val diagnostics = mutableMapOf<String, Any?>()
     override fun onCreate(arguments: Bundle?) {
         super.onCreate(arguments)
+        fixturePackage = arguments?.getString("fixturePackage") ?: "com.tencent.mm"
+        check(fixturePackage in setOf("com.tencent.mm", "com.eg.android.AlipayGphone"))
         admitted = arguments?.getString("isolated") == "waydroid-ocr-flow"
         originalPageSessionWasEmpty = arguments?.getString("originalPageSession") == "empty"
         start()
@@ -60,7 +63,7 @@ class OcrFlowInstrumentation : Instrumentation() {
     }
 
     private suspend fun runCases() {
-        val fixture = ComponentName("com.tencent.mm", "io.github.mymoney.ocrfixture.PaymentFixtureActivity")
+        val fixture = ComponentName(fixturePackage, "io.github.mymoney.ocrfixture.PaymentFixtureActivity")
         check(targetContext.packageManager.getActivityInfo(fixture, 0).exported)
         sendStatus(0, Bundle().apply { putString("phase", "await-service") })
         withTimeout(15_000) {
@@ -76,6 +79,7 @@ class OcrFlowInstrumentation : Instrumentation() {
         val aliases = db.capture().aliases().toSet()
         val evidence = db.capture().exportEvidence().toSet()
         val deliveries = db.capture().deliveries().toSet()
+        val learning = LocalRuleStore.snapshot()
         val prefs = targetContext.getSharedPreferences("mymoney", Context.MODE_PRIVATE)
         val consentPrefs = targetContext.getSharedPreferences("screen_text_consent", Context.MODE_PRIVATE)
         val settingsKeys = setOf(Settings.KEY_ENABLED, Settings.KEY_PAGE_FALLBACK_ENABLED,
@@ -88,7 +92,7 @@ class OcrFlowInstrumentation : Instrumentation() {
         val oldPage = setOf("digest", "token").associateWith { if (originalPageSessionWasEmpty) null else pagePrefs.all[it] }
         val letters = UUID.randomUUID().toString().take(8).map { if (it in '0'..'9') 'k' + (it - '0') else it }.joinToString("")
         val prefix = "SIM-OCR-$letters"
-        val tags = listOf("$prefix-NO", "$prefix-YES", "$prefix-WAIT", "$prefix-SECURE")
+        val tags = listOf("$prefix-NO", "$prefix-YES", "$prefix-WAIT", "$prefix-SECURE", "$prefix-RESULT", "$prefix-AUTO", "$prefix-PAUSE", "$prefix-SAVE")
         check(baseline.values.none { it.merchant in tags })
         try {
             defaultsAndQueue()
@@ -98,10 +102,18 @@ class OcrFlowInstrumentation : Instrumentation() {
             settings.notificationCaptureEnabled = false
             settings.hookCaptureEnabled = false
             settings.autoConfirm = false
-            settings.whitelist = settings.whitelist + "com.tencent.mm"
+            settings.whitelist = settings.whitelist + fixturePackage
             runOnMainSync { CaptureModeManager.reconcile(targetContext) }
             delay(800)
             val consent = OcrPreferences(targetContext)
+            check(consent.setEnabled(true))
+            val screenshotCount = PageOcrAssist.screenshotAttemptCount()
+            launch(fixture, tags[4], result = true)
+            delay(2500)
+            check(DebugBus.state.value?.outcome == "skip:scene:payment-result-not-page-capture") { "Result must be rejected by the automatic scene gate: ${DebugBus.state.value?.outcome}" }
+            check(db.recognitions().allOnce().associateBy { it.id } == baseline)
+            check(PageOcrAssist.screenshotAttemptCount() == screenshotCount)
+            results += "payment_result_real_accessibility_event_creates_no_record_card_or_screenshot"
             check(consent.setEnabled(false))
             launch(fixture, tags[0])
             val noConsent = awaitRecord(db, tags[0])
@@ -139,6 +151,46 @@ class OcrFlowInstrumentation : Instrumentation() {
             check(db.capture().forRecord(secure.id).filter { it.detail.contains("method=ocr") }
                 .all { it.outcome == "ocr-unusable" })
             results += "secure_window_keeps_node_record_without_adopting_protected_pixels"
+
+            check(consent.setEnabled(false))
+            settings.autoConfirm = true
+            runOnMainSync { CaptureModeManager.reconcile(targetContext) }
+            launch(fixture, tags[5])
+            val automatic = awaitRecord(db,tags[5])
+            withTimeout(12000) { while(findText("记一笔") == null) delay(100) }
+            check(db.capture().deliveries().any { it.recognitionId == automatic.id && it.state == CaptureDeliveryState.ACKNOWLEDGED })
+            getUiAutomation(android.app.UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES).takeScreenshot()?.let { bitmap ->
+                java.io.File(targetContext.getExternalFilesDir(null),"g-detail-automatic-card.png").outputStream().use {
+                    bitmap.compress(Bitmap.CompressFormat.PNG,100,it)
+                }; bitmap.recycle()
+            }
+            var ignore = findText("忽略") ?: error("Missing ignore on automatic card")
+            while(!ignore.isClickable && ignore.parent != null) ignore = ignore.parent
+            check(ignore.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK))
+            withTimeout(10000) { while(db.recognitions().byId(automatic.id)?.status != RecognitionStatus.IGNORED) delay(100) }
+            check(db.bills().allOnce().toSet() == bills)
+            results += "detail_real_accessibility_automatically_shows_confirm_card_and_ignore_does_not_post"
+
+            delay(700)
+            launch(fixture,tags[7])
+            val toSave = awaitRecord(db,tags[7])
+            withTimeout(12000) { while(findText("记一笔") == null) delay(100) }
+            var saveButton = findText("记一笔") ?: error("Missing save on automatic card")
+            while(!saveButton.isClickable && saveButton.parent != null) saveButton = saveButton.parent
+            check(saveButton.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK))
+            withTimeout(10000) { while(db.recognitions().byId(toSave.id)?.status != RecognitionStatus.RECORDED) delay(100) }
+            val savedBill = db.bills().byRecognitionId(toSave.id) ?: error("Saved bill missing")
+            check(!savedBill.assetLinked) { "Synthetic fixture must not link a real asset" }
+            check(db.bills().allOnce().size == bills.size+1)
+            check(db.assets().entries().toSet() == entries)
+            results += "detail_automatic_card_save_commits_one_bill_without_asset_link"
+
+            settings.enabled = false
+            runOnMainSync { CaptureModeManager.reconcile(targetContext) }
+            launch(fixture,tags[6]); delay(2000)
+            check(db.recognitions().allOnce().none { it.merchant == tags[6] })
+            results += "global_pause_prevents_detail_capture"
+
         } catch (error: Throwable) {
             withContext(NonCancellable) {
                 runCatching {
@@ -146,18 +198,18 @@ class OcrFlowInstrumentation : Instrumentation() {
                     diagnostics["debugBus"] = state?.let {
                         mapOf("package" to it.packageName, "activity" to it.activityClass,
                             "source" to it.source, "outcome" to it.outcome.take(500),
-                            "text" to if (it.packageName == "com.tencent.mm" && it.text.contains(prefix)) it.text.take(2000) else "[outside current synthetic fixture]",
+                            "text" to if (it.packageName == fixturePackage && it.text.contains(prefix)) it.text.take(2000) else "[outside current synthetic fixture]",
                             "atMillis" to it.atMillis)
                     }
                     diagnostics["newFixtureRecords"] = db.recognitions().allOnce()
-                        .filter { it.id !in baseline && it.sourcePkg == "com.tencent.mm" }.take(12).map {
+                        .filter { it.id !in baseline && it.sourcePkg == fixturePackage }.take(12).map {
                             mapOf("id" to it.id, "merchant" to if (it.merchant?.contains(prefix) == true || it.merchant?.contains("模拟") == true) it.merchant else "[non-fixture merchant redacted]",
                                 "status" to it.status, "amountCents" to it.priceCents,
                                 "hasMethod" to !it.method.isNullOrBlank(), "hasProduct" to !it.productName.isNullOrBlank())
                         }
                     runOnMainSync {
                         val root = BillAccessibilityService.instance?.rootInActiveWindow
-                        if (root?.packageName?.toString() == "com.tencent.mm") {
+                        if (root?.packageName?.toString() == fixturePackage) {
                             val collected = TextCollector().collectResult(root)
                             if (collected.items.any { it.contains(prefix) }) {
                                 diagnostics["fixtureItems"] = collected.items
@@ -181,14 +233,19 @@ class OcrFlowInstrumentation : Instrumentation() {
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     delay(700)
                     db.withTransaction {
-                        db.recognitions().allOnce().filter { it.id !in baseline && it.merchant in tags && it.sourcePkg == "com.tencent.mm" }
+                        db.recognitions().allOnce().filter { it.id !in baseline && it.merchant in tags && it.sourcePkg == fixturePackage }
                             .forEach { row ->
-                                check(row.billId == null && row.status == RecognitionStatus.PENDING) { "Refuse to remove a posted test record" }
+                                row.billId?.let { billId ->
+                                    val bill = db.bills().byId(billId) ?: error("Missing fixture bill")
+                                    check(bill !in bills && bill.recognitionId == row.id && bill.sourcePkg == fixturePackage && !bill.assetLinked)
+                                    db.openHelper.writableDatabase.execSQL("DELETE FROM bills WHERE id = ? AND recognitionId = ?", arrayOf(billId,row.id))
+                                }
                                 db.openHelper.writableDatabase.execSQL("DELETE FROM recognition_history WHERE id = ?", arrayOf(row.id))
                             }
                     }
                 } finally {
                     // Restore both stores even if fixture cleanup or one restore fails.
+                    LocalRuleStore.restore(learning)
                     try { restore(prefs, oldSettings) }
                     finally {
                         restore(consentPrefs, oldConsent)
@@ -226,9 +283,19 @@ class OcrFlowInstrumentation : Instrumentation() {
         results += "queue_rejects_revoked_oversized_and_invalid_images_before_native_ocr"
     }
 
-    private fun launch(component: ComponentName, tag: String, status: String = "支付成功", secure: Boolean = false) {
+    private fun findText(text: String): android.view.accessibility.AccessibilityNodeInfo? {
+        fun walk(node: android.view.accessibility.AccessibilityNodeInfo?): android.view.accessibility.AccessibilityNodeInfo? {
+            if(node == null) return null
+            if(node.text?.toString() == text || node.contentDescription?.toString() == text) return node
+            for(i in 0 until node.childCount) walk(node.getChild(i))?.let { return it }
+            return null
+        }
+        val automation = getUiAutomation(android.app.UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
+        return walk(automation.rootInActiveWindow)
+    }
+    private fun launch(component: ComponentName, tag: String, status: String = "支付成功", secure: Boolean = false, result: Boolean = false) {
         targetContext.startActivity(Intent().setComponent(component).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-            .putExtra("tag", tag).putExtra("status", status).putExtra("secure", secure))
+            .putExtra("tag", tag).putExtra("status", status).putExtra("secure", secure).putExtra("scene", if(result) "result" else "detail"))
     }
     private suspend fun awaitRecord(db: AppDb, tag: String): RecognitionEntity = withTimeout(15_000) {
         var row: RecognitionEntity?

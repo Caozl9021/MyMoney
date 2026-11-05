@@ -19,26 +19,15 @@ object BillWriter {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val writeLock = Mutex()
 
-    /**
-     * 落库前的重复窗口。
-     *
-     * [com.example.billkit.BillKit] 的去重只在内存里（`LinkedHashMap`），进程一死就清空，
-     * 所以「识别 → 杀掉 App → 再回到同一张账单页」会重复入库。这里用数据库的
-     * `countRecentFingerprint` 再兜一层：同一个指纹在 10 分钟内已经存过就不再存。
-     *
-     * 选 10 分钟而不是 BillKit 的 90 秒：进程被回收、用户过几分钟再翻回同一页，
-     * 是很常见的场景；同一个指纹本身已经包含「金额 + 分钟 + 单号尾号」，
-     * 10 分钟内真正撞上的概率很低。
-     */
-    private const val DEDUPE_WINDOW_MS = 10 * 60 * 1000L
-
     data class SaveResult(val inserted: Boolean, val bill: BillEntity?)
 
     /**
-     * 保存一条草稿。重复（同指纹 10 分钟内已存在）时静默跳过，但仍会把草稿
-     * 从待确认队列里移除 —— 用户点过「记一笔」，就不该再留在队列里。
+     * 保存一条草稿。**只在「同一次识别」（同 historyId）被重复提交时**复用原账单，
+     * 不再按「指纹 + 10 分钟窗」在保存时静默跳过：疑似重复已在弹卡前由
+     * [DuplicateProbe] 提示（（可能重复）标识 + 疑似那笔），用户点「记一笔」就入账。
+     * 这样「卡面说重复、保存又被吞」的口径矛盾被消除。
      *
-     * @param onDone 落库结束后回调，`true` = 真的插入了；用于 UI 提示「这笔已经记过了」。
+     * @param onDone 落库结束后回调，`true` = 真的插入了；`false` = 同一次识别已记过（幂等复用）。
      *   回调在主线程执行。
      */
     fun save(context: Context, draft: BillDraft, original: BillDraft? = null, onDone: ((Boolean) -> Unit)? = null, onError: ((Throwable) -> Unit)? = null) =
@@ -67,12 +56,10 @@ object BillWriter {
                             // A deleted association is deliberately not resurrected or guessed by amount.
                             SaveResult(false, history.billId?.let { dao.byId(it) })
                         } else {
-                            val since = System.currentTimeMillis() - DEDUPE_WINDOW_MS
-                            var existing = if (history != null) dao.byRecognitionId(history.id)
-                                ?: if (history.identityKey.startsWith("capture:") || !history.transactionKey.isNullOrBlank()) null else dao.legacyDuplicate(draft.fingerprint, draft.sourcePkg, draft.priceCents,
-                                    draft.type.name, draft.orderTail, since)
-                                else dao.recentDuplicate(draft.fingerprint, draft.sourcePkg, draft.priceCents,
-                                    draft.type.name, draft.orderTail, since)
+                            // 只保留「同一次识别」的幂等：同 historyId 的重试/重复提交不会插第二条。
+                            // 不再按「指纹 + 10 分钟窗」在保存时默默跳过——疑似重复只在弹卡前提示，
+                            // 用户点保存就入账（口径见 DuplicateProbe / ConfirmSheet 的（可能重复）提示）。
+                            var existing = if (history != null) dao.byRecognitionId(history.id) else null
                             if (history != null && existing != null && existing.recognitionId == null) {
                                 existing = existing.copy(recognitionId = history.id)
                                 dao.update(existing)

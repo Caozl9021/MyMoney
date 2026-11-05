@@ -23,10 +23,33 @@ class RecognitionHistoryTest {
         assertEquals(RecognitionIdentity.key(a), RecognitionIdentity.key(b))
         assertNotEquals(RecognitionIdentity.key(a), RecognitionIdentity.key(a.copy(type = BillType.REFUND)))
     }
-    @Test fun `明确页面时间优先于弱会话且区分商户`() {
+    @Test fun `明确页面时间优先于弱会话且商户抖动不影响身份`() {
         val a = draft().copy(hasExplicitTime = true)
         assertEquals(RecognitionIdentity.key(a), RecognitionIdentity.key(a.copy(captureSessionId = "other")))
-        assertNotEquals(RecognitionIdentity.key(a), RecognitionIdentity.key(a.copy(merchant = "超市")))
+        // 商户文案是页面上最易抖的字段，切页重绘/点更多都会变；同一笔必须仍视为同一身份。
+        assertEquals(RecognitionIdentity.key(a), RecognitionIdentity.key(a.copy(merchant = "超市")))
+        assertEquals(RecognitionIdentity.key(a), RecognitionIdentity.key(a.copy(merchant = null)))
+    }
+    @Test fun `明确页面时间但缺单号走time分支商户变化身份稳定`() {
+        // F4：支付宝详情页单号常藏「更多」里，采集时缺 transactionKey 只有页面时间。
+        // 此时必须走 time 分支（金额+类型+时间+方式），商户变化不影响身份，切页重绘不重复弹卡。
+        val a = draft().copy(hasExplicitTime = true, transactionKey = null, method = "工商银行储蓄卡(5821)")
+        assertEquals(null, a.transactionKey)
+        assertEquals(RecognitionIdentity.key(a), RecognitionIdentity.key(a.copy(merchant = "换了个商户名", captureSessionId = "page-2")))
+        // 补到单号后切到 order 分支仍是同一身份（time 分支与 order 分支对同一笔不冲突）
+        assertNotEquals(RecognitionIdentity.key(a), RecognitionIdentity.key(a.copy(priceCents = 2000)))
+    }
+    @Test fun `明确页面时间时付款方式区分不同笔但金额与时间区分`() {
+        val a = draft().copy(hasExplicitTime = true, method = "工商银行储蓄卡(5821)")
+        // 换一张卡付款 → 视为不同笔
+        assertNotEquals(RecognitionIdentity.key(a), RecognitionIdentity.key(a.copy(method = "零钱")))
+        // 金额不同 → 不同笔
+        assertNotEquals(RecognitionIdentity.key(a), RecognitionIdentity.key(a.copy(priceCents = 2000)))
+        // 支付时间不同（秒级）→ 不同笔
+        assertNotEquals(RecognitionIdentity.key(a), RecognitionIdentity.key(a.copy(timeMillis = a.timeMillis + 1000)))
+        // 三样都相同，即使 point 更多/商户/商品说明都变 → 同一笔，不重复弹卡
+        val same = a.copy(merchant = "另一商户", productName = "另一商品说明", captureSessionId = "page-2")
+        assertEquals(RecognitionIdentity.key(a), RecognitionIdentity.key(same))
     }
     @Test fun `历史草稿完整保留元数据及用户分类`() {
         val r = RecognitionEntity.fromDraft(draft().copy(category = "餐饮", note = "早餐", transactionKey = "order", hasExplicitTime = true))

@@ -22,6 +22,8 @@ import java.util.concurrent.ConcurrentHashMap
 object PageOcrAssist {
     private data class Binding(val id: String, val expected: BillDraft, val key: String)
     private val epoch = java.util.concurrent.atomic.AtomicLong()
+    private val screenshotAttempts = java.util.concurrent.atomic.AtomicLong()
+    internal fun screenshotAttemptCount(): Long = screenshotAttempts.get()
     fun cancelAll() { epoch.incrementAndGet(); pending.values.forEach { it.cancel() }; pending.clear() }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val pending = ConcurrentHashMap<String, CompletableDeferred<Binding>>()
@@ -39,7 +41,8 @@ object PageOcrAssist {
     }
     fun request(service: AccessibilityService, snapshot: UiSnapshot, expected: BillDraft, windowId: Int,
                 safeWindow: () -> Boolean): Boolean {
-        if (Build.VERSION.SDK_INT < 30 || expected.type != BillType.EXPENSE ||
+        if (!com.example.billkit.PageCaptureEligibility.evaluate(snapshot).allowed ||
+            Build.VERSION.SDK_INT < 30 || expected.type != BillType.EXPENSE ||
             !com.example.billkit.visual.VisualCaptureGate.allows(snapshot.packageName, snapshot.items, snapshot.truncated)) return false
         val observation = snapshot.pageObservationId ?: return false
         val prefs = OcrPreferences(service)
@@ -50,7 +53,8 @@ object PageOcrAssist {
         val token = snapshot.configurationToken ?: return false
         val started = SystemClock.elapsedRealtime()
         fun allowed(): Boolean = serviceEpoch == epoch.get() &&
-            io.github.mymoney.capture.BillAccessibilityService.instance === service && prefs.enabled && prefs.generation == generation &&
+            io.github.mymoney.capture.BillAccessibilityService.instance === service &&
+            (service as? io.github.mymoney.capture.BillAccessibilityService)?.isObservationCurrent(observation) == true && prefs.enabled && prefs.generation == generation &&
             Settings(service).let { it.enabled && it.pageEnabled && snapshot.packageName in it.whitelist } &&
             token == NotificationIngress.configurationToken(service) &&
             (service.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager)?.isKeyguardLocked != true
@@ -81,6 +85,7 @@ object PageOcrAssist {
             override fun onFailure(errorCode: Int) { pixels.completeExceptionally(IllegalStateException("系统截图不可用：$errorCode")) }
         }
         try {
+            screenshotAttempts.incrementAndGet()
             if (Build.VERSION.SDK_INT >= 34) service.takeScreenshotOfWindow(windowId, service.mainExecutor, callback)
             else service.takeScreenshot(Display.DEFAULT_DISPLAY, service.mainExecutor, callback)
         } catch (error: Exception) { pixels.completeExceptionally(error) }

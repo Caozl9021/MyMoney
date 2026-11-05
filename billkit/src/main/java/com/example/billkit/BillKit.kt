@@ -82,7 +82,7 @@ object BillKit {
 
     /** 主入口：一屏文本进去，命中草稿就回调 [sink]。返回值可直接用于调试展示。 */
     fun offer(snapshot: UiSnapshot, now: Long = System.currentTimeMillis()): BillPipeline.Outcome {
-        val outcome = pipeline.process(snapshot, now)
+        val outcome = pipeline.processForCapture(snapshot, now)
         dispatch(outcome, snapshot, now)
         return outcome
     }
@@ -157,7 +157,7 @@ object BillKit {
         pageSessionProvider == null -> draft.fingerprint // preserve standalone library compatibility
         draft.transactionKey != null -> "order:${draft.sourcePkg}:${draft.type.name}:${draft.transactionKey}"
         draft.hasExplicitTime -> listOf(draft.sourcePkg, draft.type.name, draft.priceCents,
-            draft.timeMillis, draft.merchant, draft.method).joinToString("|")
+            draft.timeMillis, draft.method).joinToString("|")
         else -> draft.captureSessionId ?: draft.fingerprint
     }
 

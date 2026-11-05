@@ -1,37 +1,27 @@
 # 文档索引
 
-面向使用者和贡献者的专题说明。项目总览、构建与安装见仓库根目录的 [README](../README.md)。
+当前候选1.9.0/143，待用户验收；更新日期2026-11-05。本轮只同步文档，版本/包/设备保持。
 
-## 功能说明
-
-| 文档 | 内容 |
+| 当前入口 | 内容 |
 | --- | --- |
-| [LOCAL_RULES.md](LOCAL_RULES.md) | 分类/账户/备注的推荐优先级与学习机制、规则 JSON 文件格式、识别统计与诊断样本 |
-| [UI_COMPONENTS.md](UI_COMPONENTS.md) | 公共组件的尺寸、间距、交互与语义约束 |
-| [ASSET_MANAGEMENT.md](ASSET_MANAGEMENT.md) | 账户余额口径、净资产算法、转账与还款、账期详情 |
-| [LEDGER_MONTH_PERIOD.md](LEDGER_MONTH_PERIOD.md) | 每月起始日、首页翻期与各处账期的一致性 |
+| [PROJECT_SCOPE](PROJECT_SCOPE.md) | 当前版本、两种识别分工、数据与未测边界 |
+| [ACCEPTANCE](ACCEPTANCE.md) | 143外观与G阶段真实使用待验收项目 |
+| [PROGRESS](PROGRESS.md) | 各构建实施/验证/验收状态与历史证据 |
+| [PLAN_1.0](PLAN_1.0.md) | 当前剩余项及原1.0发布合同 |
+| [OPENSPEC_STATUS](OPENSPEC_STATUS.md) | 35个变更的当前关联与历史范围 |
+| [架构](../ARCHITECTURE.md) | 准入/协调/投递/存储和OCR生命周期 |
+| [验证](../TEST_REPORT.md) | JVM、合成设备、真实支付边界 |
 
-## 工程约定
-
-| 文档 | 内容 |
+| 功能与工程 | 文档 |
 | --- | --- |
-| [PACKAGING.md](PACKAGING.md) | 打包产物目录、独立构建、防覆盖与发布快照规则 |
-| [VERSIONING.md](VERSIONING.md) | 版本号语义、何时升 versionName/versionCode、功能批次与验收节奏 |
-| [FAMILY_BACKUPS.md](FAMILY_BACKUPS.md) | 家庭账本手动备份、下载预览、合并/覆盖与恢复前快照 |
+| 页面OCR、选图及Q阶段 | [OCR_ASSISTANCE](OCR_ASSISTANCE.md) |
+| 识别规则、备注与学习 | [LOCAL_RULES](LOCAL_RULES.md) |
+| UI/重复提示间距 | [UI_COMPONENTS](UI_COMPONENTS.md) |
+| 资产/账期 | [ASSET_MANAGEMENT](ASSET_MANAGEMENT.md)、[LEDGER_MONTH_PERIOD](LEDGER_MONTH_PERIOD.md) |
+| 导入导出 | [QIANJI_IMPORT](QIANJI_IMPORT.md)、[ICOST_IMPORT](ICOST_IMPORT.md) |
+| 家庭服务/更新 | [FAMILY_BACKUPS](FAMILY_BACKUPS.md)、[M1–M5计划](HOME_SYNC_AND_APP_UPDATE_PLAN.md) |
+| Root/凭证 | [ROOT_PLAN](ROOT_PLAN.md)、[LSP_MODULE](LSP_MODULE.md)、[LSP_SCOPE_CONFIG](LSP_SCOPE_CONFIG.md) |
+| 构建/包与版本 | [部署](../DEPLOYMENT.md)、[PACKAGING](PACKAGING.md)、[VERSIONING](VERSIONING.md) |
+| 测试环境 | [TEST_ENVIRONMENT](TEST_ENVIRONMENT.md)、[旧环境清理记录](LEGACY_EMULATOR_CLEANUP_REVIEW.md) |
 
-## 导入导出
-
-| 文档 | 内容 |
-| --- | --- |
-| [ICOST_IMPORT.md](ICOST_IMPORT.md) | 导出到 iCost：十列 CSV 模板、支付方式映射、投递顺序与边界 |
-| [QIANJI_IMPORT.md](QIANJI_IMPORT.md) | 钱迹 XLSX 导入：预览与核对、去重与冲突、支持范围与上限 |
-
-## 高级功能
-
-| 文档 | 内容 |
-| --- | --- |
-| [LSP_MODULE.md](LSP_MODULE.md) | 内置 LSPosed 模块：作用域、管理器入口、加载状态与重启目标 App |
-
-## 尚未覆盖的范围
-
-完整 TalkBack、低 API 设备、锁屏与长时间功耗、各厂商省电策略下的采集时延，以及真实支付的全场景矩阵，目前都还没有完整证据。文档里描述的是设计与已知行为，不等于每个场景都实测过。
+M3/M4交接、BUG记录和旧self入口保留为历史；历史图和旧run不表示143已在真实支付/各ROM/API上通过。完整矩阵与用户最终验收继续开放。

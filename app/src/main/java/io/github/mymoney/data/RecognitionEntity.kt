@@ -72,10 +72,18 @@ data class RecognitionEntity(
 object RecognitionIdentity {
     private fun digest(parts: List<Any?>): String = MessageDigest.getInstance("SHA-256")
         .digest(MiniJson.encode(parts).toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+    /**
+     * 同一笔交易的稳定身份。**明确页面时间**时，用「应用 + 类型 + 金额 + 支付时间 + 付款方式」
+     * 判定——这三样在支付宝/微信账单详情页永远可见且精确到秒，切页重绘、点「更多」展开订单号、
+     * 商户文案微调都不会改变它们，因此同一笔在多次采集下会算出同一个 key，不会重复弹卡。
+     *
+     * 故意**不含 merchant 文本**：商户名是页面上最易抖的字段（多字/空格/重绘），一旦掺进哈希，
+     * 同一笔切页回来就会被当成新交易重复弹卡。真正能唯一确定一笔的订单号走上面的 order: 分支。
+     */
     fun key(draft: BillDraft): String = when {
         !draft.transactionKey.isNullOrBlank() -> "order:" + digest(listOf(draft.sourcePkg, draft.type.name, draft.transactionKey))
-        draft.hasExplicitTime -> "time:" + digest(listOf(draft.sourcePkg, draft.type.name, draft.priceCents, draft.timeMillis, draft.merchant, draft.method))
-        !draft.captureSessionId.isNullOrBlank() -> "session:" + digest(listOf(draft.sourcePkg, draft.type.name, draft.captureSessionId))
+        draft.hasExplicitTime -> "time:" + digest(listOf(draft.sourcePkg, draft.type.name, draft.priceCents, draft.timeMillis, draft.method))
+        !draft.captureSessionId.isNullOrBlank() -> "session:" + digest(listOf(draft.sourcePkg, draft.type.name, draft.priceCents, draft.captureSessionId))
         else -> "legacy:" + digest(listOf(draft.fingerprint, draft.type.name))
     }
 }

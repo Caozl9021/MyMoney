@@ -70,6 +70,9 @@ object FieldExtractor {
         "客服", "联系", "分享", "收藏", "删除", "复制", "投诉", "疑问", "申请", "查看",
         "首页", "主页", "详情", "成功", "状态", "时间", "方式", "单号", "金额", "备注",
         "确认收款", "等待收款", "待对方", "分类", "账户", "余额", "总额", "说明", "订单", "账单服务", "本服务由",
+        // 页面 tab / 分区标题（真机：微信交易详情顶部「服务 ｜ 交易详情」那一栏的「服务」
+        // 会被当成金额上方的商户名）。这些是分区标签，不是商户。
+        "服务", "交易服务", "账单服务", "订单详情", "全部账单", "收单机构",
     )
 
     /**
@@ -91,6 +94,26 @@ object FieldExtractor {
                 if (candidate.startsWith("¥") || candidate.startsWith("￥")) continue
                 return candidate
             }
+        }
+        return null
+    }
+
+    /**
+     * 商户兜底 #3：部分详情页（真机：微信交易详情带「服务｜交易详情」tab 那一版）把
+     * 商户大字放在**金额的正下方**——`-23.00` 下一行就是 `美团`，`-26.77` 下一行是
+     * `美团金融还款`。金额上方却是「服务」「交易详情」「特价外卖团购」这类 tab/推广词，
+     * 用 [merchantAboveAmount] 会取错。这里取金额行紧邻下一行，同样跳过非名称行。
+     */
+    fun merchantBelowAmount(items: List<String>): String? {
+        for (index in items.indices) {
+            val line = items[index].trim()
+            if (!amountLineRe.matches(line)) continue
+            val next = items.getOrNull(index + 1)?.trim().orEmpty()
+            if (next.length !in 2..24) continue
+            if (next.any { it.isDigit() }) continue
+            if (nonNameLines.any { next.contains(it) }) continue
+            if (next.startsWith("¥") || next.startsWith("￥")) continue
+            return next
         }
         return null
     }

@@ -6,7 +6,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class RecognitionCaptureIdentityTest {
-    private val minimal = listOf("支付成功", "测试商户（*某）", "¥0.01", "完成")
+    private val minimal = listOf("交易详情", "当前状态", "支付成功", "¥0.01", "支付时间", "未显示", "支付方式", "零钱")
     private val t0 = 1_792_713_660_000L
     private fun page(items: List<String>) = UiSnapshot(Packages.WECHAT, null, items)
     @After fun cleanup() { BillKit.reset(); DebugBus.clear() }

@@ -26,7 +26,7 @@ class CaptureHealthTest {
         assertEquals(listOf(CaptureAction.RESUME), result.actions)
     }
     @Test fun dumpsysNotificationNeedsNeitherAccessibilityNorNotificationAccess() {
-        // 走 dumpsys 时无障碍信号与通知使用权都不影响**通知**这条路；页面辅助关着，
+        // 走 dumpsys 时无障碍信号与通知使用权都不影响**通知**这条路；页面识别关着，
         // 所以也就不该冒出无障碍的待办。这条与「选了哪个预设」无关，只看此刻的实现。
         val input = running.copy(mode = CaptureMode.ROOT, notificationsEnabled = true, pageEnabled = false,
             rootNotificationReady = true, notificationPlan = NotificationPath.DUMPSYS,
@@ -39,7 +39,7 @@ class CaptureHealthTest {
     }
 
     @Test fun pageChannelProblemIsReportedEvenUnderTheRootPreset() {
-        // 拆掉互斥后的直接后果：Root 预设 + 页面辅助开着却没授权，健康卡必须报，
+        // 拆掉互斥后的直接后果：Root 预设 + 页面识别开着却没授权，健康卡必须报，
         // 而不是像以前那样因为「不是无障碍模式」而闭嘴。
         val input = running.copy(mode = CaptureMode.ROOT, notificationsEnabled = true,
             rootNotificationReady = true, notificationPlan = NotificationPath.DUMPSYS,
@@ -103,11 +103,11 @@ class CaptureHealthTest {
     @Test fun workingPageSurvivesNotificationFailureAndViceVersa() {
         val page = captureHealth(running.copy(notificationsEnabled = true))
         assertEquals(CaptureHealthKind.DEGRADED, page.kind)
-        assertTrue(page.title.contains("页面辅助") && page.title.contains("可用"))
+        assertTrue(page.title.contains("页面识别") && page.title.contains("可用"))
         val notification = captureHealth(running.copy(notificationsEnabled = true,
             notificationAuthorized = true, notificationBound = true, accessibilityBound = false))
         assertEquals(CaptureHealthKind.DEGRADED, notification.kind)
-        assertTrue(notification.title.contains("通知识别") && notification.title.contains("可用"))
+        assertTrue(notification.title.contains("通知监听") && notification.title.contains("可用"))
     }
 
     @Test fun intentionallyDisabledSourcesAreNotReportedAsLostPermissions() {
