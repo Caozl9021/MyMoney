@@ -36,38 +36,13 @@ jobs:
           ls "${ANDROID_HOME}/platforms" 2>/dev/null || echo "!! platforms 目录不存在"
           ls "${ANDROID_HOME}/build-tools" 2>/dev/null || echo "!! build-tools 目录不存在"
 
-      # ocr-research/v6/generated/ 整个被 .gitignore 忽略，其中的 *-dual.aar 不随仓库分发。
-      # app/build.gradle.kts 直接引用这两个 dual AAR，全新 checkout 里没有会构建失败。
-      # 这里只用仓库已跟踪的 runtime/*-{arm64-v8a,x86_64}.aar 就地合并出 dual（复刻 prepare.py 的
-      # 合并逻辑，确定性 ZIP、不联网、不碰模型），保证 CI 自洽。
-      - name: Reconstruct dual runtime AARs
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          from zipfile import ZipFile, ZipInfo, ZIP_DEFLATED
-          import hashlib
-          root = Path('ocr-research/v6')
-          for prefix in ('onnxruntime-reduced', 'opencv-minimal'):
-              entries = {}
-              for abi in ('arm64-v8a', 'x86_64'):
-                  with ZipFile(root / 'runtime' / (prefix + '-' + abi + '.aar')) as z:
-                      for name in z.namelist():
-                          if name.endswith('/'):
-                              continue
-                          blob = z.read(name)
-                          if name in entries and entries[name] != blob:
-                              raise SystemExit('ABI AAR shared content differs: ' + name)
-                          entries[name] = blob
-              target = root / 'generated/runtime' / (prefix + '-dual.aar')
-              target.parent.mkdir(parents=True, exist_ok=True)
-              with ZipFile(target, 'w', compression=ZIP_DEFLATED, compresslevel=9) as archive:
-                  for name, blob in sorted(entries.items()):
-                      info = ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
-                      info.compress_type = ZIP_DEFLATED
-                      info.external_attr = 0o644 << 16
-                      archive.writestr(info, blob, compress_type=ZIP_DEFLATED, compresslevel=9)
-              print('reconstructed', prefix + '-dual.aar', hashlib.sha256(target.read_bytes()).hexdigest())
-          PY
+      # ocr-research/v6/generated/ 整个被 .gitignore 忽略（Paddle SDK 源码、模型 assets、合并后的
+      # *-dual.aar 都不随仓库分发）。但 :ocr-v6 的 sourceSets 和 app 的依赖都引用它们，全新 checkout
+      # 里没有就会构建失败（138 起 CI 一直红的根因）。这里跑模块自带的 prepare.py：从锁定 commit 的
+      # PaddleOCR 拉 SDK 源码、从官方归档拉模型、并用已跟踪的 runtime/*-{arm64,x86_64}.aar 合并出
+      # dual AAR。全部按 config/*.json 里的 sha256 校验，可复现。
+      - name: Prepare OCR v6 generated inputs
+        run: python3 ocr-research/v6/prepare.py
 
       - uses: gradle/actions/setup-gradle@v4
 
