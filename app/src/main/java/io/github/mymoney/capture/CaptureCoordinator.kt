@@ -135,7 +135,8 @@ object CaptureCoordinator {
         val reviewLink = if (reviewSuppressed) review else null
         val created = matched == null
         val row = if (matched != null) {
-            CaptureMergePolicy.enrich(matched, draft, CaptureEditLocks.contains(matched.id)).also {
+            CaptureMergePolicy.enrich(matched, draft, CaptureEditLocks.contains(matched.id),
+                replaceAutomaticAccount = mayUpgradeAccount(matched, draft)).also {
                 if (it != matched) db.recognitions().update(it.copy(updatedAt = input.receivedAt))
             }
         } else {
@@ -166,6 +167,71 @@ object CaptureCoordinator {
         val deliverable = created || (shortWindowMerged && row.status == RecognitionStatus.PENDING &&
             CaptureShortWindowPolicy.retryableDelivery(dao.delivery(row.id)?.state))
         return Accepted(row, created, decision, reviewReason, reviewSuppressed, deliverable)
+    }
+
+    data class OcrSupplementResult(val row: RecognitionEntity, val outcome: String, val changedFields: List<String> = emptyList()) {
+        val message: String get() = when (outcome) {
+            "added" -> "已补充识别信息，请核对后保存"
+            "no-change", "duplicate" -> "没有可补充的新信息"
+            "conflict" -> "截图与当前账单信息不一致，未自动修改"
+            "unusable" -> "截图信息不明确，未自动修改"
+            "terminal" -> "该记录已处理或需要核对，未修改"
+            else -> "页面已变化，本次结果未采用"
+        }
+    }
+
+    /** Explicitly attached visual evidence. Never creates a row, aliases, delivery or asset posting. */
+    suspend fun supplementOcr(context: Context, recognitionId: String, expected: BillDraft,
+                             result: com.example.billkit.visual.VisualBillResult, observationId: String,
+                             allowed: () -> Boolean = { true }, manualTarget: Boolean = false, engineId: String = "local"): OcrSupplementResult? = lock.withLock {
+        if (!allowed()) return@withLock null
+        RecognitionStore.init(context)
+        RecognitionStore.awaitReady()
+        val db = AppDb.get(context)
+        db.withTransaction {
+            if (!allowed()) null else supplementOcrInTransaction(db, recognitionId, expected, result, observationId,
+                manualTarget = manualTarget, allowed = allowed, engineId = engineId)
+        }
+    }
+
+    internal suspend fun supplementOcrInTransaction(db: AppDb, recognitionId: String, expected: BillDraft,
+                                                   result: com.example.billkit.visual.VisualBillResult, observationId: String,
+                                                   manualTarget: Boolean = false,
+                                                   allowed: () -> Boolean = { true }, engineId: String = "local"): OcrSupplementResult? {
+        if (!allowed()) return null
+        val row = db.recognitions().byId(recognitionId) ?: return null
+        if (row.status != RecognitionStatus.PENDING || row.reviewOf != null)
+            return OcrSupplementResult(row, "terminal")
+        if (observationId.isBlank() || (!manualTarget &&
+                (db.capture().alias("obs:" + CaptureMergePolicy.digest(observationId))?.recognitionId != recognitionId ||
+                    "PAGE" !in db.capture().sourcesForRecord(recognitionId))))
+            return OcrSupplementResult(row, "observation-mismatch")
+        val eventId = "ocr:" + CaptureMergePolicy.digest(recognitionId + "|" + observationId)
+        if (db.capture().evidenceById(eventId) != null) return OcrSupplementResult(row, "duplicate")
+        val resolved = OcrEvidencePolicy.resolveAccount(result.fields.method, db.assets().accounts())
+        val decision = OcrEvidencePolicy.apply(row, expected, result, CaptureEditLocks.fields(row.id), resolved)
+        if (!allowed()) return null
+        val updated = if (decision.row != row) decision.row.copy(updatedAt = System.currentTimeMillis()) else row
+        if (updated != row) db.recognitions().update(updated)
+        db.capture().putEvidence(CaptureEvidence(eventId, row.id, if (manualTarget) "IMAGE" else "PAGE", row.sourcePkg, System.currentTimeMillis(),
+            "ocr-" + decision.outcome, "method=ocr;observation=" + CaptureMergePolicy.digest(observationId).take(16) +
+                ";engine=" + engineId.take(80).replace(Regex("[^a-zA-Z0-9._:-]"), "_") +
+                ";target=" + (if (manualTarget) "explicit" else "page") + ";fields=" + decision.changedFields.joinToString(",")))
+        if (!allowed()) throw kotlinx.coroutines.CancellationException("OCR source disabled")
+        return OcrSupplementResult(updated, decision.outcome, decision.changedFields)
+    }
+
+    /** Recompute provenance conservatively: only a still-identical builtin suggestion may yield. */
+    private fun mayUpgradeAccount(row: RecognitionEntity, incoming: BillDraft): Boolean {
+        if (!row.method.isNullOrBlank() || incoming.method.isNullOrBlank() || incoming.account.isNullOrBlank()) return false
+        if (row.account.isNullOrBlank()) return true
+        return runCatching {
+            val unique = LedgerConfig.accounts.distinct().filter { name ->
+                CategorySuggester.matchAccount(incoming.method, listOf(name)) == name
+            }.singleOrNull()
+            val old = CategorySuggester.suggest(row.toDraft(), candidates = ExternalRuleStore.candidates()).accountHit
+            unique == incoming.account && old?.source == RuleSource.BUILTIN && old.account == row.account
+        }.getOrDefault(false)
     }
 
     /** A persistent claim is at-most-once for automatic UI, not an exactly-once OS transaction. */

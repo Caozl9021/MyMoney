@@ -2,6 +2,9 @@ package io.github.mymoney.capture
 
 import android.accessibilityservice.AccessibilityService
 import android.content.Intent
+import android.os.Build
+import com.example.billkit.BillPipeline
+import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import android.accessibilityservice.AccessibilityServiceInfo
@@ -151,8 +154,20 @@ class BillAccessibilityService : AccessibilityService() {
             truncated = collected.truncated,
             source = UiSnapshot.Source.ACCESSIBILITY,
             configurationToken = token,
+            pageObservationId = UUID.randomUUID().toString(),
         )
 
+        // Nodes establish a payment before any pixels are requested. OCR never discovers safety.
+        if (Build.VERSION.SDK_INT >= 30 && io.github.mymoney.ocr.OcrPreferences(this).enabled &&
+            !collected.truncated && safeOcrWindow(pkg, root.windowId)) {
+            val result = BillPipeline().process(snapshot)
+            if (result is BillPipeline.Outcome.Draft) {
+                val windowId = root.windowId
+                io.github.mymoney.ocr.PageOcrAssist.request(this, snapshot, result.draft, windowId) {
+                    safeOcrWindow(pkg, windowId, snapshot.items)
+                }
+            }
+        }
         clearPending()
         worker.execute {
             if (settings.pageActive && token == NotificationIngress.configurationToken(this)) {
@@ -161,16 +176,44 @@ class BillAccessibilityService : AccessibilityService() {
         }
     }
 
+    /** Bounded traversal, unknown/over-budget/editable/sensitive windows fail closed. */
+    private fun safeOcrWindow(pkg: String, windowId: Int, expectedItems: List<String>? = null): Boolean {
+        if (!settings.pageActive || pkg !in setOf("com.tencent.mm", "com.eg.android.AlipayGphone")) return false
+        val root = rootInActiveWindow ?: return false
+        try {
+            if (root.packageName?.toString() != pkg || root.windowId != windowId) return false
+            if (expectedItems != null) {
+                val current = collector.collectResult(root)
+                if (current.truncated || current.items != expectedItems) return false
+            }
+            var count = 0
+            fun safe(node: android.view.accessibility.AccessibilityNodeInfo): Boolean {
+                if (++count > 400 || node.isPassword || node.isEditable) return false
+                val text = listOfNotNull(node.text?.toString(), node.contentDescription?.toString()).joinToString(" ")
+                if (listOf("密码", "验证码", "指纹验证", "人脸验证", "身份验证", "确认付款", "立即付款").any(text::contains)) return false
+                for (index in 0 until node.childCount) {
+                    val child = node.getChild(index) ?: continue
+                    try { if (!safe(child)) return false } finally { child.recycle() }
+                }
+                return true
+            }
+            return safe(root)
+        } finally { root.recycle() }
+    }
+
     override fun onInterrupt() {
+        io.github.mymoney.ocr.PageOcrAssist.cancelAll()
         clearPending()
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
+        io.github.mymoney.ocr.PageOcrAssist.cancelAll()
         if (instance === this) { instance = null; mutableBound.value = false }
         return super.onUnbind(intent)
     }
 
     override fun onDestroy() {
+        io.github.mymoney.ocr.PageOcrAssist.cancelAll()
         clearPending()
         worker.shutdownNow()
         if (instance === this) { instance = null; mutableBound.value = false }

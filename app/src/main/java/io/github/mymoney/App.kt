@@ -74,6 +74,10 @@ class App : Application() {
                     val accepted = io.github.mymoney.capture.CaptureCoordinator.accept(this@App,
                         io.github.mymoney.capture.CaptureCoordinator.Input(enriched, "PAGE",
                             "page:" + io.github.mymoney.data.RecognitionIdentity.key(enriched), receivedAt = receivedAt), allowed = { allowed() }) ?: continue
+                    enriched.pageObservationId?.let { observation ->
+                        io.github.mymoney.ocr.PageOcrAssist.bind(observation, accepted.row.id, enriched,
+                            "page:" + io.github.mymoney.data.RecognitionIdentity.key(enriched))
+                    }
                     val delivery = io.github.mymoney.capture.CaptureCoordinator.deliver(this@App, accepted) { allowed() }
                     if (DebugBus.state.value == diagnostic) DebugBus.annotateOutcome(buildString {
                         append(" → ").append(delivery)

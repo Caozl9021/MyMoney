@@ -20,15 +20,16 @@ import java.util.UUID
 class ShortWindowDedupInstrumentation : Instrumentation() {
     private val automation get() = getUiAutomation(android.app.UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
     private val results = mutableListOf<String>()
+    private var liveCard = false
     private var ui = false
     private var writerRace = false
     private val at = 1_793_577_599_000L
     private val base = BillDraft(400, BillType.EXPENSE, at, "早餐店", null, null,
         "com.tencent.mm", "synthetic-short-window", hasExplicitTime = false)
-    override fun onCreate(arguments: Bundle?) { super.onCreate(arguments); ui = arguments?.getString("ui") == "true"; writerRace = arguments?.getString("writerRace") == "true"; start() }
+    override fun onCreate(arguments: Bundle?) { super.onCreate(arguments); liveCard = arguments?.getString("liveCard") == "waydroid-only"; ui = arguments?.getString("ui") == "true"; writerRace = arguments?.getString("writerRace") == "true"; start() }
     override fun onStart() {
         var failure: Throwable? = null
-        try { runBlocking(Dispatchers.IO) { if (ui) uiCase() else if (writerRace) writerRaceCases() else cases() } }
+        try { runBlocking(Dispatchers.IO) { if (liveCard) liveCardCase() else if (ui) uiCase() else if (writerRace) writerRaceCases() else cases() } }
         catch (error: Throwable) { failure = error }
         finish(if (failure == null) Activity.RESULT_OK else Activity.RESULT_CANCELED, Bundle().apply {
             putString("status", if (failure == null) "passed" else "failed")
@@ -46,6 +47,33 @@ class ShortWindowDedupInstrumentation : Instrumentation() {
         try { withTimeout(30_000) { body(db) }; results += name } finally { db.close() }
     }
     private suspend fun cases() {
+        test("wechat_outgoing_transfer_page_20s_after_recorded_hook") { db ->
+            val transfer = base.copy(priceCents=3280, transactionKey="synthetic-transfer-order")
+            val first = accept(db, input("HOOK", "transfer-hook", draft=transfer))
+            val recorded = first.row.copy(status=RecognitionStatus.RECORDED, billId=2306)
+            db.recognitions().update(recorded)
+            val snapshot = com.example.billkit.UiSnapshot("com.tencent.mm", null,
+                listOf("支付成功", "¥32.80", "待测试对象确认收款", "完成"))
+            val page = (com.example.billkit.BillPipeline().process(snapshot, at) as com.example.billkit.BillPipeline.Outcome.Draft).draft
+            check(page.type == BillType.EXPENSE && page.merchant == null)
+            val second = accept(db, input("PAGE", "transfer-page", 20_000, page))
+            check(second.row.id == first.row.id && !second.created && !second.deliverable)
+            check(db.recognitions().allOnce() == listOf(recorded))
+        }
+        test("late_hook_enriches_open_card_but_not_touched_fields") { db ->
+            val first = accept(db, input("PAGE", "page"))
+            db.capture().putDelivery(CaptureDelivery(first.row.id, CaptureDeliveryState.ACKNOWLEDGED, "shown", at+85))
+            CaptureEditLocks.acquire(first.row.id)
+            try {
+                CaptureEditLocks.touch(first.row.id, CaptureFields.ACCOUNT or CaptureFields.NOTE)
+                val second = accept(db, input("HOOK", "hook", 136,
+                    base.copy(method="零钱", account="测试零钱账户", note="不覆盖", orderTail="123456", transactionKey="late-order")))
+                check(!second.created && !second.deliverable && second.row.id == first.row.id)
+                check(second.row.method == "零钱" && second.row.orderTail == "123456")
+                check(second.row.account == null && second.row.note == null)
+                check(CaptureMergePolicy.version(first.row) != CaptureMergePolicy.version(second.row))
+            } finally { CaptureEditLocks.release(first.row.id) }
+        }
         for ((first, second) in listOf("PAGE" to "HOOK", "HOOK" to "PAGE", "PAGE" to "NOTIFICATION",
             "NOTIFICATION" to "PAGE", "HOOK" to "NOTIFICATION", "NOTIFICATION" to "HOOK", "ROOT" to "PAGE")) {
             test("${first}_then_${second}_same_amount_no_payment_time") { db ->
@@ -177,6 +205,75 @@ class ShortWindowDedupInstrumentation : Instrumentation() {
             check(b.row.id == a.row.id && !b.created && disk.recognitions().allOnce().size == 1)
             results += "persistent_database_reopen_retains_anchor_sources_and_aliases"
         } finally { disk.close(); targetContext.deleteDatabase(name) }
+    }
+
+    /** One tagged temporary history on Waydroid, exact-ID cleanup; never allowed on a phone. */
+    private suspend fun liveCardCase() {
+        check(Build.MODEL.contains("waydroid", true) || Build.PRODUCT.contains("waydroid", true))
+        automation.serviceInfo = automation.serviceInfo.apply {
+            flags = flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+        }
+        RecognitionStore.init(targetContext); RecognitionStore.awaitReady()
+        val db = AppDb.get(targetContext)
+        val before = db.recognitions().allOnce()
+        val billsBefore = db.bills().allOnce()
+        val unique = UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+        val d = base.copy(sourcePkg="io.github.mymoney.test.capture-ui", timeMillis=now,
+            merchant="SIM热更新", note="SIM用户备注", noteOrigin=NoteTemplate.USER)
+        val first = CaptureCoordinator.accept(targetContext, CaptureCoordinator.Input(d,"PAGE",unique,receivedAt=now))!!
+        fun find(predicate: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
+            fun walk(n: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+                if(n==null)return null
+                if(predicate(n))return n
+                for(i in 0 until n.childCount)walk(n.getChild(i))?.let{return it}
+                return null
+            }
+            if(Build.VERSION.SDK_INT>=34)automation.clearCache()
+            for(w in automation.windows)walk(w.root)?.let{return it}
+            return walk(automation.rootInActiveWindow)
+        }
+        suspend fun waitText(text: String): AccessibilityNodeInfo = withTimeout(12000) {
+            var node=find { it.text?.toString()==text || it.contentDescription?.toString()==text }
+            while(node==null){delay(100);node=find { it.text?.toString()==text || it.contentDescription?.toString()==text }}
+            node
+        }
+        try {
+            targetContext.startActivity(android.content.Intent(targetContext,io.github.mymoney.ui.ConfirmActivity::class.java)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                .putExtra(io.github.mymoney.ui.ConfirmActivity.EXTRA_HISTORY_ID,first.row.id))
+            waitText("SIM用户备注")
+            var more: AccessibilityNodeInfo?=waitText("更多")
+            while(more!=null && !more.isClickable)more=more.parent
+            check(more?.performAction(AccessibilityNodeInfo.ACTION_CLICK)==true)
+            val note=waitText("SIM用户备注")
+            check(note.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,Bundle().apply {
+                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,"SIM人工保护")
+            }))
+            waitText("SIM人工保护")
+            val late=CaptureCoordinator.accept(targetContext,CaptureCoordinator.Input(d.copy(method="零钱",orderTail="123456"),
+                "HOOK",unique+"-hook",receivedAt=now+136))!!
+            check(late.row.id==first.row.id && !late.created)
+            waitText("零钱");waitText("123456");waitText("SIM人工保护")
+            screenshot("capture-live-card.png")
+            results += "actual_confirm_activity_late_method_and_order_visible_manual_note_preserved"
+            // First back closes source details (or IME); subsequent back dismisses the sheet.
+            repeat(3) {
+                automation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+                delay(350)
+            }
+            withTimeout(10000) { while(db.recognitions().byId(first.row.id)?.note!="SIM人工保护")delay(100) }
+            val preserved=db.recognitions().byId(first.row.id)!!
+            check(preserved.method=="零钱" && preserved.orderTail=="123456")
+            check(preserved.protectedFields and CaptureFields.NOTE !=0L)
+            check(db.bills().allOnce()==billsBefore)
+            results += "dismissed_card_keeps_new_evidence_and_user_note_without_creating_bill"
+        } finally {
+            automation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+            delay(500)
+            db.openHelper.writableDatabase.execSQL("DELETE FROM recognition_history WHERE id=?",arrayOf(first.row.id))
+            check(db.recognitions().allOnce()==before && db.bills().allOnce()==billsBefore)
+        }
     }
 
     private suspend fun uiCase() {

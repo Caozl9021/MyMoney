@@ -1,0 +1,26 @@
+{
+  "play-services-mlkit-text-recognition-common-19.1.0-third_party_licenses.json": {
+    "asset": "play-services-mlkit-text-recognition-common-19.1.0-third_party_licenses.json",
+    "sha256": "1d58e3d1afdf9d30cdd8a2c47b34e364385c2b8ff388315eab0d0d567df6cec0"
+  },
+  "play-services-mlkit-text-recognition-common-19.1.0-third_party_licenses.txt": {
+    "asset": "play-services-mlkit-text-recognition-common-19.1.0-third_party_licenses.txt",
+    "sha256": "6da40abfe5e602989582ae0fbe1e86c1a781dffe7dda8a457f0263c5baa2451c"
+  },
+  "text-recognition-bundled-common-17.0.0-third_party_licenses.json": {
+    "asset": "text-recognition-bundled-common-17.0.0-third_party_licenses.json",
+    "sha256": "02919d2466f2a05d0f1c4822ccad7dd105010211e918672d40fea34d2c3bf793"
+  },
+  "text-recognition-bundled-common-17.0.0-third_party_licenses.txt": {
+    "asset": "text-recognition-bundled-common-17.0.0-third_party_licenses.txt",
+    "sha256": "b7d81734e6144858be69ba7538c0f4fcb9cc6a904437af90d6186abfe2a9627c"
+  },
+  "text-recognition-chinese-16.0.1-third_party_licenses.json": {
+    "sameContentAsset": "text-recognition-bundled-common-17.0.0-third_party_licenses.json",
+    "sha256": "02919d2466f2a05d0f1c4822ccad7dd105010211e918672d40fea34d2c3bf793"
+  },
+  "text-recognition-chinese-16.0.1-third_party_licenses.txt": {
+    "sameContentAsset": "text-recognition-bundled-common-17.0.0-third_party_licenses.txt",
+    "sha256": "b7d81734e6144858be69ba7538c0f4fcb9cc6a904437af90d6186abfe2a9627c"
+  }
+}

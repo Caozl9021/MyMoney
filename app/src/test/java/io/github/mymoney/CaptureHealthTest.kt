@@ -14,7 +14,7 @@ class CaptureHealthTest {
 
     @Test fun unconfiguredPrecedesPauseAndPermissions() {
         // 一条通道都没配过时，先说的是「还没开启自动记账」，动作指向自动记账页而不是某个系统设置。
-        val result = captureHealth(running.copy(mode = null, notificationsEnabled = false,
+        val result = captureHealth(running.copy(mode = null, pageEnabled = false, notificationsEnabled = false,
             enabled = false, overlayAllowed = false))
         assertEquals(CaptureHealthKind.MODE_REQUIRED, result.kind)
         assertEquals(listOf(CaptureAction.OPEN_AUTOMATION), result.actions)

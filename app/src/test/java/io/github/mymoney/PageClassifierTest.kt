@@ -202,10 +202,10 @@ class PageClassifierTest {
     }
 
     @Test
-    fun `微信转账是转账方向且取到收款方`() {
+    fun `微信对外转账是支出且取到收款方`() {
         val draft = draftOf(Packages.WECHAT, Samples.wechatTransfer)
         assertEquals(20000L, draft.priceCents)
-        assertEquals(BillType.TRANSFER, draft.type)
+        assertEquals(BillType.EXPENSE, draft.type)
         assertEquals("张三", draft.merchant)
     }
 
@@ -286,12 +286,13 @@ class PageClassifierTest {
     }
 
     @Test
-    fun `转账给好友的待确认页记成转账而不是支出`() {
+    fun `转账给好友的待确认页与凭证一致记成支出`() {
         // 真机 8.0.79：付完转账只有「支付成功 / ¥0.03 / 待某某确认收款 / 完成」，
-        // 整页没有「转账」二字，之前被极简支付成功页接走，记成了一笔支出。
+        // 与凭证相同按对外支出处理，不能作为本人账户资产调拨。
         val draft = draftOf(Packages.WECHAT, listOf("支付成功", "¥0.03", "待小千寻乐确认收款", "完成"))
         assertEquals(3L, draft.priceCents)
-        assertEquals(BillType.TRANSFER, draft.type)
+        assertEquals(BillType.EXPENSE, draft.type)
+        assertNull(draft.merchant)
     }
 
     @Test

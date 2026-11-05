@@ -70,7 +70,11 @@ class NoteFillPolicyTest {
     @Test fun manualProtectedFixedOffEditingAndRecordedRowsNeverUpgradeNotes() {
         val incoming=apply(draft());val base=RecognitionEntity.fromDraft(apply(draft(null)),"identity",1793506849000)
         for(row in listOf(base.copy(note="人工",noteOrigin=NoteTemplate.USER),base.copy(note=null,noteOrigin=NoteTemplate.USER),base.copy(note="固定",noteOrigin=NoteFillPolicy.FIXED),base.copy(note=null,noteOrigin=NoteFillPolicy.DISABLED),base.copy(protectedFields=CaptureFields.NOTE),base.copy(status=RecognitionStatus.RECORDED)))assertEquals(row.note,CaptureMergePolicy.enrich(row,incoming,false).note)
-        assertEquals(base,CaptureMergePolicy.enrich(base,incoming,true))
+        CaptureEditLocks.acquire(base.id)
+        try {
+            CaptureEditLocks.touch(base.id, CaptureFields.NOTE)
+            assertEquals(base.note,CaptureMergePolicy.enrich(base,incoming,true).note)
+        } finally { CaptureEditLocks.release(base.id) }
     }
     @Test fun conflictingProductEvidenceDoesNotChangeAlreadyObservedProductNote() {
         val row=RecognitionEntity.fromDraft(apply(draft()),"identity",1793506849000)

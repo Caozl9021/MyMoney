@@ -97,6 +97,8 @@ class BillPipeline(
         if (incomeStrong.any { joined.contains(it) }) return BillType.INCOME
 
         if (kind == PageKind.WECHAT_RECEIVE) return BillType.INCOME
+        // A payment to another person is spending, not a transfer between owned assets.
+        if (kind == PageKind.WECHAT_TRANSFER) return BillType.EXPENSE
 
         if (joined.contains("转账") ||
             kind == PageKind.WECHAT_TRANSFER ||

@@ -12,7 +12,7 @@ class AutomationPageTest {
 
     @Test fun lspEntryHiddenUnderOrdinaryPresetButNeverWhileChannelOn() {
         // 「普通记账」预设下不画凭证入口：那个预设只讲通知 + 页面辅助。
-        assertFalse(showsLspSettings(hookEnabled = false, lspInstalled = true, preset = CaptureMode.ACCESSIBILITY))
+        assertTrue(showsLspSettings(hookEnabled = false, lspInstalled = true, preset = CaptureMode.ACCESSIBILITY))
         // Root 增强与「还没选过预设」按能力显示。
         assertTrue(showsLspSettings(hookEnabled = false, lspInstalled = true, preset = CaptureMode.ROOT))
         assertTrue(showsLspSettings(hookEnabled = false, lspInstalled = true, preset = null))

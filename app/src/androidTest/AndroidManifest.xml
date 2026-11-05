@@ -27,4 +27,9 @@
     <instrumentation android:name="io.github.mymoney.BillDeletionInstrumentation" android:targetPackage="io.github.mymoney" />
     <instrumentation android:name="io.github.mymoney.DeletionBackupInstrumentation" android:targetPackage="io.github.mymoney" />
     <instrumentation android:name="io.github.mymoney.StatisticsDrilldownInstrumentation" android:targetPackage="io.github.mymoney" />
+    <instrumentation android:name="io.github.mymoney.OcrDeviceSnapshotInstrumentation" android:targetPackage="io.github.mymoney" />
+    <instrumentation android:name="io.github.mymoney.OcrEvidenceInstrumentation" android:targetPackage="io.github.mymoney" />
+    <instrumentation android:name="io.github.mymoney.OcrEngineBenchmarkInstrumentation" android:targetPackage="io.github.mymoney" />
+    <instrumentation android:name="io.github.mymoney.OcrManualInstrumentation" android:targetPackage="io.github.mymoney" />
+    <instrumentation android:name="io.github.mymoney.OcrFlowInstrumentation" android:targetPackage="io.github.mymoney" />
 </manifest>

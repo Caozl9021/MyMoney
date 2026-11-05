@@ -15,6 +15,7 @@ data class UiSnapshot(
     val truncated: Boolean = false,
     val source: Source = Source.ACCESSIBILITY,
     val configurationToken: String? = null,
+    val pageObservationId: String? = null,
 ) {
     enum class Source {
         ACCESSIBILITY,

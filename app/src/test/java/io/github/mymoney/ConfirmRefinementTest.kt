@@ -62,4 +62,10 @@ class ConfirmRefinementTest {
         assertFalse(ConfirmFeedback.closeAfterSave(BillWriter.SaveResult(false, null)))
         assertFalse(ConfirmFeedback.closeAfterSave(BillWriter.SaveResult(true, null)))
     }
+    @Test fun clearingOnlyOcrPaymentMethodRequiresDiscardConfirmation() {
+        val before = BillWriter.toDraft(row).copy(sourcePkg = "io.github.mymoney.manual.ocr.fixture", historyId = null)
+        assertTrue(editorFieldsChanged(before, before.copy(method = null), "19.99"))
+        assertFalse(editorFieldsChanged(before, before.copy(method = " 零钱 "), "19.99"))
+    }
+
 }

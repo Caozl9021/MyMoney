@@ -1,0 +1,36 @@
+{
+  "selectedIntegration": "bundled-mlkit-chinese-16.0.1",
+  "selectionStatus": "provisional-build-compatible; full-comparative-Q0-not-passed",
+  "inputs": [
+    {
+      "coordinate": "com.google.mlkit:text-recognition-chinese:16.0.1",
+      "file": "text-recognition-chinese-16.0.1.aar",
+      "bytes": 2036186,
+      "sha256": "cb81f8036a6410e036cff88350ee8548e5258ff6f9e2ffbc7455defa7f672dbe",
+      "embeddedNotices": [
+        "third_party_licenses.json",
+        "third_party_licenses.txt"
+      ]
+    },
+    {
+      "coordinate": "com.google.mlkit:text-recognition-bundled-common:17.0.0",
+      "file": "text-recognition-bundled-common-17.0.0.aar",
+      "bytes": 17960748,
+      "sha256": "fb1d4e26d69125659b6f5a94f03cce145544b0116807d04333335a9775636e05",
+      "embeddedNotices": [
+        "third_party_licenses.json",
+        "third_party_licenses.txt"
+      ]
+    },
+    {
+      "coordinate": "com.google.android.gms:play-services-mlkit-text-recognition-common:19.1.0",
+      "file": "play-services-mlkit-text-recognition-common-19.1.0.aar",
+      "bytes": 437936,
+      "sha256": "3be02b3c3c829476100f01d0ab79f0b4a923da23909d3ac63e486d1a63381c58",
+      "embeddedNotices": [
+        "third_party_licenses.json",
+        "third_party_licenses.txt"
+      ]
+    }
+  ]
+}

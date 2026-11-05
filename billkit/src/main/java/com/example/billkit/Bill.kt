@@ -29,6 +29,8 @@ data class BillDraft(
     val captureSessionId: String? = null,
     /** Ephemeral observation generation; never restored as permission or a runnable task. */
     val captureConfigurationToken: String? = null,
+    /** Ephemeral link between nodes and the screenshot of exactly that observation. */
+    val pageObservationId: String? = null,
     val productName: String? = null,
     val productSource: String? = null,
     /** Null means legacy/user-owned. Only TEMPLATE may recompute automatically. */
@@ -44,6 +46,9 @@ data class BillDraft(
     val dedupKey: String? = null,
     /** Explicit transfer destination chosen by the user; never inferred from a category. */
     val transferAccountId: String? = null,
+    /** Editor-only optimistic version; never persisted or part of transaction identity. */
+    val captureVersion: String? = null,
+    val captureTouchedFields: Long = 0L,
 ) {
     /** 去重指纹：包名 + 金额 + 分钟 + 单号尾号（容忍几秒内的重复回调） */
     val fingerprint: String

@@ -1,0 +1,43 @@
+{
+  "selectedIntegration": "paddle-v6-tiny-pinned",
+  "selectionStatus": "synthetic-x86_64-comparison-only; real-Q0-and-ARM64-gates-not-met",
+  "sdkAndModelsLock": "v6/config/upstream-lock.json",
+  "nativeInputsLock": "v6/config/ledger-v6-runtime-lock.json",
+  "preparedDualRuntimeSha256": {
+    "onnxruntime-reduced": "4d6086e2a59b6b01267d95859833199783b2d95b776c863653ab6aea9276ff32",
+    "opencv-minimal": "557029deba506e8835ac952347d3eece720c8a25056c013af79eb82b471c2887"
+  },
+  "supportedAbis": [
+    "arm64-v8a",
+    "x86_64"
+  ],
+  "minSdk": 26,
+  "realUniqueImages": 0,
+  "syntheticComparison": {
+    "positive": 40,
+    "negative": 30,
+    "V6CorrectPositiveCents": 40,
+    "V6FalsePositive": 0,
+    "MLKitPositiveDrafts": 0,
+    "engineErrors": 0,
+    "p50Ms": 527.5,
+    "p95Ms": 638,
+    "maxSampledIncrementalPssKiB": 243730
+  },
+  "limitations": [
+    "Synthetic only; not general accuracy",
+    "Pinned native ELF imports require API30: API26-29 OCR disabled until native runtimes rebuilt; ARM64 execution untested",
+    "x86 sampled PSS exceeds 200 MiB ARM target; target not passed"
+  ],
+  "evidence": "../runs/20261104-194125-ocr-assistance/outputs/engine-comparison.json",
+  "nativeMinimumApi": 30,
+  "supportedAbisScope": "V6 OCR runtime, not complete APK",
+  "ocrRequires64BitProcess": true,
+  "completeReleaseApkAbis": [
+    "armeabi-v7a",
+    "arm64-v8a",
+    "x86",
+    "x86_64"
+  ],
+  "32BitOnlyDeviceInstallation": "not tested; existing 32-bit graphics native library retained, OCR unavailable in 32-bit process"
+}

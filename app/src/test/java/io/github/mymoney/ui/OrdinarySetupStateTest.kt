@@ -42,7 +42,7 @@ class OrdinarySetupStateTest {
         val disconnected = ordinarySetupState(ready.copy(notificationBound = false))
         assertEquals(CaptureAction.NOTIFICATION_RECONNECT, disconnected.nextAction)
         assertFalse(disconnected.notificationReady)
-        assertFalse(disconnected.complete)
+        assertTrue(disconnected.complete)
     }
 
     @Test fun pageCannotBeReadyFromACheckedSystemSwitchAlone() {
@@ -55,7 +55,7 @@ class OrdinarySetupStateTest {
     @Test fun oneRealSourceCanStartWhileAnotherSelectedSourceNeedsRepair() {
         val state = ordinarySetupState(ready.copy(notificationAuthorized = false))
         assertTrue(state.pageReady && state.canStart)
-        assertFalse(state.complete)
+        assertTrue(state.complete)
         assertEquals(CaptureAction.NOTIFICATION_ACCESS, state.nextAction)
     }
 
@@ -77,6 +77,25 @@ class OrdinarySetupStateTest {
         assertFalse(ordinarySetupState(input).canStart)
         assertEquals(CaptureAction.OVERLAY, ordinarySetupState(input).nextAction)
         assertTrue(ordinarySetupState(input.copy(autoConfirm = false)).canStart)
+    }
+
+    @Test fun loadedHookAloneCanFinishWithoutReconfiguringOtherSources() {
+        val state = ordinarySetupState(ready.copy(notificationsEnabled = false, pageEnabled = false,
+            hookEnabled = true, hookReady = true, hookPackages = setOf("com.tencent.mm"),
+            ruleCapabilities = setOf("com.tencent.mm|DATA")))
+        assertTrue(state.sourceReady && state.complete)
+    }
+
+    @Test fun notificationAuthorizationDoesNotBypassMissingRuleCoverage() {
+        val state = ordinarySetupState(ready.copy(pageEnabled = false,
+            selectedPackages = setOf("not-supported"), ruleCapabilities = emptySet()))
+        assertFalse(state.sourceReady)
+    }
+
+    @Test fun readySourcePrioritizesOptionalCardChoiceOverRepairingOtherSource() {
+        val input = ready.copy(notificationAuthorized = false, overlayAllowed = false)
+        assertEquals(CaptureAction.OVERLAY, ordinarySetupState(input).nextAction)
+        assertTrue(ordinarySetupState(input.copy(autoConfirm = false)).complete)
     }
 
     @Test fun noSourcesCannotStartRegardlessOfPermissions() {

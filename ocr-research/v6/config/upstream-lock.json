@@ -1,0 +1,196 @@
+{
+  "repository": "https://github.com/PaddlePaddle/PaddleOCR",
+  "commit": "dab3fe35379033fdcb2d0e9572fac0b36c9a9ebf",
+  "sources": [
+    {
+      "path": "LICENSE",
+      "sha256": "3840c5c0c61c294264d2dd77b8777be6ddd90121ef4e0e64abcd22edea581d6e"
+    },
+    {
+      "path": "proguard-rules.pro",
+      "sha256": "be3c0a028538d32dcac1700f722c151768e5f48aaafe1c01142447ff377debee"
+    },
+    {
+      "path": "src/main/AndroidManifest.xml",
+      "sha256": "8ef94a6aec2218c5fd02408d018f6d52602c0ef4473dd1c115c5c6964f1e63e1"
+    },
+    {
+      "path": "src/main/java/com/paddle/ocr/engine/DetectionEngine.kt",
+      "sha256": "b99dfce96cc2819e28a068e535fd096185b4abf41d1038079bf6836c8a1a985a"
+    },
+    {
+      "path": "src/main/java/com/paddle/ocr/engine/OCREngine.kt",
+      "sha256": "ad235c1c01522fa41729d58d5a9405ffaff3ad6f391e920cb6a942ef78256446"
+    },
+    {
+      "path": "src/main/java/com/paddle/ocr/engine/OCREngineResult.kt",
+      "sha256": "6f1b7853dfc5b2ba1a70cb1d77518a10bbff45d71f3a689105f675c4d3be9a7a"
+    },
+    {
+      "path": "src/main/java/com/paddle/ocr/engine/ORTSessionManager.kt",
+      "sha256": "edc1b780d5277bcef93d052f3f1bddcad49830dcfa0a3b13ae63e18300e6f394"
+    },
+    {
+      "path": "src/main/java/com/paddle/ocr/engine/RecognitionEngine.kt",
+      "sha256": "00e683a56ec2741a0daca0ff8f2ceb001ae690f30e03dc6118cd49828b747396"
+    },
+    {
+      "path": "src/main/java/com/paddle/ocr/EngineConfig.kt",
+      "sha256": "886b7ef3dd4600ff92ff77c44643ce800e3f0da2d74de43112dbd79648ecdcda"
+    },
+    {
+      "path": "src/main/java/com/paddle/ocr/model/ModelConfig.kt",
+      "sha256": "e64e9262839b9e4da57d00a5cfef7ab3f81dcb5be1b96f47c4067449f306ddf0"
+    },
+    {
+      "path": "src/main/java/com/paddle/ocr/model/OCRBox.kt",
+      "sha256": "4db761a2e541db9145ba9512c4a5e8719ee70b09e241616525afcbf61abbcbc9"
+    },
+    {
+      "path": "src/main/java/com/paddle/ocr/model/OCRError.kt",
+      "sha256": "e360a2aa3580692d6ef8d98c9a740260566d5731f5f20f3633feadd55337fe6e"
+    },
+    {
+      "path": "src/main/java/com/paddle/ocr/model/OCRResult.kt",
+      "sha256": "0f492da6f396886ad68c5d0dc09a853715e50e1c23cd9f4c1fbbde7eedbb5264"
+    },
+    {
+      "path": "src/main/java/com/paddle/ocr/model/OCRRunResult.kt",
+      "sha256": "ba90ee5a89fa3bba36e4325dd1ed1b18e90e6c10401eb00df29937bfadccbed4"
+    },
+    {
+      "path": "src/main/java/com/paddle/ocr/PaddleOCR.kt",
+      "sha256": "961945f4532b6339d20afa8415f8e6e289eeef20d2e142f67d37cc35b9310ede"
+    },
+    {
+      "path": "src/main/java/com/paddle/ocr/PaddleOCRConfig.kt",
+      "sha256": "ebe53f5f21e127857b7b947995a19b5baa966d996104daa5c36ac5c07affa7d5"
+    },
+    {
+      "path": "src/main/java/com/paddle/ocr/postprocess/BoxSorter.kt",
+      "sha256": "d298db1421a7a0250db3c76627f640c13cccd66e4c6960116286a3b2399f7ccc"
+    },
+    {
+      "path": "src/main/java/com/paddle/ocr/postprocess/CTCDecoder.kt",
+      "sha256": "ae5ee6c3bd3e5993e80f20f2e35e90c7b50801d0b84fd9caff74966af4337a1f"
+    },
+    {
+      "path": "src/main/java/com/paddle/ocr/postprocess/DBPostProcessor.kt",
+      "sha256": "53923f88a025a4810d009223a79d15e9e27200673f40722ff0f9e105d2b12276"
+    },
+    {
+      "path": "src/main/java/com/paddle/ocr/postprocess/PolygonUnclip.kt",
+      "sha256": "bc575aba1d0f7618473b87c64ca0a7d0219d3bbfe57f356fd2a51d1cc2703cdd"
+    },
+    {
+      "path": "src/main/java/com/paddle/ocr/postprocess/QuadGeometry.kt",
+      "sha256": "936674693f20b2120663fb33576a6ee9264c44b28e2a1e3a01dbab0d6023ded5"
+    },
+    {
+      "path": "src/main/java/com/paddle/ocr/postprocess/QuadTextCrop.kt",
+      "sha256": "49f8889430ca8aeda4ef5e90f8de4b0e695696de64fdd97d8ed7421d21198109"
+    },
+    {
+      "path": "src/main/java/com/paddle/ocr/preprocess/DetPreprocessor.kt",
+      "sha256": "9e16244a57d8d8be5aba3eff85c676d0b08282f396868fa244bf35dd572dcff8"
+    },
+    {
+      "path": "src/main/java/com/paddle/ocr/preprocess/RecPreprocessor.kt",
+      "sha256": "edf40bd7e4cec5411a92dda05291cff524794f00bf63615f82e184b54dee9fab"
+    },
+    {
+      "path": "src/main/java/com/paddle/ocr/util/BitmapUtils.kt",
+      "sha256": "66b5771266ad5166453b428d01ea707efcc56e076c7d4813347d672629e2330c"
+    },
+    {
+      "path": "src/main/java/com/paddle/ocr/util/ImageUtils.kt",
+      "sha256": "205fd17a1dcfacdbbc8f5bb76e059aba7c0fffecfaff443812a1960272ecfbbe"
+    },
+    {
+      "path": "src/main/java/com/paddle/ocr/util/MathUtils.kt",
+      "sha256": "7465d79388376ccbbd4c575d1c03fe4524877db79cf92e74d3c35d1b7e22efd8"
+    },
+    {
+      "path": "src/main/java/com/paddle/ocr/util/OpenCVUtils.kt",
+      "sha256": "ed3fd0918df9ccff85c6f2da3ea22a1cabe31d1cd68f11a3a3c1915a758bb5f5"
+    },
+    {
+      "path": "src/main/java/com/paddle/ocr/util/YamlUtils.kt",
+      "sha256": "d61f540ed2420dea704dc381d91eb5e154191817745a8ecb2f1e712d58938f1a"
+    }
+  ],
+  "models": [
+    {
+      "name": "PP-OCRv6_tiny_det",
+      "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-OCRv6_tiny_det_onnx_infer.tar",
+      "tarBytes": 1792000,
+      "sha256": "ff6ab415b0a6e0c488550f2fb5d5046f1719848df220b2dc21b56402a65bc05d",
+      "files": [
+        [
+          "inference.onnx",
+          1780590
+        ],
+        [
+          "inference.yml",
+          883
+        ]
+      ],
+      "extracted": [
+        {
+          "path": "inference.onnx",
+          "sha256": "193bab7a04fca699a6c82e6abb5b81bdb28177f0abd4062552b04908dafb19f8"
+        },
+        {
+          "path": "inference.yml",
+          "sha256": "3ac018be6f97499a08faa3bbdeb33640968d9307f6736d152902747a9f259593"
+        }
+      ]
+    },
+    {
+      "name": "PP-OCRv6_tiny_rec",
+      "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-OCRv6_tiny_rec_onnx_infer.tar",
+      "tarBytes": 4526080,
+      "sha256": "1e13b22717b1edd89d4cde4fda272b6c17d5b505c97c2baea99da1a3a2d54b29",
+      "files": [
+        [
+          "inference.onnx",
+          4462639
+        ],
+        [
+          "inference.yml",
+          55571
+        ]
+      ],
+      "extracted": [
+        {
+          "path": "inference.onnx",
+          "sha256": "9ef676d6ed3c88256a2d92c640c44f25b0c40947e111b14b8be8f594091563e6"
+        },
+        {
+          "path": "inference.yml",
+          "sha256": "66170210bad538e83fff3c4a3867e547d6bf20b50d64b20347c4b913f3034ea1"
+        }
+      ]
+    }
+  ],
+  "notices": [
+    {
+      "file": "ONNX-Runtime-LICENSE.txt",
+      "url": "https://github.com/microsoft/onnxruntime/blob/v1.21.1/LICENSE",
+      "gitBlobSha": "48bc6bb4996ac924359e8e28b9ae88970e5ed3fc",
+      "sha256": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c"
+    },
+    {
+      "file": "ONNX-Runtime-ThirdPartyNotices.txt",
+      "url": "https://github.com/microsoft/onnxruntime/blob/v1.21.1/ThirdPartyNotices.txt",
+      "gitBlobSha": "a449e42f6bf1962f625a3be70345ee187824242d",
+      "sha256": "8c06e8cff286a4a117b3b246a4c7da68428a144af757823db50e3d6520941ec6"
+    },
+    {
+      "file": "OpenCV-LICENSE.txt",
+      "url": "https://github.com/opencv/opencv/blob/4.12.0/LICENSE",
+      "gitBlobSha": "d645695673349e3947e8e5ae42332d0ac3164cd7",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    }
+  ]
+}

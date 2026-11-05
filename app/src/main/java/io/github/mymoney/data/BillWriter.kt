@@ -60,6 +60,8 @@ object BillWriter {
                         val history = draft.historyId?.let { id ->
                             db.recognitions().byId(id) ?: error("识别记录不存在，请从历史重新打开")
                         }
+                        require(history == null || history.status == RecognitionStatus.RECORDED || draft.captureVersion == null ||
+                            CaptureMergePolicy.version(history) == draft.captureVersion) { "识别信息已更新，请核对卡片后再次保存" }
                         require(history?.reviewOf == null) { "请先在记录历史核对是否为独立交易" }
                         if (history?.status == RecognitionStatus.RECORDED) {
                             // A deleted association is deliberately not resurrected or guessed by amount.
@@ -92,7 +94,7 @@ object BillWriter {
                                 db.recognitions().update(RecognitionEntity.fromDraft(draft.copy(historyId = it.id), it.identityKey, it.recognizedAt)
                                     .copy(status = RecognitionStatus.RECORDED, billId = bill.id,
                                         updatedAt = System.currentTimeMillis(), shareState = it.shareState,
-                                        protectedFields = it.protectedFields or CaptureFields.changed(it.toDraft(), draft), reviewOf = it.reviewOf))
+                                        protectedFields = it.protectedFields or draft.captureTouchedFields or CaptureFields.changed(it.toDraft(), draft), reviewOf = it.reviewOf))
                             }
                             SaveResult(inserted, bill)
                         }

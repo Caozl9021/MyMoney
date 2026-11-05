@@ -1,0 +1,321 @@
+Original copyright/license headers from pinned OpenCV 4.12.0 hal/carotene source.
+
+Files: hal/tegra_hal.hpp, src/div.cpp
+/*
+ * By downloading, copying, installing or using the software you agree to this license.
+ * If you do not agree to this license, do not download, install,
+ * copy or use the software.
+ *
+ *
+ *                           License Agreement
+ *                For Open Source Computer Vision Library
+ *                        (3-clause BSD License)
+ *
+ * Copyright (C) 2016, NVIDIA Corporation, all rights reserved.
+ * Third party copyrights are property of their respective owners.
+ *
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
+ *
+ *   * Redistributions of source code must retain the above copyright notice,
+ *     this list of conditions and the following disclaimer.
+ *
+ *   * Redistributions in binary form must reproduce the above copyright notice,
+ *     this list of conditions and the following disclaimer in the documentation
+ *     and/or other materials provided with the distribution.
+ *
+ *   * Neither the names of the copyright holders nor the names of the contributors
+ *     may be used to endorse or promote products derived from this software
+ *     without specific prior written permission.
+ *
+ * This software is provided by the copyright holders and contributors "as is" and
+ * any express or implied warranties, including, but not limited to, the implied
+ * warranties of merchantability and fitness for a particular purpose are disclaimed.
+ * In no event shall copyright holders or contributors be liable for any direct,
+ * indirect, incidental, special, exemplary, or consequential damages
+ * (including, but not limited to, procurement of substitute goods or services;
+ * loss of use, data, or profits; or business interruption) however caused
+ * and on any theory of liability, whether in contract, strict liability,
+ * or tort (including negligence or otherwise) arising in any way out of
+ * the use of this software, even if advised of the possibility of such damage.
+ */
+
+Files: include/carotene/definitions.hpp, src/laplacian.cpp, src/remap.cpp, src/remap.hpp, src/resize.cpp, src/warp_affine.cpp, src/warp_perspective.cpp
+/*
+ * By downloading, copying, installing or using the software you agree to this license.
+ * If you do not agree to this license, do not download, install,
+ * copy or use the software.
+ *
+ *
+ *                           License Agreement
+ *                For Open Source Computer Vision Library
+ *                        (3-clause BSD License)
+ *
+ * Copyright (C) 2015, NVIDIA Corporation, all rights reserved.
+ * Third party copyrights are property of their respective owners.
+ *
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
+ *
+ *   * Redistributions of source code must retain the above copyright notice,
+ *     this list of conditions and the following disclaimer.
+ *
+ *   * Redistributions in binary form must reproduce the above copyright notice,
+ *     this list of conditions and the following disclaimer in the documentation
+ *     and/or other materials provided with the distribution.
+ *
+ *   * Neither the names of the copyright holders nor the names of the contributors
+ *     may be used to endorse or promote products derived from this software
+ *     without specific prior written permission.
+ *
+ * This software is provided by the copyright holders and contributors "as is" and
+ * any express or implied warranties, including, but not limited to, the implied
+ * warranties of merchantability and fitness for a particular purpose are disclaimed.
+ * In no event shall copyright holders or contributors be liable for any direct,
+ * indirect, incidental, special, exemplary, or consequential damages
+ * (including, but not limited to, procurement of substitute goods or services;
+ * loss of use, data, or profits; or business interruption) however caused
+ * and on any theory of liability, whether in contract, strict liability,
+ * or tort (including negligence or otherwise) arising in any way out of
+ * the use of this software, even if advised of the possibility of such damage.
+ */
+
+Files: include/carotene/functions.hpp, include/carotene/types.hpp, src/absdiff.cpp, src/channel_extract.cpp, src/channels_combine.cpp, src/cmp.cpp, src/common.hpp, src/separable_filter.cpp, src/separable_filter.hpp, src/vround_helper.hpp, src/vtransform.hpp
+/*
+ * By downloading, copying, installing or using the software you agree to this license.
+ * If you do not agree to this license, do not download, install,
+ * copy or use the software.
+ *
+ *
+ *                           License Agreement
+ *                For Open Source Computer Vision Library
+ *                        (3-clause BSD License)
+ *
+ * Copyright (C) 2014-2015, NVIDIA Corporation, all rights reserved.
+ * Third party copyrights are property of their respective owners.
+ *
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
+ *
+ *   * Redistributions of source code must retain the above copyright notice,
+ *     this list of conditions and the following disclaimer.
+ *
+ *   * Redistributions in binary form must reproduce the above copyright notice,
+ *     this list of conditions and the following disclaimer in the documentation
+ *     and/or other materials provided with the distribution.
+ *
+ *   * Neither the names of the copyright holders nor the names of the contributors
+ *     may be used to endorse or promote products derived from this software
+ *     without specific prior written permission.
+ *
+ * This software is provided by the copyright holders and contributors "as is" and
+ * any express or implied warranties, including, but not limited to, the implied
+ * warranties of merchantability and fitness for a particular purpose are disclaimed.
+ * In no event shall copyright holders or contributors be liable for any direct,
+ * indirect, incidental, special, exemplary, or consequential damages
+ * (including, but not limited to, procurement of substitute goods or services;
+ * loss of use, data, or profits; or business interruption) however caused
+ * and on any theory of liability, whether in contract, strict liability,
+ * or tort (including negligence or otherwise) arising in any way out of
+ * the use of this software, even if advised of the possibility of such damage.
+ */
+
+Files: src/accumulate.cpp, src/add.cpp, src/bitwise.cpp, src/common.cpp, src/convert_depth.cpp, src/convolution.cpp, src/fill_minmaxloc.cpp, src/flip.cpp, src/intrinsics.hpp, src/magnitude.cpp, src/meanstddev.cpp, src/min_max.cpp, src/morph.cpp, src/sub.cpp
+/*
+ * By downloading, copying, installing or using the software you agree to this license.
+ * If you do not agree to this license, do not download, install,
+ * copy or use the software.
+ *
+ *
+ *                           License Agreement
+ *                For Open Source Computer Vision Library
+ *                        (3-clause BSD License)
+ *
+ * Copyright (C) 2014, NVIDIA Corporation, all rights reserved.
+ * Third party copyrights are property of their respective owners.
+ *
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
+ *
+ *   * Redistributions of source code must retain the above copyright notice,
+ *     this list of conditions and the following disclaimer.
+ *
+ *   * Redistributions in binary form must reproduce the above copyright notice,
+ *     this list of conditions and the following disclaimer in the documentation
+ *     and/or other materials provided with the distribution.
+ *
+ *   * Neither the names of the copyright holders nor the names of the contributors
+ *     may be used to endorse or promote products derived from this software
+ *     without specific prior written permission.
+ *
+ * This software is provided by the copyright holders and contributors "as is" and
+ * any express or implied warranties, including, but not limited to, the implied
+ * warranties of merchantability and fitness for a particular purpose are disclaimed.
+ * In no event shall copyright holders or contributors be liable for any direct,
+ * indirect, incidental, special, exemplary, or consequential damages
+ * (including, but not limited to, procurement of substitute goods or services;
+ * loss of use, data, or profits; or business interruption) however caused
+ * and on any theory of liability, whether in contract, strict liability,
+ * or tort (including negligence or otherwise) arising in any way out of
+ * the use of this software, even if advised of the possibility of such damage.
+ */
+
+Files: src/add_weighted.cpp, src/blur.cpp, src/canny.cpp, src/colorconvert.cpp, src/convert.cpp, src/convert_scale.cpp, src/count_nonzero.cpp, src/dot_product.cpp, src/fast.cpp, src/gaussian_blur.cpp, src/in_range.cpp, src/minmaxloc.cpp, src/norm.cpp, src/opticalflow.cpp, src/phase.cpp, src/pyramid.cpp, src/reduce.cpp, src/saturate_cast.hpp, src/scharr.cpp, src/sobel.cpp, src/sum.cpp, src/threshold.cpp
+/*
+ * By downloading, copying, installing or using the software you agree to this license.
+ * If you do not agree to this license, do not download, install,
+ * copy or use the software.
+ *
+ *
+ *                           License Agreement
+ *                For Open Source Computer Vision Library
+ *                        (3-clause BSD License)
+ *
+ * Copyright (C) 2012-2015, NVIDIA Corporation, all rights reserved.
+ * Third party copyrights are property of their respective owners.
+ *
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
+ *
+ *   * Redistributions of source code must retain the above copyright notice,
+ *     this list of conditions and the following disclaimer.
+ *
+ *   * Redistributions in binary form must reproduce the above copyright notice,
+ *     this list of conditions and the following disclaimer in the documentation
+ *     and/or other materials provided with the distribution.
+ *
+ *   * Neither the names of the copyright holders nor the names of the contributors
+ *     may be used to endorse or promote products derived from this software
+ *     without specific prior written permission.
+ *
+ * This software is provided by the copyright holders and contributors "as is" and
+ * any express or implied warranties, including, but not limited to, the implied
+ * warranties of merchantability and fitness for a particular purpose are disclaimed.
+ * In no event shall copyright holders or contributors be liable for any direct,
+ * indirect, incidental, special, exemplary, or consequential damages
+ * (including, but not limited to, procurement of substitute goods or services;
+ * loss of use, data, or profits; or business interruption) however caused
+ * and on any theory of liability, whether in contract, strict liability,
+ * or tort (including negligence or otherwise) arising in any way out of
+ * the use of this software, even if advised of the possibility of such damage.
+ */
+
+Files: src/integral.cpp, src/median_filter.cpp
+/*
+ * By downloading, copying, installing or using the software you agree to this license.
+ * If you do not agree to this license, do not download, install,
+ * copy or use the software.
+ *
+ *
+ *                           License Agreement
+ *                For Open Source Computer Vision Library
+ *                        (3-clause BSD License)
+ *
+ * Copyright (C) 2012-2014, NVIDIA Corporation, all rights reserved.
+ * Third party copyrights are property of their respective owners.
+ *
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
+ *
+ *   * Redistributions of source code must retain the above copyright notice,
+ *     this list of conditions and the following disclaimer.
+ *
+ *   * Redistributions in binary form must reproduce the above copyright notice,
+ *     this list of conditions and the following disclaimer in the documentation
+ *     and/or other materials provided with the distribution.
+ *
+ *   * Neither the names of the copyright holders nor the names of the contributors
+ *     may be used to endorse or promote products derived from this software
+ *     without specific prior written permission.
+ *
+ * This software is provided by the copyright holders and contributors "as is" and
+ * any express or implied warranties, including, but not limited to, the implied
+ * warranties of merchantability and fitness for a particular purpose are disclaimed.
+ * In no event shall copyright holders or contributors be liable for any direct,
+ * indirect, incidental, special, exemplary, or consequential damages
+ * (including, but not limited to, procurement of substitute goods or services;
+ * loss of use, data, or profits; or business interruption) however caused
+ * and on any theory of liability, whether in contract, strict liability,
+ * or tort (including negligence or otherwise) arising in any way out of
+ * the use of this software, even if advised of the possibility of such damage.
+ */
+
+Files: src/mul.cpp
+/*
+ * By downloading, copying, installing or using the software you agree to this license.
+ * If you do not agree to this license, do not download, install,
+ * copy or use the software.
+ *
+ *
+ *                           License Agreement
+ *                For Open Source Computer Vision Library
+ *                        (3-clause BSD License)
+ *
+ * Copyright (C) 2014-2016, NVIDIA Corporation, all rights reserved.
+ * Third party copyrights are property of their respective owners.
+ *
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
+ *
+ *   * Redistributions of source code must retain the above copyright notice,
+ *     this list of conditions and the following disclaimer.
+ *
+ *   * Redistributions in binary form must reproduce the above copyright notice,
+ *     this list of conditions and the following disclaimer in the documentation
+ *     and/or other materials provided with the distribution.
+ *
+ *   * Neither the names of the copyright holders nor the names of the contributors
+ *     may be used to endorse or promote products derived from this software
+ *     without specific prior written permission.
+ *
+ * This software is provided by the copyright holders and contributors "as is" and
+ * any express or implied warranties, including, but not limited to, the implied
+ * warranties of merchantability and fitness for a particular purpose are disclaimed.
+ * In no event shall copyright holders or contributors be liable for any direct,
+ * indirect, incidental, special, exemplary, or consequential damages
+ * (including, but not limited to, procurement of substitute goods or services;
+ * loss of use, data, or profits; or business interruption) however caused
+ * and on any theory of liability, whether in contract, strict liability,
+ * or tort (including negligence or otherwise) arising in any way out of
+ * the use of this software, even if advised of the possibility of such damage.
+ */
+
+Files: src/template_matching.cpp
+/*
+ * By downloading, copying, installing or using the software you agree to this license.
+ * If you do not agree to this license, do not download, install,
+ * copy or use the software.
+ *
+ *
+ *                           License Agreement
+ *                For Open Source Computer Vision Library
+ *                        (3-clause BSD License)
+ *
+ * Copyright (C) 2013-2015, NVIDIA Corporation, all rights reserved.
+ * Third party copyrights are property of their respective owners.
+ *
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
+ *
+ *   * Redistributions of source code must retain the above copyright notice,
+ *     this list of conditions and the following disclaimer.
+ *
+ *   * Redistributions in binary form must reproduce the above copyright notice,
+ *     this list of conditions and the following disclaimer in the documentation
+ *     and/or other materials provided with the distribution.
+ *
+ *   * Neither the names of the copyright holders nor the names of the contributors
+ *     may be used to endorse or promote products derived from this software
+ *     without specific prior written permission.
+ *
+ * This software is provided by the copyright holders and contributors "as is" and
+ * any express or implied warranties, including, but not limited to, the implied
+ * warranties of merchantability and fitness for a particular purpose are disclaimed.
+ * In no event shall copyright holders or contributors be liable for any direct,
+ * indirect, incidental, special, exemplary, or consequential damages
+ * (including, but not limited to, procurement of substitute goods or services;
+ * loss of use, data, or profits; or business interruption) however caused
+ * and on any theory of liability, whether in contract, strict liability,
+ * or tort (including negligence or otherwise) arising in any way out of
+ * the use of this software, even if advised of the possibility of such damage.
+ */

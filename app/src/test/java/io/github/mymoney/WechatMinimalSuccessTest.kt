@@ -89,7 +89,7 @@ class WechatMinimalSuccessTest {
     @Test fun transferAndIncomeRetainTheirExistingDirections() {
         val transfer = screenshotTranscription + "转账成功"
         assertEquals(PageKind.WECHAT_TRANSFER, classifier.classify(snapshot(transfer))?.kind)
-        assertEquals(BillType.TRANSFER, draft(transfer).type)
+        assertEquals(BillType.EXPENSE, draft(transfer).type)
         val income = screenshotTranscription + "你已收款"
         assertEquals(PageKind.WECHAT_RECEIVE, classifier.classify(snapshot(income))?.kind)
         assertEquals(BillType.INCOME, draft(income).type)

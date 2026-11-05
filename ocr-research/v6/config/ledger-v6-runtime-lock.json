@@ -1,0 +1,111 @@
+{
+  "description": "Previously validated minimal native runtimes for V6; models/source pinned separately by upstream-lock.json.",
+  "files": [
+    {
+      "path": ".tools/ocr-native/onnxruntime-reduced-arm64-v8a.aar",
+      "sha256": "2d14ade8970a3d657934bf838285ad28ae7c3f0080ab2fbd7be4811dfc274187",
+      "bytes": 2538734,
+      "build": {
+        "abi": "arm64-v8a",
+        "version": "1.21.1",
+        "sourceCommit": "8f7cce3a49fdbdac96e0868b75b7d0159db7ac7f",
+        "sourceSha256": "f867db83cb997f93b45a572ca4a4d409c7dad6f614179d59dd4b08eea5f9df02",
+        "eigenCommit": "1d8b82b0740839c0de7f1242a3585e3390ff5f33",
+        "eigenSourceSha256": "c8adb6532fbfacd2ec1418c66404159b00c34d855bdc19cefa1f0db0e5e0aa5f",
+        "baseAarSha256": "30e594a4b9246fe3ca25768570e90f71e6d33ceb7b7dd72f92dcd7c267611d3f",
+        "opsConfigSha256": "abea48f5e53488aaf6cb7865618c193592397b7a82521fd910ec9d18d71b3c24",
+        "nativeBytes": 6342864,
+        "nativeSha256": "dc4521df91caaf776238ecd2780c0ff100f5cf1d22f1fdc3f8ed2f6226a252f9",
+        "aarSha256": "2d14ade8970a3d657934bf838285ad28ae7c3f0080ab2fbd7be4811dfc274187",
+        "buildType": "MinSizeRel",
+        "ndk": "28.2.13676358",
+        "driverPatch": "realpath -> abspath for two source-directory resolutions only",
+        "exceptionsEnabled": true,
+        "onnxLoadingRetained": true,
+        "modelPrecisionChanged": false,
+        "jniBridge": "unmodified same-version C sources rebuilt CPU-only; official Java classes retained",
+        "jniNativeBytes": 70208,
+        "jniNativeSha256": "fa99e6bc97558e94f8045ca300b5cc00537e2df005c158d4b64a2c1cca6c2d26",
+        "armProviderBuildFix": "retain original fused_activation.cc helper"
+      }
+    },
+    {
+      "path": ".tools/ocr-native/onnxruntime-reduced-x86_64.aar",
+      "sha256": "a10772e63487e9f8cafd3fb26483454ad3423813c7365b8507dcebcd6614fb5e",
+      "bytes": 2650755,
+      "build": {
+        "abi": "x86_64",
+        "version": "1.21.1",
+        "sourceCommit": "8f7cce3a49fdbdac96e0868b75b7d0159db7ac7f",
+        "sourceSha256": "f867db83cb997f93b45a572ca4a4d409c7dad6f614179d59dd4b08eea5f9df02",
+        "eigenCommit": "1d8b82b0740839c0de7f1242a3585e3390ff5f33",
+        "eigenSourceSha256": "c8adb6532fbfacd2ec1418c66404159b00c34d855bdc19cefa1f0db0e5e0aa5f",
+        "baseAarSha256": "30e594a4b9246fe3ca25768570e90f71e6d33ceb7b7dd72f92dcd7c267611d3f",
+        "opsConfigSha256": "abea48f5e53488aaf6cb7865618c193592397b7a82521fd910ec9d18d71b3c24",
+        "nativeBytes": 6516944,
+        "nativeSha256": "d1e6154f3f869874ccd9b9cb0d182258ad9731fa51126b553a29cf3cb461bf4d",
+        "aarSha256": "a10772e63487e9f8cafd3fb26483454ad3423813c7365b8507dcebcd6614fb5e",
+        "buildType": "MinSizeRel",
+        "ndk": "28.2.13676358",
+        "driverPatch": "realpath -> abspath for two source-directory resolutions only",
+        "exceptionsEnabled": true,
+        "onnxLoadingRetained": true,
+        "modelPrecisionChanged": false,
+        "jniBridge": "unmodified same-version C sources rebuilt CPU-only; official Java classes retained",
+        "jniNativeBytes": 63312,
+        "jniNativeSha256": "f96e9bc89b465ec67e35831fdb183cfad627e965f5e6e857907d6de0c5bf3ce6",
+        "armProviderBuildFix": null
+      }
+    },
+    {
+      "path": ".tools/ocr-native/opencv-minimal-arm64-v8a.aar",
+      "sha256": "7ab68fc9e368eb72214827ac7e509cef1b7cc4bb89c429fd416a69f2fa5fe7d9",
+      "bytes": 3152073,
+      "build": {
+        "abi": "arm64-v8a",
+        "sourceSha256": "8f00b42869ab2836be36090f6631ae4c38ba59171e22a69a8e0f92f8ef1771d4",
+        "sourceCommit": "49486f61fb25722cbcf586b7f4320921d46fb38e",
+        "baseAarSha256": "f71846a313388d9da667a59be1e921669fcf792d1ba264b3898253ca789bc3f0",
+        "nativeBytes": 6233616,
+        "nativeSha256": "13d437b7ddc999245309c06ced53411e8d7d17a4d68be61ce7b0ec72dcedfb01",
+        "cppRuntimeBytes": 1253544,
+        "cppRuntimeSha256": "cd61762848882a16c8244c964a6f396c0caa0b440588a210ce9cc4ab0e6d9f0c",
+        "aarSha256": "7ab68fc9e368eb72214827ac7e509cef1b7cc4bb89c429fd416a69f2fa5fe7d9",
+        "modules": [
+          "core",
+          "imgproc",
+          "imgcodecs",
+          "java"
+        ],
+        "buildType": "MinSizeRel",
+        "ndk": "28.2.13676358",
+        "modelPrecisionChanged": false
+      }
+    },
+    {
+      "path": ".tools/ocr-native/opencv-minimal-x86_64.aar",
+      "sha256": "e58e6baf210b7c9f2ffd0d5d90664c1bc6c4b4f826c94c6f79e05c29ffafcca6",
+      "bytes": 4002220,
+      "build": {
+        "abi": "x86_64",
+        "sourceSha256": "8f00b42869ab2836be36090f6631ae4c38ba59171e22a69a8e0f92f8ef1771d4",
+        "sourceCommit": "49486f61fb25722cbcf586b7f4320921d46fb38e",
+        "baseAarSha256": "f71846a313388d9da667a59be1e921669fcf792d1ba264b3898253ca789bc3f0",
+        "nativeBytes": 8596792,
+        "nativeSha256": "2d9d20194fc146c9772ec1b0916114d41223da1ae36f141e39443cc0983dbba6",
+        "cppRuntimeBytes": 1229808,
+        "cppRuntimeSha256": "2e855857f80819737d25a663109fedf816a5e996a85423166806014a06593256",
+        "aarSha256": "e58e6baf210b7c9f2ffd0d5d90664c1bc6c4b4f826c94c6f79e05c29ffafcca6",
+        "modules": [
+          "core",
+          "imgproc",
+          "imgcodecs",
+          "java"
+        ],
+        "buildType": "MinSizeRel",
+        "ndk": "28.2.13676358",
+        "modelPrecisionChanged": false
+      }
+    }
+  ]
+}

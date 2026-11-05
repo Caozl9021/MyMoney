@@ -7,7 +7,7 @@ internal fun editorFieldsChanged(before: BillDraft, after: BillDraft, amountText
     fun clean(value: String?) = value?.trim().orEmpty()
     val amountChanged = if (amountText.isBlank()) before.priceCents > 0 else parseAmountCents(amountText) != before.priceCents
     return amountChanged || before.type != after.type || before.timeMillis != after.timeMillis ||
-        clean(before.merchant) != clean(after.merchant) || clean(before.category) != clean(after.category) ||
+        clean(before.merchant) != clean(after.merchant) || clean(before.method) != clean(after.method) || clean(before.category) != clean(after.category) ||
         clean(before.subCategory) != clean(after.subCategory) || clean(before.account) != clean(after.account) ||
         before.transferAccountId != after.transferAccountId || clean(before.note) != clean(after.note)
 }

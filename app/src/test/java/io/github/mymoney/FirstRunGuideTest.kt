@@ -38,6 +38,10 @@ class FirstRunGuideTest {
         assertFalse(FirstRunGuide.steps(ready.copy(overlayAllowed = false), true)[1].complete)
         assertTrue(FirstRunGuide.steps(ready.copy(overlayAllowed = false, autoConfirm = false), true)[1].complete)
     }
+    @Test fun sourceConfigurationCompletesWithoutForcingOptionalCardPermission() {
+        assertTrue(FirstRunGuide.configurationComplete(ready.copy(overlayAllowed = false)))
+        assertFalse(FirstRunGuide.steps(ready.copy(overlayAllowed = false), false)[1].complete)
+    }
     @Test fun manualEntriesCannotCompleteRecognitionStep() {
         assertFalse(FirstRunGuide.hasRecognizedSource("io.github.mymoney.manual.123"))
         assertFalse(FirstRunGuide.hasRecognizedSource(""))

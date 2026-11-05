@@ -347,7 +347,7 @@ fun SettingsScreen(rootRequest: Long? = null, onRootRequestHandled: (Long) -> Un
             },
             onToggleEnabled = {
                 // 还没补完授权就打开总开关，先把人送到引导页；否则直接开。
-                if (it && !ordinarySetupState(healthInput).canStart) navigate(SettingsPage.ORDINARY_SETUP)
+                if (it && !ordinarySetupState(healthInput).sourceReady) navigate(SettingsPage.ORDINARY_SETUP)
                 else CaptureModeManager.setEnabled(context, it)
             },
             onToggleConfirm = { autoConfirm = it; settings.autoConfirm = it },
@@ -414,6 +414,9 @@ fun SettingsScreen(rootRequest: Long? = null, onRootRequestHandled: (Long) -> Un
         SettingsPage.IMPORT_EXPORT -> SettingsMenuPage("迁移与备份", back, listOf(
             "导入账单" to listOf(
                 SettingsLink("钱迹账单", "选择 XLSX，预览后导入", AbIcons.Export) { navigate(SettingsPage.QIANJI_IMPORT) },
+                SettingsLink("从截图补记", "选择一张交易截图，识别后核对保存", AbIcons.Search) {
+                    context.startActivity(android.content.Intent(context, OcrImportActivity::class.java))
+                },
             ),
             "导出账单" to listOf(
                 SettingsLink("导出到 iCost", "按时间范围生成 CSV", AbIcons.Export) { navigate(SettingsPage.EXPORT_CSV) },

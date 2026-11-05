@@ -106,9 +106,9 @@ internal fun OrdinarySetupPage(onBack: () -> Unit, onBackground: () -> Unit,
     }
     SettingsContentPage("开启自动记账", onBack) {
             GroupFooter(when {
-                state.complete -> if (input.enabled) "配置已就绪 · 自动记账已开启" else "配置已就绪 · 点击开始识别"
-                state.canStart -> "部分来源可用，可补全设置或使用现有来源开始。"
-                else -> "依次开启需要的权限，返回后会自动检查。"
+                state.canStart -> "已有识别方式就绪，可直接开始；其他方式可按需补充。"
+                state.sourceReady -> "识别方式已就绪，推荐开启确认卡；也可先用待确认。"
+                else -> "推荐依次开启通知、页面辅助和确认卡。可跳过部分步骤，覆盖随已开方式变化。"
             })
             InsetGroup {
                 ListRow(title = "读取交易通知", subtitle = when {
@@ -141,7 +141,8 @@ internal fun OrdinarySetupPage(onBack: () -> Unit, onBackground: () -> Unit,
             }
             error?.let { Text(it, style = AbType.footnote, color = p.red) }
             val action = state.nextAction
-            PrimaryButton(when (action) {
+            val primaryAction = if (state.canStart) null else action
+            PrimaryButton(when (primaryAction) {
                 CaptureAction.NOTIFICATION_ACCESS -> "开启通知识别"
                 CaptureAction.NOTIFICATION_RECONNECT -> "重新连接通知监听"
                 CaptureAction.ACCESSIBILITY -> "开启页面辅助"
@@ -152,13 +153,13 @@ internal fun OrdinarySetupPage(onBack: () -> Unit, onBackground: () -> Unit,
                 } else "使用推荐配置"
             }, onClick = {
                 when {
-                    action != null -> open(action)
                     state.canStart -> start()
+                    primaryAction != null -> open(primaryAction)
                     else -> CaptureModeManager.useRecommendedOrdinarySources(context)
                 }
             }, modifier = Modifier.fillMaxWidth(), enabled = !launching)
             if (state.canStart && action != null) {
-                SecondaryButton("使用现有来源开始", ::start, Modifier.fillMaxWidth(), enabled = !launching)
+                SecondaryButton("继续补充：${action.label}", { open(action) }, Modifier.fillMaxWidth(), enabled = !launching)
             }
             if (action == CaptureAction.NOTIFICATION_ACCESS || action == CaptureAction.NOTIFICATION_RECONNECT ||
                 action == CaptureAction.ACCESSIBILITY) {

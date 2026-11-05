@@ -26,8 +26,9 @@ internal fun RecognitionSettingsPage(showsHook: Boolean, showsRoot: Boolean,
     snapshot: CaptureModeStateSnapshot, autoConfirm: Boolean, onBack: () -> Unit,
     onAction: (CaptureAction) -> Unit, onOpenHook: () -> Unit,
     onPermissions: () -> Unit, onRootStatus: () -> Unit) {
-    SettingsContentPage("识别设置", onBack) {
+    SettingsContentPage("识别方式与增强", onBack) {
         ChannelRows(state = snapshot, showsHook = showsHook, onAction = onAction, onOpenHook = onOpenHook)
+        ScreenTextConsentRow()
         val overlay = autoConfirm && !snapshot.overlayAllowed
         InsetGroup {
             if (showsRoot) ListRow(title = "Root 状态", chevron = true, onClick = onRootStatus)
@@ -90,4 +91,31 @@ internal fun LspSettingsPage(hookEnabled: Boolean, enabled: Boolean, showsLsp: B
             }
         }
     }
+}
+
+
+@Composable
+private fun ScreenTextConsentRow() {
+    val context = LocalContext.current
+    val prefs = remember { io.github.mymoney.ocr.OcrPreferences(context) }
+    var enabled by remember { mutableStateOf(prefs.enabled) }
+    var explain by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    InsetGroup {
+        ListRow(title = "页面文字补全", subtitle = if (!io.github.mymoney.ocr.LocalOcrEngine.isSupported)
+            "当前OCR需要Android 11及以上和64位进程" else if (enabled)
+            "已同意 · 必要时在本机读取支付截图" else "可选 · 补充节点未读到的字段",
+            trailing = { AbSwitch(enabled) { value ->
+                if (value && io.github.mymoney.ocr.LocalOcrEngine.isSupported) explain = true else if (!value && prefs.setEnabled(false)) enabled = false else error = "保存失败，请重试"
+            } }, onClick = if (!io.github.mymoney.ocr.LocalOcrEngine.isSupported) null else ({ explain = true }))
+        error?.let { ListRow(title = it) }
+    }
+    if (explain) androidx.compose.material3.AlertDialog(onDismissRequest = { explain = false },
+        title = { Text("允许页面文字补全？") },
+        text = { Text("仅在微信、支付宝可确认的付款或账单页面，必要时读取截图并在本机识别。不上传、不永久保存原图，也不自动保存账单。密码和验证页面会跳过；已有识别方式继续可用。") },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = {
+            if (io.github.mymoney.ocr.LocalOcrEngine.isSupported && prefs.setEnabled(true)) { enabled = true; explain = false }
+            else { error = "当前无法启用，请检查系统版本或稍后重试"; explain = false }
+        }) { Text("同意并开启") } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = { explain = false }) { Text("暂不开启") } })
 }

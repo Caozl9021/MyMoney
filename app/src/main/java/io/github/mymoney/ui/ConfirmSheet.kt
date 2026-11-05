@@ -153,6 +153,7 @@ fun ConfirmSheet(
     busyLabel: String = "保存中…",
     errorMessage: String? = null,
     assetHint: String? = null,
+    reviewNotice: String? = null,
     amountVisibility: Boolean = true,
     sharedAmountProgress: Float? = null,
     managedEditorExit: Boolean = false,
@@ -172,7 +173,23 @@ fun ConfirmSheet(
     val haptic = rememberAbHaptic()
 
     var type by rememberSaveable { mutableStateOf(draft.type) }
-    val merchant = draft.merchant.orEmpty()
+    val historyRecords by io.github.mymoney.data.RecognitionStore.records.collectAsStateWithLifecycle()
+    val liveRow = historyRecords.firstOrNull { it.id == draft.historyId &&
+        it.status == io.github.mymoney.data.RecognitionStatus.PENDING }
+    var evidence by remember(draft.historyId) { mutableStateOf(draft) }
+    var evidenceVersion by remember(draft.historyId) { mutableStateOf<String?>(null) }
+    var touched by rememberSaveable(draft.historyId) { mutableStateOf(draft.captureTouchedFields) }
+    SideEffect { draft.historyId?.let { io.github.mymoney.data.CaptureEditLocks.touch(it, touched) } }
+    fun touch(fields: Long) {
+        touched = touched or fields
+        draft.historyId?.let { io.github.mymoney.data.CaptureEditLocks.touch(it, fields) }
+    }
+    val visualNotices by io.github.mymoney.ocr.OcrReviewNotices.messages.collectAsStateWithLifecycle()
+    val displayedReviewNotice = reviewNotice ?: draft.historyId?.let { visualNotices[it] }
+    val visualEditable = editableDetails && draft.historyId == null && draft.sourcePkg.startsWith("io.github.mymoney.manual.ocr.")
+    var visualMerchant by rememberSaveable(draft.sourcePkg) { mutableStateOf<String?>(null) }
+    var visualMethod by rememberSaveable(draft.sourcePkg) { mutableStateOf<String?>(null) }
+    val merchant = (if (visualEditable) visualMerchant else null) ?: evidence.merchant.orEmpty()
     var timeMillis by rememberSaveable { mutableStateOf(draft.timeMillis) }
     var timeOpen by remember { mutableStateOf(false) }
     var category by rememberSaveable { mutableStateOf(draft.category) }
@@ -207,7 +224,7 @@ fun ConfirmSheet(
 
     // ---- 金额：新建为空（0.00 只是占位）；已有金额首次点入全选，直接键入即替换 ----
     val isNew = draft.priceCents <= 0L
-    var amount by remember { mutableStateOf(TextFieldValue(initialAmountText(draft.priceCents))) }
+    var amount by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue(initialAmountText(draft.priceCents))) }
     var selectAllOnFocus by remember { mutableStateOf(!isNew) }
     var forceSelectAll by remember { mutableStateOf(false) }
     val amountFocus = remember { FocusRequester() }
@@ -217,10 +234,11 @@ fun ConfirmSheet(
     val validAmount = parseAmountCents(amount.text)
     val amountInvalid = amount.text.isNotBlank() && validAmount == null
 
-    fun current(): BillDraft = draft.copy(
+    fun current(): BillDraft = evidence.copy(
         priceCents = validAmount ?: draft.priceCents,
         type = type,
-        merchant = draft.merchant,
+        merchant = if (visualEditable && visualMerchant != null) visualMerchant?.trim()?.ifBlank { null } else evidence.merchant,
+        method = if (visualEditable && visualMethod != null) visualMethod?.trim()?.ifBlank { null } else evidence.method,
         timeMillis = timeMillis,
         category = category.takeUnless { type == BillType.TRANSFER },
         subCategory = subCategory.takeUnless { type == BillType.TRANSFER },
@@ -228,7 +246,22 @@ fun ConfirmSheet(
         account = account,
         note = note.trim().ifBlank { null },
         noteOrigin = noteOrigin, noteTemplateSnapshot = templateSnapshot,
+        captureVersion = evidenceVersion, captureTouchedFields = touched,
     )
+    LaunchedEffect(liveRow) {
+        liveRow?.let { row ->
+            val next = row.toDraft()
+            val blocked = touched or row.protectedFields
+            fun untouched(flag: Long) = blocked and flag == 0L
+            if (untouched(io.github.mymoney.data.CaptureFields.TIME)) timeMillis = next.timeMillis
+            if (untouched(io.github.mymoney.data.CaptureFields.CATEGORY)) category = next.category
+            if (untouched(io.github.mymoney.data.CaptureFields.SUBCATEGORY)) subCategory = next.subCategory
+            if (untouched(io.github.mymoney.data.CaptureFields.ACCOUNT)) { account = next.account; transferAccountId = next.transferAccountId }
+            if (untouched(io.github.mymoney.data.CaptureFields.NOTE)) { note = next.note.orEmpty(); noteOrigin = next.noteOrigin }
+            evidence = next
+            evidenceVersion = io.github.mymoney.data.CaptureMergePolicy.version(row)
+        }
+    }
     LaunchedEffect(type, category, subCategory, account, transferAccountId, timeMillis) {
         if (noteOrigin == NoteTemplate.TEMPLATE) note = NoteTemplate.render(current(), templateSnapshot)
     }
@@ -238,7 +271,8 @@ fun ConfirmSheet(
     // noteSuggestions 本身也是 key：最近账单是异步读的，读完换了一个新的 lambda，要重算
     val suggestions = remember(noteSuggestions, editedDraft) { noteSuggestions(current()) }
     var closing by remember { mutableStateOf(false) }
-    val locked = saving || dispatching || closing || editorExiting || (sharedAmountProgress != null && sharedAmountProgress < 1f)
+    val locked = (draft.historyId != null && !editableDetails && evidenceVersion == null) ||
+        (liveRow != null && evidenceVersion != io.github.mymoney.data.CaptureMergePolicy.version(liveRow)) || saving || dispatching || closing || editorExiting || (sharedAmountProgress != null && sharedAmountProgress < 1f)
     val picker = remember { CategoryPickerState() }
     var categoryViewport by remember { mutableStateOf(Rect.Zero) }
     var hostOrigin by remember { mutableStateOf(Offset.Zero) }
@@ -246,6 +280,7 @@ fun ConfirmSheet(
     fun selectSub(group: String, sub: String, pulse: Boolean = true) {
         if (locked || groups.none { it.name == group && sub in it.subs }) return
         if (pulse) haptic.tick()
+        touch(io.github.mymoney.data.CaptureFields.CATEGORY or io.github.mymoney.data.CaptureFields.SUBCATEGORY)
         category = group
         subCategory = sub
         undo = null
@@ -413,6 +448,7 @@ fun ConfirmSheet(
                         BasicTextField(
                             value = amount,
                             onValueChange = { next ->
+                                if (next.text != amount.text) touch(io.github.mymoney.data.CaptureFields.AMOUNT)
                                 undo = null
                                 amount = if (forceSelectAll) {
                                     forceSelectAll = false
@@ -452,6 +488,7 @@ fun ConfirmSheet(
                         options = BillType.entries.map(::typeLabel), selected = BillType.entries.indexOf(type), enabled = !locked,
                         onSelect = { index ->
                             if (!locked) {
+                                touch(io.github.mymoney.data.CaptureFields.TYPE or io.github.mymoney.data.CaptureFields.CATEGORY or io.github.mymoney.data.CaptureFields.SUBCATEGORY)
                                 val next = BillType.entries[index]
                                 if (type != next) { haptic.tick(); picker.cancel(); type = next; category = null; subCategory = null }
                                 importError = null
@@ -466,9 +503,9 @@ fun ConfirmSheet(
                     val transferValid = type != BillType.TRANSFER || fromTransfer != null && toTransfer != null && fromTransfer.id != toTransfer.id
                     if (type == BillType.TRANSFER) {
                         ChipRow(label = "转出账户", items = transferEligible.map { it.name }, selected = account, enabled = !locked,
-                            onToggle = { name -> haptic.tick(); account = name })
+                            onToggle = { name -> touch(io.github.mymoney.data.CaptureFields.ACCOUNT); haptic.tick(); account = name })
                         ChipRow(label = "转入账户", items = transferEligible.map { it.name }, selected = toTransfer?.name, enabled = !locked,
-                            onToggle = { name -> haptic.tick(); transferAccountId = transferEligible.firstOrNull { it.name == name }?.id })
+                            onToggle = { name -> touch(io.github.mymoney.data.CaptureFields.ACCOUNT); haptic.tick(); transferAccountId = transferEligible.firstOrNull { it.name == name }?.id })
                         if (transferEligible.size < 2) Text("请先在设置→资产为至少两个账户设置余额", style = AbType.caption1, color = p.secondaryLabel,
                             modifier = Modifier.padding(horizontal = AbSpacing.xl))
                         else if (fromTransfer != null && fromTransfer.id == toTransfer?.id) Text("转出和转入账户不能相同", style = AbType.caption1, color = p.red,
@@ -484,15 +521,15 @@ fun ConfirmSheet(
                         onSlideStart = { name, anchor -> currentOpenPicker(name, anchor, true) }, onSlideMove = picker::move,
                         onSlideRelease = { picker.release()?.let { (group, sub) -> currentSelectSub(group, sub) } }, onSlideCancel = picker::cancel,
                         onOpenSub = { name, anchor -> currentOpenPicker(name, anchor, false) },
-                        onToggle = { name -> if (!currentLocked) { haptic.tick(); category = if (category == name) null else name; subCategory = null } },
+                        onToggle = { name -> if (!currentLocked) { touch(io.github.mymoney.data.CaptureFields.CATEGORY or io.github.mymoney.data.CaptureFields.SUBCATEGORY); haptic.tick(); category = if (category == name) null else name; subCategory = null } },
                     )
                     if (accounts.isEmpty()) EmptyLedgerPickerActions("账户", !locked,
                         onAdd = { LedgerConfig.addAccount(it); configVersion++ }, onRestored = { configVersion++ })
                     ChipRow(label = "账户", items = accounts, selected = account, enabled = !locked,
-                        onToggle = { name -> haptic.tick(); account = if (account == name) null else name })
+                        onToggle = { name -> touch(io.github.mymoney.data.CaptureFields.ACCOUNT); haptic.tick(); account = if (account == name) null else name })
                     }
                     Column(Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xl)) {
-                        CompactNoteField(note, !locked) { note = it; noteOrigin = NoteTemplate.USER; undo = null }
+                        CompactNoteField(note, !locked) { touch(io.github.mymoney.data.CaptureFields.NOTE); note = it; noteOrigin = NoteTemplate.USER; undo = null }
 
                     }
                     if (suggestions.isNotEmpty() || undo != null) LazyRow(
@@ -500,11 +537,11 @@ fun ConfirmSheet(
                         modifier = Modifier.fillMaxWidth().semantics { contentDescription = "备注建议" },
                     ) {
                         undo?.let { previous -> item(key = "undo") { SuggestionBubble("撤销", accent = true, enabled = !locked) {
-                            haptic.tick(); note = previous; noteOrigin = NoteTemplate.USER; undo = null
+                            touch(io.github.mymoney.data.CaptureFields.NOTE); haptic.tick(); note = previous; noteOrigin = NoteTemplate.USER; undo = null
                         } } }
                         itemsIndexed(suggestions, key = { _, suggestion -> "s:" + suggestion.label }) { _, suggestion ->
                             SuggestionBubble(suggestion.label, enabled = !locked) {
-                                haptic.tick(); undo = note; note = suggestion.note; noteOrigin = NoteTemplate.SUGGESTION
+                                touch(io.github.mymoney.data.CaptureFields.NOTE); haptic.tick(); undo = note; note = suggestion.note; noteOrigin = NoteTemplate.SUGGESTION
                             }
                         }
                     }
@@ -525,15 +562,31 @@ fun ConfirmSheet(
                     AnimatedVisibility(visible = detailsOpen) {
                         Column(Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xl), verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
                             Text("来源信息", style = AbType.caption1, color = p.secondaryLabel)
-                            if (merchant.isNotBlank()) DetailLine("商户", merchant)
-                            draft.method?.let { DetailLine("支付方式", it) }
-                            draft.orderTail?.let { DetailLine("单号尾号", it) }
+                            if (visualEditable) {
+                                OcrCorrectionField("商户", merchant, !locked) {
+                                    touch(io.github.mymoney.data.CaptureFields.MERCHANT); visualMerchant = it.take(80)
+                                }
+                                OcrCorrectionField("支付方式", visualMethod ?: evidence.method.orEmpty(), !locked) {
+                                    touch(io.github.mymoney.data.CaptureFields.METHOD); visualMethod = it.take(80)
+                                }
+                            } else {
+                                if (merchant.isNotBlank()) DetailLine("商户", merchant)
+                                evidence.method?.let { DetailLine("支付方式", it) }
+                            }
+                            evidence.orderTail?.let { DetailLine("单号尾号", it) }
+                            evidence.productName?.takeIf(String::isNotBlank)?.let { product ->
+                                DetailLine("商品说明", product)
+                                TextButton(onClick = {
+                                    touch(io.github.mymoney.data.CaptureFields.NOTE)
+                                    note = product; noteOrigin = NoteTemplate.USER; undo = null
+                                }, enabled = !locked) { Text("用作备注") }
+                            }
                             sourceLabel(draft)?.let { DetailLine("来源", it) }
                             assetHint?.let { Text(it, style = AbType.caption1, color = p.secondaryLabel) }
                             if (draft.sourcePkg in setOf("com.tencent.mm", "com.eg.android.AlipayGphone") && merchant.isNotBlank() && type != BillType.TRANSFER) {
                                 TextButton(onClick={noteFillOpen=!noteFillOpen},enabled=!locked) {Text(if(noteFillOpen) "收起备注设置" else "设置此商家的备注")}
                                 if(noteFillOpen && !locked) InlineMerchantNoteEditor(current(),templateSnapshot,onClose={noteFillOpen=false},onSaved={updated->
-                                    note=updated.note.orEmpty();noteOrigin=updated.noteOrigin;undo=null;noteFillOpen=false
+                                    touch(io.github.mymoney.data.CaptureFields.NOTE); note=updated.note.orEmpty();noteOrigin=updated.noteOrigin;undo=null;noteFillOpen=false
                                 })
                             }
                         }
@@ -547,6 +600,8 @@ fun ConfirmSheet(
                                 error(it)
                             })
                     }
+                    displayedReviewNotice?.let { Text(it, style = AbType.footnote, color = p.secondaryLabel,
+                        modifier = Modifier.padding(horizontal = AbSpacing.xl).semantics { liveRegion = LiveRegionMode.Polite }) }
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xl).padding(top = AbSpacing.xs),
                         horizontalArrangement = Arrangement.spacedBy(AbSpacing.m),
@@ -572,7 +627,7 @@ fun ConfirmSheet(
                 }
             }
         }
-        if (timeOpen) LedgerDateTimeDialog(timeMillis, onDismiss = { timeOpen = false }, onConfirm = { timeMillis = it; timeOpen = false })
+        if (timeOpen) LedgerDateTimeDialog(timeMillis, onDismiss = { timeOpen = false }, onConfirm = { touch(io.github.mymoney.data.CaptureFields.TIME); timeMillis = it; timeOpen = false })
         CategoryPicker(picker, hostOrigin) { group, sub -> selectSub(group, sub) }
     }
 }
@@ -734,6 +789,20 @@ private fun SuggestionBubble(text: String, accent: Boolean = false, enabled: Boo
             Text(text, style = AbType.footnote, color = if (!enabled) p.secondaryLabel else if (accent) p.accent else p.label, maxLines = 1,
                 overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 220.dp))
         }
+    }
+}
+
+/** Uses the same simple input surface as notes, including inside the animated sheet. */
+@Composable
+private fun OcrCorrectionField(label: String, value: String, enabled: Boolean, onChange: (String) -> Unit) {
+    val p = LocalAbPalette.current
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, style = AbType.caption1, color = p.secondaryLabel)
+        BasicTextField(value = value, onValueChange = onChange, enabled = enabled, singleLine = true,
+            textStyle = AbType.body.copy(color = p.label), cursorBrush = SolidColor(p.accent),
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(AbRadius.row)).background(p.fill)
+                .heightIn(min = 44.dp).padding(horizontal = AbSpacing.l, vertical = 10.dp)
+                .semantics { contentDescription = label })
     }
 }
 

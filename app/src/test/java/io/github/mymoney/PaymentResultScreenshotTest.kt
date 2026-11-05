@@ -248,6 +248,6 @@ class PaymentResultScreenshotTest {
         assertEquals(1999L, refund.priceCents)
 
         val wechatTransfer = draft(Samples.wechatTransfer, Packages.WECHAT)
-        assertEquals(BillType.TRANSFER, wechatTransfer.type)
+        assertEquals(BillType.EXPENSE, wechatTransfer.type)
     }
 }

@@ -72,27 +72,14 @@ internal fun AutomationPage(
                     }
                 }
             }
-            // 推荐配置只在真有 root 的机器上出现：没有 root 时它的一项永远是死选项。
-            if (capabilities.rootGranted) {
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(AbLayout.headingGap)) {
-                        GroupHeader("推荐配置")
-                        PresetSwitch(mode = mode, lspInstalled = capabilities.lspInstalled, onApply = onApplyPreset)
-                    }
-                }
-            }
             item {
                 InsetGroup {
                     ListRow(
-                        title = if (health.attention) "完成设置" else "检查授权",
+                        title = "识别方式与增强",
                         subtitle = if (showsLsp) "通知识别、页面辅助与凭证采集" else "通知识别、页面辅助",
                         leading = { SettingsIconBadge("识别设置", AbIcons.Filter) },
                         chevron = true, onClick = { onNavigate(Route.SOURCES) })
-                    if (showsLsp) {
-                        ListRow(title = "LSPosed 模块", subtitle = "微信与支付宝交易采集",
-                            leading = { SettingsIconBadge("LSPosed 模块", AbIcons.Layers) },
-                            dividerAbove = true, chevron = true, onClick = { onNavigate(Route.LSP) })
-                    }
+
                 }
             }
             item {

@@ -12,7 +12,7 @@ internal data class OrdinarySetupState(
     val nextAction: CaptureAction?,
 ) {
     val canStart: Boolean get() = sourceReady && presentationReady
-    val complete: Boolean get() = canStart && selectedSourcesReady
+    val complete: Boolean get() = canStart
 }
 
 /**
@@ -23,15 +23,12 @@ internal data class OrdinarySetupState(
  * 通知那一路按**实际实现**判：跑 listener 就要求授权且已连接，跑 dumpsys 就要求 Root 读取就绪。
  */
 internal fun ordinarySetupState(input: CaptureHealthInput): OrdinarySetupState = with(input) {
-    val notification = notificationsEnabled && when (notificationPlan) {
-        NotificationPath.LISTENER -> notificationAuthorized && notificationBound
-        NotificationPath.DUMPSYS -> rootNotificationReady
-        null -> false
-    }
+    val notification = notificationReady
     val page = pageEnabled && accessibilityAuthorized && accessibilityBound
-    val source = notification || page
+    val source = notification || page || lspReady
     val presentation = !autoConfirm || overlayAllowed
     val next = when {
+        source && !presentation -> CaptureAction.OVERLAY
         notificationsEnabled && !notification -> when (notificationPlan) {
             NotificationPath.DUMPSYS -> CaptureAction.ROOT_STATUS
             else -> if (!notificationAuthorized) CaptureAction.NOTIFICATION_ACCESS

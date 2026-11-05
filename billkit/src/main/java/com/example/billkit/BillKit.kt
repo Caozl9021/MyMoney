@@ -100,7 +100,7 @@ object BillKit {
             }
 
             is BillPipeline.Outcome.Draft -> {
-                val draft = outcome.draft.copy(captureSessionId = sessionId, captureConfigurationToken = snapshot.configurationToken)
+                val draft = outcome.draft.copy(captureSessionId = sessionId, captureConfigurationToken = snapshot.configurationToken, pageObservationId = snapshot.pageObservationId)
                 val dedupeKey = deliveryKey(draft)
                 if (page == lastDraftPage) {
                     DebugBus.publish(snapshot, snapshot.diagnostic("skip:same-page"))

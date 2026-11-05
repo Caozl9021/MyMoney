@@ -18,8 +18,8 @@ android {
         targetSdk = 35
         testInstrumentationRunner = providers.gradleProperty("mymoneyTestRunner")
             .getOrElse("io.github.mymoney.HistoryInstrumentation")
-        versionCode = 133
-        versionName = "1.8.0"
+        versionCode = 139
+        versionName = "1.9.0"
     }
 
     // 签名信息放在仓库之外（~/.mymoney-keys/keystore.properties），不进版本库。
@@ -91,9 +91,13 @@ dependencies {
     // new SpringForce()，缺了它一启动就是 NoClassDefFoundError: androidx.dynamicanimation.animation.SpringForce。
     implementation("androidx.dynamicanimation:dynamicanimation:1.1.0")
 
-    // 已移除：OCR 实现随 Root 页面轮询一起删除（com.google.mlkit:text-recognition-chinese）。
-    // 现在所有通道拿到的都是结构化凭证（hook 的库字段、通知的 title/text、短信正文），
-    // 不需要截图识别，也就不需要这个约 10MB 的模型。
+    // Production contains one offline engine: pinned V6 Tiny, with both supported 64-bit ABIs.
+    implementation(project(":ocr-v6"))
+    implementation(files(rootProject.file("ocr-research/v6/generated/runtime/onnxruntime-reduced-dual.aar")))
+    implementation(files(rootProject.file("ocr-research/v6/generated/runtime/opencv-minimal-dual.aar")))
+
+    // ML Kit remains exclusively in the comparison test APK.
+    androidTestImplementation("com.google.mlkit:text-recognition-chinese:16.0.1")
 
     // Xposed API（内置 LSP 增强模块）
     compileOnly("de.robv.android.xposed:api:82")

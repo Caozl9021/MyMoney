@@ -72,9 +72,12 @@ object RecognitionStore {
     suspend fun preserve(draft: BillDraft) {
         val row = record(draft)
         change(row.id) { current ->
-            if (current.status != RecognitionStatus.PENDING) current else RecognitionEntity.fromDraft(draft.copy(historyId = current.id), current.identityKey, current.recognizedAt)
-                .copy(shareState = current.shareState, reviewOf = current.reviewOf,
-                    protectedFields = current.protectedFields or CaptureFields.changed(current.toDraft(), draft))
+            if (current.status != RecognitionStatus.PENDING) current else {
+                val saved = if (draft.captureVersion != null) CaptureEditorPolicy.applyTouched(current.toDraft(), draft) else draft
+                RecognitionEntity.fromDraft(saved.copy(historyId = current.id), current.identityKey, current.recognizedAt)
+                    .copy(shareState = current.shareState, reviewOf = current.reviewOf,
+                        protectedFields = current.protectedFields or draft.captureTouchedFields or CaptureFields.changed(current.toDraft(), saved))
+            }
         }
     }
     suspend fun markShare(id: String, launched: Boolean) = change(id) { it.copy(shareState = if (launched) RecognitionShareState.REQUESTED else RecognitionShareState.FAILED) }

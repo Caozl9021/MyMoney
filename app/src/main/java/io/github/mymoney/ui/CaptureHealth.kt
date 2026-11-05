@@ -107,7 +107,7 @@ internal fun captureHealth(input: CaptureHealthInput): CaptureHealth = with(inpu
     // 凭证通道不需要选模式，所以只开了它也算「设置过」——不能一边采着一边要求用户去选模式。
     // 一条通道都没配过。以前这里要求用户先选「普通模式 / Root 模式」，现在没有这个选择了：
     // 需要的是把通知识别打开，所以直接指向自动记账页。
-    if (mode == null && !notificationsEnabled && !hookEnabled) return CaptureHealth(CaptureHealthKind.MODE_REQUIRED,
+    if (mode == null && !pageEnabled && !notificationsEnabled && !hookEnabled) return CaptureHealth(CaptureHealthKind.MODE_REQUIRED,
         "尚未开启自动记账", "打开通知识别后，麦米会在收到微信、支付宝交易通知时生成草稿。",
         listOf(CaptureAction.OPEN_AUTOMATION))
     if (!enabled) return CaptureHealth(CaptureHealthKind.PAUSED, "自动记账已暂停",

@@ -101,9 +101,45 @@ class CaptureMergePolicyTest {
         assertEquals("来源备注", merged.note)
     }
 
-    @Test fun openEditorBlocksEveryAutomaticMutationIncludingIdentityAndTime() {
+    @Test fun openEditorAllowsMissingFieldsButProtectsTouchedAccountAndNote() {
         val original = row()
-        assertSame(original, CaptureMergePolicy.enrich(original, filled(), editing = true))
+        CaptureEditLocks.acquire(original.id)
+        try {
+            CaptureEditLocks.touch(original.id, CaptureFields.ACCOUNT or CaptureFields.NOTE)
+            val merged = CaptureMergePolicy.enrich(original, filled(), editing = true)
+            assertEquals("储蓄卡", merged.method)
+            assertNull(merged.account)
+            assertNull(merged.note)
+            assertEquals("order-1", merged.transactionKey)
+        } finally { CaptureEditLocks.release(original.id) }
+        assertEquals(0L, CaptureEditLocks.fields(original.id))
+    }
+
+    @Test fun onlyExplicitAutomaticAccountUpgradeMayReplaceANonemptyAccount() {
+        val original = row(draft().copy(account="默认账户"))
+        assertEquals("默认账户", CaptureMergePolicy.enrich(original, filled(), false).account)
+        assertEquals("支付宝", CaptureMergePolicy.enrich(original, filled(), false, true).account)
+        assertEquals("默认账户", CaptureMergePolicy.enrich(original.copy(protectedFields=CaptureFields.ACCOUNT), filled(), false, true).account)
+    }
+
+    @Test fun dismissingStaleEditorKeepsNewEvidenceAndIntentionalClears() {
+        val opened = draft().copy(account="默认账户", note="旧备注")
+        val incoming = filled().copy(method="零钱", account="零钱账户", orderTail="123456")
+        val edited = opened.copy(note=null, captureTouchedFields=CaptureFields.NOTE)
+        val preserved = CaptureEditorPolicy.applyTouched(incoming, edited)
+        assertEquals("零钱", preserved.method)
+        assertEquals("零钱账户", preserved.account)
+        assertEquals("123456", preserved.orderTail)
+        assertNull(preserved.note)
+        val clearedAccount = CaptureEditorPolicy.applyTouched(incoming, edited.copy(account=null,
+            captureTouchedFields=CaptureFields.ACCOUNT))
+        assertNull(clearedAccount.account)
+    }
+
+    @Test fun evidenceVersionDetectsUpdatesEvenWithIdenticalTimestamps() {
+        val original = row()
+        assertNotEquals(CaptureMergePolicy.version(original), CaptureMergePolicy.version(original.copy(method="零钱")))
+        assertEquals(original.updatedAt, original.copy(method="零钱").updatedAt)
     }
 
     @Test fun ignoredAndRecordedStatesRemainUntouched() {
