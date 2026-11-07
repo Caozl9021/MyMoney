@@ -107,6 +107,26 @@ class MainActivity : ComponentActivity() {
             // Consume the command while retaining extras identifying the launch source.
             intent.action = null
         }
+        consumeJoinLink(intent)
+    }
+
+    /**
+     * `mymoney://join?invite=…`：把整串邀请放进内存，等「家庭同步与备份」页取走。
+     *
+     * 走深链而不是让用户手打，是因为邀请串带一次性授权码，200 字符在手机上粘贴极易出错。
+     */
+    private fun consumeJoinLink(intent: android.content.Intent?) {
+        if (intent == null || intent.action != android.content.Intent.ACTION_VIEW) return
+        val data = intent.data ?: return
+        if (!data.scheme.equals("mymoney", ignoreCase = true)) return
+        if (!data.host.equals("join", ignoreCase = true)) return
+        val invite = data.getQueryParameter("invite")?.trim().orEmpty()
+        if (invite.isEmpty()) return
+        io.github.mymoney.data.rulesync.PendingInviteText.put(invite)
+        intent.action = null
+        intent.data = null
+        tabState.intValue = tabs.lastIndex
+        settingsRootRequest.value = ++settingsRootSequence
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -135,6 +155,8 @@ class MainActivity : ComponentActivity() {
             requestAdd.intValue++
             intent.action = null
         }
+        // 冷启动直接由邀请深链拉起时也要接住。
+        if (savedInstanceState == null) consumeJoinLink(intent)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.isNavigationBarContrastEnforced = false
         }

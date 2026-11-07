@@ -2,10 +2,13 @@ package io.github.mymoney.data.rulesync
 
 import android.content.Context
 import io.github.mymoney.data.MiniJson
+import io.github.mymoney.data.ledgersync.LedgerSyncRepository
+import io.github.mymoney.data.ledgersync.LedgerSyncSettings
 import io.github.mymoney.data.NoteFillStore
 import io.github.mymoney.data.SpecRuleStore
 import java.io.IOException
 import java.time.Instant
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,6 +37,10 @@ object RuleSyncCoordinator {
     private val _state = MutableStateFlow(RuleSyncUiState())
     val state: StateFlow<RuleSyncUiState> = _state.asStateFlow()
 
+    /** 这次调用走哪条传输：默认直连，配置开了内嵌就走内嵌（不可用时报错，不静默降级）。 */
+    private fun transport(context: Context): FamilyTransport =
+        FamilyTransportProvider.select(context, RuleSyncSettings.load(context))
+
     suspend fun refreshStatus() {
         val pending = runCatching { RuleSyncRepository.outboxCount() }.getOrDefault(0)
         val conflicts = runCatching { RuleSyncRepository.conflicts().size }.getOrDefault(0)
@@ -41,18 +48,81 @@ object RuleSyncCoordinator {
         _state.value = _state.value.copy(pending = pending, conflicts = conflicts, lastSyncAt = lastSyncAt)
     }
 
+    /** “打开麦米就能连上”：一次真实探测，走与同步相同的传输与地址策略。 */
+    suspend fun testConnection(context: Context) = mutex.withLock {
+        _state.value = _state.value.copy(busy = true, message = "正在测试连接…")
+        try {
+            val config = RuleSyncSettings.load(context)
+            if (config.serverUrl.isBlank()) throw IOException("请先填写家庭服务地址")
+            val transport = transport(context)
+            val via = if (config.useEmbedded) "内嵌节点" else "系统直连"
+            // 内嵌模式第一次拉起节点时，Start 返回只代表本地节点起来了，真正上线还要等控制面
+            // 授权和打洞完成；这期间发出的第一个请求必然失败。留一段重试窗口，别让用户第一次
+            // 点「测试连接」就吃到失败。真连不上时窗口结束仍会报错，不是无限等。
+            val attempts = if (config.useEmbedded) 6 else 1
+            var failure: Exception? = null
+            for (attempt in 0 until attempts) {
+                if (attempt == 1) {
+                    _state.value = _state.value.copy(message = "正在等待内嵌节点上线…")
+                }
+                try {
+                    RuleSyncApi.health(config.serverUrl, transport)
+                    failure = null
+                    break
+                } catch (e: Exception) {
+                    failure = e
+                    if (attempt < attempts - 1) delay(2_500)
+                }
+            }
+            failure?.let { throw it }
+            _state.value = _state.value.copy(busy = false, message = "连接正常（$via）")
+        } catch (e: Exception) {
+            val via = if (RuleSyncSettings.load(context).useEmbedded) "内嵌节点" else "系统直连"
+            _state.value = _state.value.copy(busy = false, message = "连接失败（$via）：${e.message ?: "未知错误"}")
+        }
+    }
+
     suspend fun pair(context: Context, serverUrl: String, code: String, deviceName: String) = mutex.withLock {
         _state.value = _state.value.copy(busy = true, message = "正在配对…")
         try {
-            val response = RuleSyncApi.pair(serverUrl, code, deviceName)
+            // Pair against the address the user is looking at: the field may differ from
+            // the stored config, and the peer allowlist must be derived from the same
+            // address the request is sent to.
+            val base = RuleSyncSettings.load(context)
+            val effective = base.copy(serverUrl = serverUrl.trim().trimEnd('/'))
+            val transport = FamilyTransportProvider.select(context, effective)
+            val response = RuleSyncApi.pair(serverUrl, code, deviceName, transport)
+            // Keep the transport choice the user picked: rebuilding the config from
+            // scratch used to drop useEmbedded/ctrlUrl, so a successful embedded pairing
+            // silently fell back to direct afterwards.
+            val previous = base
             RuleSyncSettings.save(
                 context,
-                RuleSyncConfig(serverUrl = serverUrl, spaceId = response.spaceId, epoch = response.epoch, deviceId = response.deviceId, deviceName = deviceName, initialMergePending = true),
+                RuleSyncConfig(
+                    serverUrl = serverUrl,
+                    spaceId = response.spaceId,
+                    epoch = response.epoch,
+                    deviceId = response.deviceId,
+                    deviceName = deviceName,
+                    initialMergePending = true,
+                    useEmbedded = previous.useEmbedded,
+                    ctrlUrl = previous.ctrlUrl,
+                ),
                 token = response.token,
             )
             RuleSyncRepository.bindSpace(response.spaceId, response.epoch, enqueue = false)
+            // 账本副本同步也在此刻绑定 space/ledger：让账本 state 在配对成功时就建立，
+            // 之后记账→同步不会触发 bindSpace 首次绑定，避免首次同步清空配对前先记的账（首笔账单丢失）。
+            runCatching {
+                LedgerSyncRepository.bindSpace(
+                    context,
+                    response.spaceId,
+                    LedgerSyncSettings.ledgerId(context),
+                    response.epoch,
+                )
+            }
             val local = RuleSyncRepository.activeItems()
-            val remote = RuleSyncApi.snapshot(serverUrl, response.token).items.filter { it.deletedAt == null }
+            val remote = RuleSyncApi.snapshot(serverUrl, response.token, transport(context)).items.filter { it.deletedAt == null }
             val localById = local.associateBy { it.id }
             val remoteById = remote.associateBy { it.itemId }
             val localIds = localById.keys
@@ -92,7 +162,7 @@ object RuleSyncCoordinator {
         try {
             val config = RuleSyncSettings.load(context)
             val token = RuleSyncSecrets.loadToken(context) ?: throw IOException("设备令牌不存在，请重新配对")
-            val remote = RuleSyncApi.snapshot(config.serverUrl, token).items.filter { it.deletedAt == null }
+            val remote = RuleSyncApi.snapshot(config.serverUrl, token, transport(context)).items.filter { it.deletedAt == null }
             val skip = RuleSyncRepository.prepareInitialMerge(remote)
             val queued = RuleSyncRepository.enqueueAllForInitialSync(skip)
             clearInitialPreview()
@@ -105,17 +175,23 @@ object RuleSyncCoordinator {
     }
 
     suspend fun cancelInitialSync(context: Context) = mutex.withLock {
-        runCatching { disconnectWithoutLock(context) }
-        RuleSyncRepository.unbindSpace()
-        _state.value = RuleSyncUiState(message = "已取消首次同步，本地规则未修改")
+        try {
+            disconnectWithoutLock(context)
+            RuleSyncRepository.unbindSpace()
+            _state.value = RuleSyncUiState(message = "已取消首次同步，本地规则未修改")
+        } catch (e: Exception) {
+            _state.value = _state.value.copy(busy = false, message = "取消连接失败：${e.message}")
+        }
     }
 
     private suspend fun disconnectWithoutLock(context: Context) {
         val config = RuleSyncSettings.load(context)
         val token = RuleSyncSecrets.loadToken(context)
         if (config.paired && token != null) {
-            runCatching { RuleSyncApi.revoke(config.serverUrl, token) }
+            runCatching { RuleSyncApi.revoke(config.serverUrl, token, transport(context)) }
         }
+        TsnetSession.shutdown()
+        PendingInvite.clear()
         RuleSyncSettings.clear(context)
     }
 
@@ -143,7 +219,7 @@ object RuleSyncCoordinator {
                     item["sortKey"] = item["sortKey"]?.toString()
                     item
                 }
-                val results = RuleSyncApi.push(config.serverUrl, token, config.spaceId, config.epoch, batch)
+                val results = RuleSyncApi.push(config.serverUrl, token, config.spaceId, config.epoch, batch, transport(context))
                 results.forEach { result ->
                     val operationId = result["operationId"] as? String ?: return@forEach
                     when (result["status"] as? String) {
@@ -182,7 +258,7 @@ object RuleSyncCoordinator {
             var cursor = RuleSyncRepository.currentState().cursor
             var page: RuleSyncPullPage
             do {
-                page = RuleSyncApi.pull(config.serverUrl, token, cursor)
+                page = RuleSyncApi.pull(config.serverUrl, token, cursor, transport = transport(context))
                 val conflictIds = RuleSyncRepository.conflicts().map { it.itemId }.toSet()
                 page.changes.forEach { change ->
                     val local = RuleSyncRepository.localItem(change.itemId)
@@ -216,7 +292,7 @@ object RuleSyncCoordinator {
                 }
                 cursor = page.nextCursor
                 RuleSyncRepository.setCursor(cursor, page.nextCursor, System.currentTimeMillis())
-                RuleSyncApi.ack(config.serverUrl, token, page.nextCursor, config.epoch)
+                RuleSyncApi.ack(config.serverUrl, token, page.nextCursor, config.epoch, transport(context))
             } while (page.hasMore)
 
             RuleSyncRepository.reload()
@@ -236,8 +312,12 @@ object RuleSyncCoordinator {
     }
 
     suspend fun disconnect(context: Context) = mutex.withLock {
-        disconnectWithoutLock(context)
-        RuleSyncRepository.unbindSpace()
-        _state.value = RuleSyncUiState(message = "已断开家庭服务，本地规则保留")
+        try {
+            disconnectWithoutLock(context)
+            RuleSyncRepository.unbindSpace()
+            _state.value = RuleSyncUiState(message = "已断开家庭服务，本地规则保留")
+        } catch (e: Exception) {
+            _state.value = _state.value.copy(busy = false, message = "断开连接失败：${e.message}")
+        }
     }
 }

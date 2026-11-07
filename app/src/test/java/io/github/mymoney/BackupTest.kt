@@ -201,4 +201,28 @@ class BackupTest {
             fail("损坏分类应拒绝，不得静默丢弃")
         } catch (_: IllegalArgumentException) { }
     }
+
+    @Test
+    fun `format10往返保留账单同步身份`() {
+        val bill = Backup.Bill(
+            priceCents = 1999, type = "EXPENSE", timeMillis = 100, merchant = "早餐", method = null,
+            orderTail = null, sourcePkg = "manual", strategy = "手动", fingerprint = "fp1", createdAt = 100,
+            category = "餐饮", subCategory = null, account = null, note = null,
+            syncId = "5e1b7e6a-1f2c-4b3d-9e8f-000000000001",
+        )
+        val snapshot = Backup.Snapshot(100, listOf(bill), null, null)
+        val json = Backup.encode(snapshot)
+        assertTrue(json.contains("\"format\":${Backup.FORMAT}"))
+        assertTrue(json.contains("\"sid\""))
+        val restored = Backup.decode(json)
+        assertEquals(bill.syncId, restored.bills.single().syncId)
+        assertEquals(bill, restored.bills.single())
+    }
+
+    @Test
+    fun `旧格式缺同步身份时解码为空串而非报错`() {
+        val json = """{"kind":"MyMoneyBackup","format":9,"bills":[{"p":500,"ty":"EXPENSE","t":1}]}"""
+        val restored = Backup.decode(json)
+        assertEquals("", restored.bills.single().syncId)
+    }
 }

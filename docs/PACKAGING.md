@@ -1,5 +1,15 @@
 # 打包文件存放规则
 
+> 最新（2026-11-07）：1.9.0/157 AA历史备份与恢复改进**用户验收通过**（用户“改过代码了，验收通过”，自测小米14两千多笔通过）。产物 `dist/app/1.9.0-157/20261107-203850-5p0bvjyn/`，release sha256 `0526a1ca2aba58dcb41b0d6417b0c40b52236cb47b85486ee41af105c6319a88`，versionCode 157/1.9.0，签名 `05212beb…66c0` 连续，`dist/latest-app.json` status=accepted。**未提交/推送/发布**。下方 155 段为历史快照。
+
+## 155进度复核（2026-11-06，仅文档）
+
+当前候选 **1.9.0/155，Room11/JSON10，pending_acceptance**。删除历史、更多下移右对齐、context请求精简和Go HTTP复用主体已实现；155尚无用户验收。154返回修复/原“更多正常显示”分项通过保留。
+
+本轮复核候选SHA五项通过，现存JVM XML为1180/0/0/0；服务端76 pytest、部署镜像155和Mi10显式直连实测引用原记录，未重跑/操作在线环境。已有实机证据是单选删除，批删能力不等于真实多选已测；内嵌通道和分段耗时未闭环，HTTP请求减少不等于连接慢已解决。
+
+静态待收尾：R1删除重试未保留operationId；R2删后分页仍用旧offset；R3文件已不在时回收状态不能收尾；R4新备份未失效context缓存。详见[实现复核与后续](../runs/20261106-181513-155-progress-review/outputs/implementation-review.md)。本轮只同步文档，不改源码/APK/旧证据，不操作手机或服务。
+
 `dist/` 是本机打包工作区，产物不提交 Git。App 候选、规则候选和发布快照分别保存。`runs/` 保存测试及复现记录，`deliverables/` 保存稳定交付与验收记录；用户明确验收前保持待验收。
 
 ```text
@@ -22,6 +32,8 @@ dist/
   notes/v<versionName>/            发布说明草稿
   archive/                        历史重复清单、迁移映射
 ```
+
+当前latest指向1.9.0/154候选`dist/app/1.9.0-154/20261106-064211-hkmfj9cp`，pending_acceptance；小米14已安装Success，但不是返回修复/JSON入口/备份验收。153原Mi10备份恢复证据不扩为154。
 
 ## App 打包
 
@@ -58,6 +70,8 @@ python3 billkit/rules/package.py
 - `archive/legacy-root/app-update.json` 是原根目录重复清单，仅供追溯，不用于新发布。
 - `.stfolder/` 为 Syncthing 标记，保持原位。根目录不再散放 APK、ZIP、版本清单或发布草稿。
 - 不自动清理旧包或按数量删除。清理前先列候选、确认备份和复用依赖，再按用户授权执行。
+
+## 历史候选收集记录（仅按当时解释）
 
 2026-11-05同步：当前最近成功候选为1.9.0/143，路径以latest-app.json为准；143为pending_acceptance。当前用户验收见ACCEPTANCE.md，本次文档更新不修改候选APK、清单或历史发布快照。
 

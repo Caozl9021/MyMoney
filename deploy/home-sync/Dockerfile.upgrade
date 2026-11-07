@@ -1,0 +1,14 @@
+# 增量升级镜像：基于运行中的老镜像，只替换 app 源码与 schema，不重跑 pip install
+# （老镜像依赖环境完好；全量 build 因 pydantic 约束与上游冲突失败，改增量）
+# 基线固定为当前线上镜像，避免回退到更早的依赖层
+FROM mymoney-home-sync:cloud-backup-153
+
+WORKDIR /app
+COPY server/app ./app
+COPY server/schema.sql ./schema.sql
+COPY server/migrations ./migrations
+
+# Z: 管理页服务端渲染连接码二维码；基线镜像早于此依赖。
+RUN pip install --no-cache-dir qrcode==8.0
+
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${MYMONEY_PORT:-8080}"]

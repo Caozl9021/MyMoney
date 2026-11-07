@@ -9,6 +9,10 @@ data class RuleSyncConfig(
     val deviceId: String = "",
     val deviceName: String = "",
     val initialMergePending: Boolean = false,
+    /** 走内嵌 tsnet 节点而不是系统直连；旧配置没有这一项，默认 false = 直连。 */
+    val useEmbedded: Boolean = false,
+    /** 内嵌模式使用的控制面地址；留空用上游默认。 */
+    val ctrlUrl: String = "",
 ) {
     val paired: Boolean get() = serverUrl.isNotBlank() && spaceId.isNotBlank() && epoch.isNotBlank() && deviceId.isNotBlank()
 }
@@ -21,6 +25,8 @@ object RuleSyncSettings {
     private const val KEY_DEVICE = "device_id"
     private const val KEY_DEVICE_NAME = "device_name"
     private const val KEY_INITIAL_MERGE_PENDING = "initial_merge_pending"
+    private const val KEY_USE_EMBEDDED = "use_embedded"
+    private const val KEY_CTRL_URL = "ctrl_url"
 
     fun load(context: Context): RuleSyncConfig {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -31,19 +37,23 @@ object RuleSyncSettings {
             deviceId = p.getString(KEY_DEVICE, "") ?: "",
             deviceName = p.getString(KEY_DEVICE_NAME, "") ?: "",
             initialMergePending = p.getBoolean(KEY_INITIAL_MERGE_PENDING, false),
+            useEmbedded = p.getBoolean(KEY_USE_EMBEDDED, false),
+            ctrlUrl = p.getString(KEY_CTRL_URL, "") ?: "",
         )
     }
 
     fun save(context: Context, config: RuleSyncConfig, token: String? = null) {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        p.edit()
+        check(p.edit()
             .putString(KEY_SERVER, config.serverUrl.trim().trimEnd('/'))
             .putString(KEY_SPACE, config.spaceId)
             .putString(KEY_EPOCH, config.epoch)
             .putString(KEY_DEVICE, config.deviceId)
             .putString(KEY_DEVICE_NAME, config.deviceName)
             .putBoolean(KEY_INITIAL_MERGE_PENDING, config.initialMergePending)
-            .apply()
+            .putBoolean(KEY_USE_EMBEDDED, config.useEmbedded)
+            .putString(KEY_CTRL_URL, config.ctrlUrl.trim())
+            .commit()) { "无法保存连接配置" }
         if (token != null) RuleSyncSecrets.saveToken(context, token)
     }
 
@@ -93,7 +103,7 @@ object RuleSyncSecrets {
         val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, key())
         val encrypted = android.util.Base64.encodeToString(cipher.iv + cipher.doFinal(token.toByteArray(Charsets.UTF_8)), android.util.Base64.NO_WRAP)
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_TOKEN, encrypted).apply()
+        check(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_TOKEN, encrypted).commit()) { "无法保存连接凭证" }
     }
 
     fun loadToken(context: Context): String? = runCatching {

@@ -1,4 +1,9 @@
-"""Immutable JSON8/9 backup files; only committed indexes are downloadable."""
+"""Immutable JSON8/9 backup files; only committed indexes are downloadable.
+
+Deletion (Y) is a tombstone plus asynchronous file recycle: the transaction
+only flips deleted_at and records the operation; files are removed after the
+commit by the same request when possible, or by a startup recovery sweep.
+"""
 from __future__ import annotations
 
 import hashlib
@@ -12,12 +17,15 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 
 from .auth import current_device
 from .config import get_settings
 from .db import connection
 
 router = APIRouter()
+
+MAX_DELETE_BATCH = 100
 
 
 def file_digest(path: Path) -> str:
@@ -113,7 +121,7 @@ def validate_snapshot(path: Path) -> tuple[int, datetime, int]:
     try:
         with path.open("r", encoding="utf-8") as stream:
             data = json.load(stream, parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
-        if not isinstance(data, dict) or data.get("kind") != "MyMoneyBackup" or type(data.get("format")) is not int or data["format"] not in (8, 9):
+        if not isinstance(data, dict) or data.get("kind") != "MyMoneyBackup" or type(data.get("format")) is not int or data["format"] not in (8, 9, 10):
             raise ValueError()
         timestamp = data.get("exportedAt")
         if type(timestamp) is not int or timestamp <= 0:
@@ -130,6 +138,14 @@ def validate_snapshot(path: Path) -> tuple[int, datetime, int]:
             for key in ("fp", "sp", "st"):
                 if not isinstance(bill.get(key), str):
                     raise ValueError()
+        if data["format"] >= 10:
+            sync_ids = set()
+            for bill in bills:
+                sid = bill.get("sid", "")
+                if not isinstance(sid, str) or len(sid) > 128 or (sid and sid in sync_ids):
+                    raise ValueError()
+                if sid:
+                    sync_ids.add(sid)
         for key in ("history", "imports"):
             if data.get(key) is not None and (not isinstance(data[key], list) or any(not isinstance(row, dict) for row in data[key])):
                 raise ValueError()
@@ -147,7 +163,7 @@ def validate_snapshot(path: Path) -> tuple[int, datetime, int]:
                 event_ids.add(event["eventId"])
         return len(bills), snapshot_at, data["format"]
     except (ValueError, TypeError, UnicodeError, RecursionError, OverflowError, OSError) as exc:
-        raise HTTPException(status_code=422, detail="备份不是有效的 JSON8/JSON9 快照；请检查文件或升级家庭服务") from exc
+        raise HTTPException(status_code=422, detail="备份不是有效的 JSON8/JSON9/JSON10 快照；请检查文件或升级家庭服务") from exc
 
 
 def metadata(row: dict) -> dict:
@@ -185,6 +201,7 @@ async def upload_backup(
     backup_id: UUID, request: Request,
     x_content_sha256: str = Header(default=""), x_app_version: str = Header(default=""),
     x_space_epoch: str = Header(default=""), device: dict = Depends(current_device),
+    authorization: str = Header(default=""),
 ) -> dict:
     settings = get_settings()
     if x_space_epoch != device["epoch"]:
@@ -192,7 +209,7 @@ async def upload_backup(
     if not re.fullmatch(r"[0-9a-f]{64}", x_content_sha256) or not 1 <= len(x_app_version) <= 80:
         raise HTTPException(status_code=422, detail="备份摘要或应用版本无效")
     if request.headers.get("content-encoding", "identity").lower() != "identity":
-        raise HTTPException(status_code=415, detail="仅接受未压缩 JSON8/JSON9 快照")
+        raise HTTPException(status_code=415, detail="仅接受未压缩 JSON8/JSON9/JSON10 快照")
     if request.headers.get("content-type", "").split(";")[0].strip().lower() != "application/json":
         raise HTTPException(status_code=415, detail="备份必须使用 application/json")
     try:
@@ -227,14 +244,20 @@ async def upload_backup(
             # Coordinate publication across worker processes without locking the space during upload.
             conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (storage_key,))
             active = conn.execute("""SELECT s.epoch FROM devices d JOIN sync_spaces s ON s.id=d.space_id
-                                     WHERE d.space_id=%s AND d.id=%s AND d.revoked_at IS NULL FOR SHARE OF d,s""",
-                                  (device["space_id"], device["device_id"])).fetchone()
+                                     WHERE d.space_id=%s AND d.id=%s AND d.revoked_at IS NULL
+                                       AND d.token_hash=%s FOR SHARE OF d,s""",
+                                  (device["space_id"], device["device_id"], hashlib.sha256(authorization.removeprefix("Bearer ").strip().encode()).hexdigest())).fetchone()
             if not active:
                 raise HTTPException(status_code=401, detail="设备令牌已撤销")
             if str(active["epoch"]) != x_space_epoch:
                 raise HTTPException(status_code=409, detail="家庭空间已重置，请重新对账")
             previous = conn.execute(SELECT + " WHERE b.space_id=%s AND b.id=%s", (device["space_id"], backup_id)).fetchone()
             if previous:
+                if str(previous["device_id"]) != device["device_id"]:
+                    raise HTTPException(status_code=404, detail="备份不存在")
+                if previous["deleted_at"] is not None:
+                    # Deleted snapshots never come back: not via retry, repair or same-id re-upload.
+                    raise HTTPException(status_code=410, detail="此备份已删除，不能重新上传")
                 if previous["sha256"].strip() != x_content_sha256:
                     raise HTTPException(status_code=409, detail="备份标识已用于不同内容")
                 if not final.is_file() or final.stat().st_size != received or file_digest(final) != x_content_sha256:
@@ -266,8 +289,9 @@ async def upload_backup(
 def list_backups(offset: int = Query(default=0, ge=0), limit: int = Query(default=50, ge=1, le=100),
                  device: dict = Depends(current_device)) -> dict:
     with connection() as conn:
-        rows = conn.execute(SELECT + " WHERE b.space_id=%s ORDER BY b.snapshot_at DESC,b.id DESC LIMIT %s OFFSET %s",
-                            (device["space_id"], limit + 1, offset)).fetchall()
+        rows = conn.execute(SELECT + " WHERE b.space_id=%s AND b.device_id=%s AND b.deleted_at IS NULL"
+                            " ORDER BY b.uploaded_at DESC,b.id DESC LIMIT %s OFFSET %s",
+                            (device["space_id"], device["device_id"], limit + 1, offset)).fetchall()
     return {"protocolVersion": 1, "spaceId": device["space_id"], "epoch": device["epoch"],
             "items": [metadata(row) for row in rows[:limit]], "hasMore": len(rows) > limit,
             "nextOffset": offset + min(len(rows), limit)}
@@ -276,7 +300,8 @@ def list_backups(offset: int = Query(default=0, ge=0), limit: int = Query(defaul
 @router.get("/v1/backups/{backup_id}")
 def download_backup(backup_id: UUID, device: dict = Depends(current_device)):
     with connection() as conn:
-        row = conn.execute(SELECT + " WHERE b.space_id=%s AND b.id=%s", (device["space_id"], backup_id)).fetchone()
+        row = conn.execute(SELECT + " WHERE b.space_id=%s AND b.id=%s AND b.device_id=%s AND b.deleted_at IS NULL",
+                           (device["space_id"], backup_id, device["device_id"])).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="备份不存在")
     path = _backup_file(row["storage_key"])
@@ -289,20 +314,165 @@ def download_backup(backup_id: UUID, device: dict = Depends(current_device)):
                         headers={"X-Content-SHA256": row["sha256"].strip(), "Cache-Control": "no-store"})
 
 
+def latest_backup_metadata(space_id: str, device_id: str) -> dict | None:
+    """Newest live snapshot metadata for one source (used by backup-context)."""
+    with connection() as conn:
+        row = conn.execute(SELECT + " WHERE b.space_id=%s AND b.device_id=%s AND b.deleted_at IS NULL"
+                           " ORDER BY b.uploaded_at DESC,b.id DESC LIMIT 1",
+                           (space_id, device_id)).fetchone()
+    return metadata(row) if row else None
+
+
+@router.get("/v1/backups/{backup_id}/status")
+def backup_status(backup_id: UUID, device: dict = Depends(current_device)):
+    """Read-only restore-eligibility check used before a final restore confirm."""
+    with connection() as conn:
+        row = conn.execute(SELECT + " WHERE b.space_id=%s AND b.id=%s AND b.device_id=%s AND b.deleted_at IS NULL",
+                           (device["space_id"], backup_id, device["device_id"])).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="备份不存在或已删除")
+    return metadata(row)
+
+
+class DeleteRequest(BaseModel):
+    operationId: UUID
+    backupIds: list[UUID] = Field(min_length=1, max_length=MAX_DELETE_BATCH)
+
+
+def _recycle_result(rows: list[dict]) -> dict:
+    """Summarize tombstoned rows against the current state of their files."""
+    recycled_bytes = pending_bytes = 0
+    for row in rows:
+        path = _backup_file(row["storage_key"])
+        gone = row["recycled_at"] is not None or not path.is_file()
+        if gone:
+            recycled_bytes += row["size_bytes"]
+        else:
+            pending_bytes += row["size_bytes"]
+    return {"deletedCount": len(rows), "deletedBytes": recycled_bytes + pending_bytes,
+            "recycledBytes": recycled_bytes, "pendingBytes": pending_bytes,
+            "recyclePending": pending_bytes > 0}
+
+
+def _recycle_files(rows: list[dict]) -> None:
+    """Best-effort file removal for already-committed tombstones (idempotent).
+
+    A disk error never fails the delete: the tombstone is already committed and
+    the row stays pending until the startup sweep or a later retry clears it.
+    """
+    with connection() as conn:
+        for row in rows:
+            try:
+                path = _backup_file(row["storage_key"])
+                if not path.is_file():
+                    continue
+                path.unlink()
+                _sync_directory(path.parent)
+            except OSError:
+                continue
+            conn.execute("""UPDATE ledger_backups SET recycled_at=now()
+                            WHERE space_id=%s AND id=%s AND deleted_at IS NOT NULL AND recycled_at IS NULL""",
+                         (row["space_id"], row["id"]))
+            conn.commit()
+
+
+def recycle_pending_backups() -> dict:
+    """Recovery sweep for tombstones whose file removal previously failed."""
+    with connection() as conn:
+        rows = conn.execute("""SELECT b.*, d.name AS device_name FROM ledger_backups b
+                               JOIN devices d ON d.space_id=b.space_id AND d.id=b.device_id
+                               WHERE b.deleted_at IS NOT NULL AND b.recycled_at IS NULL
+                               ORDER BY b.deleted_at""").fetchall()
+    pending = [row for row in rows if _backup_file(row["storage_key"]).is_file()]
+    _recycle_files(pending)
+    with connection() as conn:
+        remaining = conn.execute("SELECT count(*) AS n, coalesce(sum(size_bytes),0) AS bytes"
+                                 " FROM ledger_backups WHERE deleted_at IS NOT NULL AND recycled_at IS NULL").fetchone()
+    return {"swept": len(pending), "pendingCount": remaining["n"], "pendingBytes": remaining["bytes"]}
+
+
+@router.post("/v1/backups/delete")
+def delete_backups(body: DeleteRequest, device: dict = Depends(current_device),
+                   authorization: str = Header(default="")) -> dict:
+    ids = sorted({str(item) for item in body.backupIds})
+    if not 1 <= len(ids) <= MAX_DELETE_BATCH:
+        raise HTTPException(status_code=422, detail=f"单次最多删除{MAX_DELETE_BATCH}份备份")
+    request_hash = hashlib.sha256(json.dumps(
+        {"operationId": str(body.operationId), "sourceId": device["device_id"], "backupIds": ids},
+        sort_keys=True).encode()).hexdigest()
+    with connection() as conn:
+        # Same per-storage-key locks as upload, taken in sorted order, so a
+        # concurrent upload/repair of the same ids cannot interleave with us.
+        for backup_id in ids:
+            conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                         (f"{device['space_id']}/{backup_id}.json",))
+        active = conn.execute("""SELECT s.epoch FROM devices d JOIN sync_spaces s ON s.id=d.space_id
+                                 WHERE d.space_id=%s AND d.id=%s AND d.revoked_at IS NULL
+                                   AND d.token_hash=%s FOR SHARE OF d,s""",
+                              (device["space_id"], device["device_id"],
+                               hashlib.sha256(authorization.removeprefix("Bearer ").strip().encode()).hexdigest())).fetchone()
+        if not active:
+            raise HTTPException(status_code=401, detail="设备令牌已撤销")
+        previous = conn.execute("""SELECT * FROM backup_delete_operations
+                                   WHERE space_id=%s AND source_id=%s AND operation_id=%s""",
+                                 (device["space_id"], device["device_id"], body.operationId)).fetchone()
+        if previous:
+            if previous["request_hash"] != request_hash:
+                raise HTTPException(status_code=409, detail="该操作已用于不同的删除请求")
+            rows = conn.execute(SELECT + " WHERE b.space_id=%s AND b.id = ANY(%s)",
+                                (device["space_id"], [UUID(item) for item in ids])).fetchall()
+            result = _recycle_result(rows)
+            result["operationId"] = str(body.operationId)
+            return result
+        rows = conn.execute(SELECT + """ WHERE b.space_id=%s AND b.id = ANY(%s)
+                                          ORDER BY b.uploaded_at DESC, b.id DESC FOR UPDATE""",
+                             (device["space_id"], [UUID(item) for item in ids])).fetchall()
+        by_id = {str(row["id"]): row for row in rows}
+        for backup_id in ids:
+            row = by_id.get(backup_id)
+            if row is None or str(row["device_id"]) != device["device_id"]:
+                # Foreign or missing ids are indistinguishable; the whole batch is rejected.
+                raise HTTPException(status_code=404, detail="备份不存在或已删除")
+            if row["deleted_at"] is not None:
+                raise HTTPException(status_code=409, detail="所选备份已被删除，请刷新后重试")
+        total_bytes = sum(row["size_bytes"] for row in rows)
+        conn.execute("""UPDATE ledger_backups SET deleted_at=now()
+                        WHERE space_id=%s AND id = ANY(%s) AND deleted_at IS NULL""",
+                     (device["space_id"], [UUID(item) for item in ids]))
+        conn.execute("""INSERT INTO backup_delete_operations
+                        (space_id,source_id,operation_id,request_hash,deleted_backup_ids,deleted_bytes)
+                        VALUES (%s,%s,%s,%s,%s,%s)""",
+                     (device["space_id"], device["device_id"], body.operationId, request_hash,
+                      [UUID(item) for item in ids], total_bytes))
+        conn.commit()
+    # File removal happens only after the tombstone transaction committed.
+    _recycle_files(rows)
+    result = _recycle_result(rows)
+    result["operationId"] = str(body.operationId)
+    return result
+
+
 def audit_files() -> dict:
     """Read-only maintenance inventory. Never automatically delete orphan/partial files."""
     root = get_settings().backup_dir
     with connection() as conn:
-        rows = conn.execute("SELECT storage_key,size_bytes,sha256 FROM ledger_backups").fetchall()
-    indexed = {row["storage_key"] for row in rows}
+        rows = conn.execute("SELECT storage_key,size_bytes,sha256,deleted_at,recycled_at FROM ledger_backups").fetchall()
+    live = [row for row in rows if row["deleted_at"] is None]
+    tombstoned = [row for row in rows if row["deleted_at"] is not None]
+    indexed = {row["storage_key"] for row in live}
+    tombstone_keys = {row["storage_key"] for row in tombstoned}
     complete = {str(path.relative_to(root)) for path in root.glob("*/*.json")}
-    missing, corrupt = [], []
-    for row in rows:
+    missing, corrupt, pending = [], [], []
+    for row in live:
         path = _backup_file(row["storage_key"])
         if not path.is_file():
             missing.append(row["storage_key"])
         elif path.stat().st_size != row["size_bytes"] or file_digest(path) != row["sha256"].strip():
             corrupt.append(row["storage_key"])
-    return {"indexedCount": len(rows), "orphanFiles": sorted(complete - indexed),
+    for row in tombstoned:
+        if row["recycled_at"] is None and _backup_file(row["storage_key"]).is_file():
+            pending.append(row["storage_key"])
+    return {"indexedCount": len(live), "orphanFiles": sorted(complete - indexed - tombstone_keys),
             "partialFiles": sorted(str(path.relative_to(root)) for path in root.glob("*/*.part")),
-            "missingFiles": sorted(missing), "corruptFiles": sorted(corrupt), "deletedCount": 0}
+            "missingFiles": sorted(missing), "corruptFiles": sorted(corrupt),
+            "deletedCount": len(tombstoned), "pendingRecycleFiles": sorted(pending)}

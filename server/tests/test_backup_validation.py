@@ -41,7 +41,7 @@ def validate(tmp_path, value):
     return validate_snapshot(path)
 
 
-@pytest.mark.parametrize("version", [8, 9])
+@pytest.mark.parametrize("version", [8, 9, 10])
 def test_supported_versions_keep_actual_schema_and_exclude_log_snapshots_from_bill_count(tmp_path, version):
     value = snapshot(format=version)
     if version == 8:
@@ -87,7 +87,7 @@ def test_incomplete_or_conflicting_audit_groups_are_rejected(tmp_path):
     event = deletion()
     cases = [snapshot(deletions=[event, copy.deepcopy(event)]),
              snapshot(format=8, deletions=[event]), snapshot(deletions=None),
-             snapshot(format=10),
+             snapshot(format=11),
              snapshot(deletions=[deletion([bill(type="TRANSFER", transferFeeCents=50)])]),
              snapshot(deletions=[deletion([bill(), bill(2, feeParentKey="fixture-key")])]),
              snapshot(deletions=[deletion([bill(type="TRANSFER", transferFeeCents=50, accountId="from"),
@@ -104,3 +104,11 @@ def test_whitespace_asset_key_cannot_link_a_fee_even_with_valid_fallback_group(t
     event["groupId"] = "bill:1"
     with pytest.raises(HTTPException):
         validate(tmp_path, snapshot(deletions=[event]))
+
+
+def test_json10_identity_and_duplicate_validation(tmp_path):
+    first = dict(p=100, ty="EXPENSE", t=1, fp="a", sp="test", st="test", sid="source-id")
+    assert validate(tmp_path, snapshot(format=10,bills=[first]))[2] == 10
+    for value in ([first,first], [dict(first,sid=123)], [dict(first,sid="x" * 129)]):
+        with pytest.raises(HTTPException):
+            validate(tmp_path,snapshot(format=10,bills=value))

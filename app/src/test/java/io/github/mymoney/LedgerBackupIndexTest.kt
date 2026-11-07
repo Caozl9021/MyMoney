@@ -13,8 +13,9 @@ class LedgerBackupIndexTest {
     @Test fun readsBothExistingAndNewFamilySnapshotIndexes() {
         assertEquals(8, LedgerBackupApi.entry(row(8)).backupSchema)
         assertEquals(9, LedgerBackupApi.entry(row(9)).backupSchema)
+        assertEquals(10, LedgerBackupApi.entry(row(10)).backupSchema)
     }
     @Test fun refusesFutureOrUnsupportedFamilySnapshotFormats() {
-        for (schema in listOf(7, 10)) assertTrue(runCatching { LedgerBackupApi.entry(row(schema)) }.isFailure)
+        for (schema in listOf(7, 11)) assertTrue(runCatching { LedgerBackupApi.entry(row(schema)) }.isFailure)
     }
 }

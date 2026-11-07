@@ -56,3 +56,40 @@ class AckRequest(BaseModel):
 
 class DeviceRevokeResponse(BaseModel):
     revoked: bool
+
+
+# ---- W2: 设备账本逐条副本同步 ----
+
+ItemKind = Literal["bill", "account", "entry"]
+
+
+class LedgerPushItem(BaseModel):
+    operationId: str = Field(min_length=16, max_length=96)
+    epoch: str
+    ledgerId: str = Field(min_length=1, max_length=64)
+    itemId: str = Field(min_length=1, max_length=128)
+    itemKind: ItemKind
+    baseRevision: int = Field(ge=0)
+    operation: Literal["put", "delete", "restore"]
+    schemaVersion: int = 1
+    contentUpdatedAt: int | None = None
+    payload: dict[str, Any] | None = None
+
+
+class LedgerPushRequest(BaseModel):
+    protocolVersion: int = 1
+    spaceId: str
+    ledgerId: str = Field(min_length=1, max_length=64)
+    epoch: str
+    items: list[LedgerPushItem] = Field(min_length=1, max_length=50)
+
+
+class LedgerPullResponse(BaseModel):
+    protocolVersion: int = 1
+    spaceId: str
+    ledgerId: str
+    epoch: str
+    changes: list[dict[str, Any]]
+    nextCursor: int
+    hasMore: bool
+    serverRevision: int

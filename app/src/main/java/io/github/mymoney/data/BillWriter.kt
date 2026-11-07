@@ -13,11 +13,50 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.util.UUID
 
+/** W2：给账单补齐同步身份（syncId 生成、updatedAt 刷新）。已删除用墓碑，不硬删。 */
+internal fun BillEntity.withSyncIdentity(now: Long): BillEntity = copy(
+    syncId = syncId.takeIf { it.isNotBlank() } ?: UUID.randomUUID().toString(),
+    updatedAt = now,
+)
+
 /** 草稿 → 账单的唯一落库入口（确认页 / 悬浮窗 / 待确认列表共用） */
 object BillWriter {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val writeLock = Mutex()
+
+    /** 记录本次业务写入影响的账单 id，事务提交后据此入 outbox（跨库不能共用事务）。
+     *  注意：不能用 ThreadLocal —— 保存跑在 Dispatchers.IO 多线程池，touch() 与
+     *  enqueueTouched() 之间有 suspend 点，恢复线程可能不同，ThreadLocal 会丢收集。
+     *  改用普通实例列表：writeLock 已串行化保存，无并发；enqueueTouched 后清空。 */
+    private val touched = mutableListOf<Long>()
+    /** 被硬删除的账单（墓碑）：提交后按 syncId 入 delete 队列。 */
+    private val deletedBills = mutableListOf<BillEntity>()
+
+    private fun touch(bill: BillEntity) {
+        if (bill.id > 0) touched.add(bill.id)
+    }
+
+    private fun touchDeleted(bill: BillEntity) {
+        if (bill.syncId.isNotBlank()) deletedBills.add(bill)
+    }
+
+    private suspend fun enqueueTouched(app: Context) {
+        val ids = touched.toList()
+        val deleted = deletedBills.toList()
+        touched.clear()
+        deletedBills.clear()
+        val db = AppDb.get(app)
+        for (id in ids) {
+            val bill = db.bills().byId(id) ?: continue
+            runCatching { io.github.mymoney.data.ledgersync.LedgerSyncRepository.enqueueBill(app, bill, deleted = false) }
+                .onFailure { android.util.Log.e("LedgerEnqueue", "enqueue bill id=$id failed", it) }
+        }
+        for (bill in deleted) {
+            runCatching { io.github.mymoney.data.ledgersync.LedgerSyncRepository.enqueueBill(app, bill, deleted = true) }
+                .onFailure { android.util.Log.e("LedgerEnqueue", "enqueue deleted syncId=${bill.syncId} failed", it) }
+        }
+    }
 
     data class SaveResult(val inserted: Boolean, val bill: BillEntity?)
 
@@ -48,6 +87,7 @@ object BillWriter {
                         saveInTransaction(db, draft)
                     }
                 }
+                enqueueTouched(app)
                 if (result.inserted) io.github.mymoney.systems.SystemIntegration.refresh(app)
                 if (draft.historyId == null) PendingStore.remove(original?.fingerprint ?: draft.fingerprint)
                 if (result.inserted && original != null) runCatching { LocalRuleStore.recordConfirmation(original, draft) }
@@ -90,8 +130,10 @@ object BillWriter {
                 category = draft.category, subCategory = draft.subCategory,
                 account = draft.account, note = draft.note, productName = draft.productName, productSource = draft.productSource,
     noteOrigin = draft.noteOrigin, noteTemplateSnapshot = draft.noteTemplateSnapshot, recognitionId = history?.id).let {
-                    val linked = AssetStore.syncBill(db, null, it)!!
-                    linked.copy(id = dao.insert(linked))
+                    val linked = AssetStore.syncBill(db, null, it)!!.withSyncIdentity(System.currentTimeMillis())
+                    val row = linked.copy(id = dao.insert(linked))
+                    touch(row)
+                    row
                 }
             history?.let {
                 db.recognitions().update(RecognitionEntity.fromDraft(draft.copy(historyId = it.id), it.identityKey, it.recognizedAt)
@@ -119,6 +161,7 @@ object BillWriter {
                     val db = AppDb.get(app)
                     db.withTransaction { saveEditorInTransaction(db, draft, original) }
                 }
+                enqueueTouched(app)
                 if (original != null) runCatching {
                     LocalRuleStore.recordConfirmation(toDraft(original), draft, allowFrequency = false)
                 }
@@ -146,6 +189,7 @@ object BillWriter {
                     val db = AppDb.get(app)
                     db.withTransaction { deleteConfirmedInTransaction(db, expected, origin) }
                 }
+                enqueueTouched(app)
                 Unit
             }
             if (result.isSuccess) io.github.mymoney.systems.SystemIntegration.refresh(app)
@@ -193,12 +237,14 @@ object BillWriter {
                         require(row.feeParentKey == null) { "手续费请从原转账操作" }
                         require(row.type != "TRANSFER") { "请先补全转出和转入账户" }
                         if (!row.assetLinked) {
-                            val linked = AssetStore.syncBill(db, row, row, forceLink = true)!!
+                            val linked = AssetStore.syncBill(db, row, row, forceLink = true)!!.withSyncIdentity(System.currentTimeMillis())
                             check(linked.assetLinked) { "请先设置该账户的当前余额" }
                             check(db.bills().update(linked) == 1) { "账单已不存在" }
+                            touch(linked)
                         }
                     }
                 }
+                enqueueTouched(app)
             }
             if (result.isSuccess) io.github.mymoney.systems.SystemIntegration.refresh(app)
             withContext(Dispatchers.Main) { onDone(result) }
@@ -220,6 +266,7 @@ object BillWriter {
                     val db = AppDb.get(app)
                     db.withTransaction { saveTransferInTransaction(db, fromId, toId, cents, feeCents, note, timeMillis, original, operationId) }
                 }
+                enqueueTouched(app)
                 Unit
             }
             if (result.isSuccess) io.github.mymoney.systems.SystemIntegration.refresh(app)
@@ -245,16 +292,22 @@ object BillWriter {
                 }
                 return saved
             }
-            val linked = AssetStore.syncBill(db, null, fresh)!!
-            return linked.copy(id = dao.insert(linked))
+            val linked = AssetStore.syncBill(db, null, fresh)!!.withSyncIdentity(System.currentTimeMillis())
+            val row = linked.copy(id = dao.insert(linked))
+            touch(row)
+            return row
         }
         val current = dao.byId(original.id) ?: error("这笔账单已被删除，请重新打开明细")
         require(current.feeParentKey == null) { "手续费请从原转账一同修改" }
         require(current.type != "TRANSFER" || current.transferAccountId == null) { "请使用转账表单修改转出和转入账户" }
         // Existing one-sided transfers remain unlinked until deliberately completed.
-        val edited = applyBillEdit(current, draft)
+        val edited = applyBillEdit(current, draft).copy(
+            syncId = current.syncId.takeIf { it.isNotBlank() } ?: UUID.randomUUID().toString(),
+            updatedAt = System.currentTimeMillis(),
+        )
         val linked = AssetStore.syncBill(db, current, edited)!!
         check(dao.update(linked) == 1) { "这笔账单已被删除，请重新打开明细" }
+        touch(linked)
         return linked
     }
 
@@ -316,10 +369,11 @@ object BillWriter {
         )
         val finalRow = if (current != null && current.sourcePkg.startsWith("io.github.mymoney.manual.") && current.recognitionId == null && !current.fingerprint.startsWith("asset-transfer-") && !current.fingerprint.startsWith("qianji:"))
             row.copy(fingerprint = toDraft(row).fingerprint) else row
-        val linked = AssetStore.syncBill(db, current, finalRow, forceLink = true)!!
+        val linked = AssetStore.syncBill(db, current, finalRow, forceLink = true)!!.withSyncIdentity(now)
         val principal = if (current == null) linked.copy(id = dao.insert(linked)) else {
             check(dao.update(linked) == 1) { "原转账已被删除" }; linked
         }
+        touch(principal)
         val previousFees = dao.allOnce().filter { it.feeParentKey == key }
         require(previousFees.size <= 1) { "手续费关联异常，请先恢复完整备份" }
         val previousFee = previousFees.singleOrNull()
@@ -335,8 +389,11 @@ object BillWriter {
                 account = from.name, accountId = fromId, assetLinked = true,
                 assetKey = "$key-fee", feeParentKey = key, note = note.takeIf(String::isNotBlank),
             )
-            val linkedFee = AssetStore.syncBill(db, previousFee, fee, forceLink = true)!!
-            if (previousFee == null) dao.insert(linkedFee) else check(dao.update(linkedFee) == 1)
+            val linkedFee = AssetStore.syncBill(db, previousFee, fee, forceLink = true)!!.withSyncIdentity(now)
+            val feeRow = if (previousFee == null) linkedFee.copy(id = dao.insert(linkedFee)) else {
+                check(dao.update(linkedFee) == 1); linkedFee
+            }
+            touch(feeRow)
         }
         return principal
     }
@@ -348,7 +405,7 @@ object BillWriter {
         require(principal.feeParentKey == null) { "手续费请从原转账一同删除" }
         val rows = listOf(principal) + if (principal.assetKey.isNotBlank())
             dao.allOnce().filter { it.feeParentKey == principal.assetKey } else emptyList()
-        rows.forEach { row -> AssetStore.syncBill(db, row, null); dao.delete(row.id) }
+        rows.forEach { row -> AssetStore.syncBill(db, row, null); touchDeleted(row); dao.delete(row.id) }
         return rows
     }
 
@@ -357,8 +414,9 @@ object BillWriter {
         // Check all slots before generating postings, then rely on the outer transaction for races.
         rows.forEach { check(dao.byId(it.id) == null) { "记录编号已占用，未覆盖现有账单" } }
         rows.forEach { row ->
-            val linked = AssetStore.syncBill(db, null, row)!!
+            val linked = AssetStore.syncBill(db, null, row)!!.withSyncIdentity(System.currentTimeMillis())
             check(dao.restoreDeleted(linked) != -1L) { "记录编号已占用，未覆盖现有账单" }
+            touch(linked)
         }
     }
 

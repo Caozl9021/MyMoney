@@ -81,7 +81,7 @@ def test_invalid_uploads_never_create_ready_index(client):
     assert c.put(f"/v1/backups/{backup_id}", content=raw, headers=bad).status_code == 413
     bad = dict(h, **{"X-Space-Epoch": str(uuid4())})
     assert c.put(f"/v1/backups/{backup_id}", content=raw, headers=bad).status_code == 409
-    for data in (b'{}', raw.replace(b'"format": 8', b'"format": 10'), raw_snapshot([{"p": -1}]), b'{'):
+    for data in (b'{}', raw.replace(b'"format": 8', b'"format": 11'), raw_snapshot([{"p": -1}]), b'{'):
         assert c.put(f"/v1/backups/{backup_id}", content=data, headers=headers(pair, data)).status_code == 422
     assert c.get("/v1/backups", headers=h).json()["items"] == []
     assert not list(directory.rglob("*.part")) and not list(directory.rglob("*.json"))
@@ -211,3 +211,37 @@ def test_json9_audit_logs_upload_with_actual_schema_without_counting_deleted_bil
     assert c.put(f"/v1/backups/{uuid4()}", content=malformed, headers=headers(pair, malformed)).status_code == 422
     assert len(c.get("/v1/backups", headers=h).json()["items"]) == 1
     assert not list(directory.rglob("*.part"))
+
+
+def test_same_space_device_cannot_list_download_or_repair_other_backup(client):
+    from app.pairing import PAIRING
+    c, pair, directory = client
+    other = c.post("/v1/pair",json={"code":PAIRING.issue(),"deviceName":"另一设备"}).json()
+    assert pair["spaceId"]==other["spaceId"]
+    raw=raw_snapshot();backup_id=str(uuid4())
+    assert c.put(f"/v1/backups/{backup_id}",content=raw,headers=headers(pair,raw)).status_code==200
+    path=directory/pair['spaceId']/f'{backup_id}.json'
+    path.write_bytes(b'corrupt')
+    assert c.get('/v1/backups',headers=headers(other,raw)).json()['items']==[]
+    assert c.get(f'/v1/backups/{backup_id}',headers=headers(other,raw)).status_code==404
+    assert c.put(f'/v1/backups/{backup_id}',content=raw,headers=headers(other,raw)).status_code==404
+    assert path.read_bytes()==b'corrupt'
+    assert c.put(f'/v1/backups/{backup_id}',content=raw,headers=headers(pair,raw)).status_code==200
+    assert path.read_bytes()==raw
+
+
+def test_latest_received_backup_is_first_even_if_device_clock_moves_back(client):
+    c, pair, _ = client
+    first_id, second_id = str(uuid4()), str(uuid4())
+    first = raw_snapshot().replace(b'1793520000000', b'1893520000000')
+    second = raw_snapshot().replace(b'1793520000000', b'1693520000000')
+    first_reply = c.put(f'/v1/backups/{first_id}',content=first,headers=headers(pair,first))
+    assert first_reply.status_code == 200
+    second_reply = c.put(f'/v1/backups/{second_id}',content=second,headers=headers(pair,second))
+    assert second_reply.status_code == 200
+    assert second_reply.json()['snapshotAt'] < first_reply.json()['snapshotAt']
+    assert second_reply.json()['uploadedAt'] > first_reply.json()['uploadedAt']
+    page = c.get('/v1/backups?limit=1',headers=headers(pair,second)).json()
+    assert page['items'][0]['id'] == second_id and page['hasMore']
+    next_page = c.get(f"/v1/backups?limit=1&offset={page['nextOffset']}",headers=headers(pair,second)).json()
+    assert next_page['items'][0]['id'] == first_id and not next_page['hasMore']

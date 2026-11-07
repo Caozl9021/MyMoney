@@ -108,6 +108,7 @@ object BackupStore {
                     accountId = r.accountId, transferAccountId = r.transferAccountId,
                     assetLinked = r.assetLinked, assetKey = r.assetKey,
                     transferFeeCents = r.transferFeeCents, feeParentKey = r.feeParentKey, transferAccount = r.transferAccount,
+                    syncId = r.syncId,
                 )
             },
             history = historyRows,
@@ -147,6 +148,7 @@ object BackupStore {
 
             applyPendingConfiguration(context)
             AssetStore.refresh()
+            runCatching { io.github.mymoney.data.ledgersync.LedgerSyncRepository.syncAllLocal(context) }
             io.github.mymoney.systems.SystemIntegration.refresh(context)
             Backup.RestoreStats(
                 bills = billCount,
@@ -183,6 +185,7 @@ object BackupStore {
             val (billCount, historyCount) = counts
             if (restoreConfiguration) applyPendingConfiguration(context)
             AssetStore.refresh()
+            runCatching { io.github.mymoney.data.ledgersync.LedgerSyncRepository.syncAllLocal(context) }
             io.github.mymoney.systems.SystemIntegration.refresh(context)
             LedgerRestoreResult(
                 Backup.RestoreStats(
@@ -304,7 +307,8 @@ object BackupStore {
                     val stableLocal = b.assetKey.takeIf { it.isNotBlank() }?.let { key ->
                         if (mode == Mode.MERGE) existingBills.firstOrNull { it.assetKey == key } else null
                     }
-                    val local = stableLocal ?: if (recognitionId != null) {
+                    val local = stableLocal ?: (b.syncId.takeIf { it.isNotBlank() }?.let { db.bills().bySyncId(it) })
+                        ?: if (recognitionId != null) {
                         db.bills().byRecognitionId(recognitionId)
                             ?: db.bills().byFingerprint(b.fingerprint)?.takeIf { it.recognitionId == null }
                     } else db.bills().byFingerprint(b.fingerprint)
@@ -331,7 +335,10 @@ object BackupStore {
                             assetKey = b.assetKey.takeIf { snapshot.assets != null && it.isNotBlank() } ?: java.util.UUID.randomUUID().toString(),
                             transferFeeCents = if (snapshot.assets != null) b.transferFeeCents else 0,
                             feeParentKey = if (snapshot.assets != null) b.feeParentKey else null,
-                            transferAccount = b.transferAccount))
+                            transferAccount = b.transferAccount,
+                            // 有稳定身份沿用（恢复/跨机迁移不新增重复记录），否则生成新身份。
+                            syncId = b.syncId.takeIf { it.isNotBlank() } ?: java.util.UUID.randomUUID().toString(),
+                            updatedAt = System.currentTimeMillis()))
                     }
                     b.id?.let { idMap[it] = billId }
                     recognitionId?.let { recognitionBills[it] = billId }

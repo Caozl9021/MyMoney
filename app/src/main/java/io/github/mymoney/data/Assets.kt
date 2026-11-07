@@ -30,6 +30,8 @@ data class AssetEntry(
     val createdAt: Long,
     val billKey: String? = null,
     val reversalOf: String? = null,
+    @androidx.room.ColumnInfo(defaultValue = "0") val updatedAt: Long = 0,
+    val deletedAt: Long? = null,
 )
 
 @Entity(tableName = "asset_meta")
@@ -54,6 +56,11 @@ interface AssetDao {
     @Query("DELETE FROM asset_accounts") suspend fun clearAccounts()
     @Query("SELECT value FROM asset_meta WHERE `key`=:key") suspend fun meta(key: String): String?
     @Upsert suspend fun putMeta(meta: AssetMeta)
+
+    // ---- W2 账本副本同步 ----
+    @Query("SELECT * FROM asset_entries WHERE id=:id") suspend fun entryById(id: String): AssetEntry?
+    @Query("UPDATE asset_entries SET deletedAt=:deletedAt, updatedAt=:updatedAt WHERE id=:id") suspend fun markEntryDeleted(id: String, deletedAt: Long?, updatedAt: Long)
+    @Update suspend fun updateEntry(entry: AssetEntry): Int
 }
 
 /** Pure accounting rules shared by the UI, writes, backup validation and tests. */

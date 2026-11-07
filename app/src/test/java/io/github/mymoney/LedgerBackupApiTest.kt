@@ -92,4 +92,74 @@ class LedgerBackupApiTest {
             serverError.get()?.let { throw it }
         } finally { server.close(); directory.deleteRecursively() }
     }
+
+    private class OneShot(val config: RuleSyncConfig, val worker: Thread, val failure: AtomicReference<Throwable?>)
+
+    /** Serves exactly one request, then hands back its line, headers and body for assertions. */
+    private fun singleRequest(
+        status: String, payload: Map<String, Any?>,
+        inspect: (request: String, headers: Map<String, String>, body: String) -> Unit,
+    ): OneShot {
+        val server = ServerSocket(0, 4, java.net.InetAddress.getByName("127.0.0.1"))
+        val failure = AtomicReference<Throwable?>()
+        val worker = thread(isDaemon = true) {
+            try {
+                server.accept().use { socket ->
+                    val input = socket.getInputStream().buffered()
+                    fun line(): String {
+                        val bytes = java.io.ByteArrayOutputStream()
+                        while (true) { val b = input.read(); if (b < 0 || b == 10) break; if (b != 13) bytes.write(b) }
+                        return bytes.toString("UTF-8")
+                    }
+                    val request = line()
+                    val headers = mutableMapOf<String, String>()
+                    while (true) { val h = line(); if (h.isEmpty()) break; headers[h.substringBefore(':').lowercase()] = h.substringAfter(':').trim() }
+                    val length = headers["content-length"]?.toInt() ?: 0
+                    val body = ByteArray(length).also { var n = 0; while (n < it.size) { val read = input.read(it, n, it.size - n); check(read > 0); n += read } }
+                    inspect(request, headers, String(body, Charsets.UTF_8))
+                    val bytes = MiniJson.encode(payload).toByteArray()
+                    socket.getOutputStream().use { out ->
+                        out.write(("HTTP/1.1 $status\r\nConnection: close\r\nContent-Length: ${bytes.size}\r\n\r\n").toByteArray())
+                        out.write(bytes)
+                    }
+                }
+            } catch (t: Throwable) { failure.set(t) } finally { server.close() }
+        }
+        return OneShot(RuleSyncConfig(serverUrl = "http://127.0.0.1:${server.localPort}", epoch = UUID.randomUUID().toString()), worker, failure)
+    }
+
+    private fun OneShot.finish() { worker.join(5000); failure.get()?.let { throw it } }
+
+    @Test fun deleteSendsOneBatchAndReportsRecycleState() {
+        val ids = List(2) { UUID.randomUUID().toString() }
+        val operationId = UUID.randomUUID().toString()
+        val server = singleRequest("200 OK", mapOf(
+            "operationId" to operationId, "deletedCount" to 2, "deletedBytes" to 4096,
+            "recycledBytes" to 2048, "pendingBytes" to 2048, "recyclePending" to true,
+        )) { line, headers, body ->
+            assertEquals("POST /v1/backups/delete", line.substringBefore(" HTTP/"))
+            assertEquals("Bearer test-secret", headers["authorization"])
+            val json = MiniJson.decode(body) as Map<*, *>
+            assertEquals(operationId, json["operationId"])
+            assertEquals(ids, json["backupIds"])
+        }
+        val result = LedgerBackupApi.delete(server.config, "test-secret", operationId, ids)
+        server.finish()
+        assertEquals(2, result.deletedCount)
+        assertEquals(4096L, result.deletedBytes)
+        assertEquals(2048L, result.recycledBytes)
+        assertEquals(2048L, result.pendingBytes)
+        assertTrue(result.recyclePending)
+    }
+
+    @Test fun deletedBackupStatusIsReportedAsDeleted() {
+        val id = UUID.randomUUID().toString()
+        val server = singleRequest("404 Not Found", mapOf("error" to "备份不存在或已删除")) { line, _, _ ->
+            assertEquals("GET /v1/backups/$id/status", line.substringBefore(" HTTP/"))
+        }
+        val error = runCatching { LedgerBackupApi.status(server.config, "test-secret", id) }.exceptionOrNull()
+        server.finish()
+        assertNotNull(error)
+        assertTrue(error!!.message!!.contains("已删除"))
+    }
 }

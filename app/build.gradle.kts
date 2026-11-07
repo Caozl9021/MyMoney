@@ -18,8 +18,8 @@ android {
         targetSdk = 35
         testInstrumentationRunner = providers.gradleProperty("mymoneyTestRunner")
             .getOrElse("io.github.mymoney.HistoryInstrumentation")
-        versionCode = 145
-        versionName = "1.9.0"
+        versionCode = 158
+        versionName = "1.10.0"
     }
 
     // 签名信息放在仓库之外（~/.mymoney-keys/keystore.properties），不进版本库。
@@ -45,6 +45,9 @@ android {
             if (keystoreProps != null) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // 正式包只带 arm64-v8a：内嵌 tsnet 的 libgojni.so 双 ABI 会把包撑到 100MB+，
+            // 而真机全是 64 位 ARM。debug 保留 x86_64，Waydroid 才能继续跑界面/回归。
+            ndk { abiFilters += "arm64-v8a" }
         }
     }
 
@@ -77,6 +80,14 @@ dependencies {
     implementation("androidx.savedstate:savedstate-ktx:1.2.1")
     implementation("androidx.core:core-ktx:1.13.1")
 
+    // Z4 扫码连接设备：CameraX 预览 + 本地 ZXing core 解码（不联网、不走外部二维码服务）。
+    // 只在用户点「扫码」并按需授予 CAMERA 后才启动相机；识别确认前不联网、不改配置。
+    implementation("androidx.camera:camera-core:1.4.1")
+    implementation("androidx.camera:camera-camera2:1.4.1")
+    implementation("androidx.camera:camera-lifecycle:1.4.1")
+    implementation("androidx.camera:camera-view:1.4.1")
+    implementation("com.google.zxing:core:3.5.3")
+
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
@@ -95,6 +106,11 @@ dependencies {
     implementation(project(":ocr-v6"))
     implementation(files(rootProject.file("ocr-research/v6/generated/runtime/onnxruntime-reduced-dual.aar")))
     implementation(files(rootProject.file("ocr-research/v6/generated/runtime/opencv-minimal-dual.aar")))
+
+    // U3: embedded-tsnet family transport (gomobile build of runs/.../transport/go).
+    // Dual ABI (arm64-v8a + x86_64), 16KiB-page aligned. Default transport is still
+    // DirectHttpTransport; this AAR is only used when a caller injects it.
+    implementation(files("libs/famisync.aar"))
 
     // ML Kit remains exclusively in the comparison test APK.
     androidTestImplementation("com.google.mlkit:text-recognition-chinese:16.0.1")

@@ -19,4 +19,4 @@ LSP 模块内置在主 APK 里（入口 `assets/xposed_init`），不需要单�
 
 源码入口：`lsp/LsposedManagerLauncher`、`lsp/ScopeAppRestarter`、`lsp/ScopeRestartPolicy`、`xposed/MyMoneyXposedModule`、`xposed/TargetHookProbe`；加载状态由 `capture/HookTargetMonitor`、`HookTargetRegistry` 维护。
 
-G阶段只限制普通PAGE路径为交易详情，没有关闭高级凭证增强；模块加载/凭证到达/草稿生成/实际可见卡是不同事实。当前143候选与未测矩阵见[范围](PROJECT_SCOPE.md)，不要按旧Root/无障碍互斥模式配置。
+G阶段只限制普通PAGE路径为交易详情，没有关闭高级凭证增强；模块加载/凭证到达/草稿生成/实际可见卡是不同事实。当前154候选与未测矩阵见[范围](PROJECT_SCOPE.md)，不要按旧Root/无障碍互斥模式配置。

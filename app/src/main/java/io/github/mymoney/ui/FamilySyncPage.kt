@@ -23,8 +23,15 @@ import io.github.mymoney.data.rulesync.RuleSyncCoordinator
 import io.github.mymoney.data.rulesync.RuleSyncRepository
 import io.github.mymoney.data.rulesync.RuleSyncKind
 import io.github.mymoney.data.rulesync.RuleSyncSettings
+import io.github.mymoney.data.rulesync.EmbeddedTsnetTransport
+import io.github.mymoney.data.rulesync.FamilyInvite
+import io.github.mymoney.data.rulesync.PendingInvite
+import io.github.mymoney.data.rulesync.PendingInviteText
+import io.github.mymoney.data.rulesync.TsnetIdentity
+import io.github.mymoney.data.rulesync.TsnetSession
 import io.github.mymoney.data.rulesync.SyncConflictEntity
 import io.github.mymoney.ui.design.AbSpacing
+import io.github.mymoney.ui.design.AbSwitch
 import io.github.mymoney.ui.design.InsetGroup
 import io.github.mymoney.ui.design.InputRow
 import io.github.mymoney.ui.design.ListRow
@@ -34,10 +41,11 @@ import java.text.DateFormat
 import java.util.Date
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** 家庭规则同步：配对、手动同步与冲突状态。 */
 @Composable
-fun FamilySyncPage(onBack: () -> Unit) {
+fun FamilySyncPage(onBack: () -> Unit, title: String = "家庭同步与备份") {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val state by RuleSyncCoordinator.state.collectAsStateWithLifecycle()
@@ -47,6 +55,8 @@ fun FamilySyncPage(onBack: () -> Unit) {
     var deviceName by remember { mutableStateOf(config.deviceName.ifBlank { android.os.Build.MODEL }) }
     var localMessage by remember { mutableStateOf(if (config.paired) "已连接，可立即同步" else "") }
     var showConflicts by remember { mutableStateOf(false) }
+    var inviteText by remember { mutableStateOf("") }
+    var nodeStatus by remember { mutableStateOf("") }
     val initialPreview = state.initialPreview
 
     if (showConflicts) {
@@ -59,11 +69,45 @@ fun FamilySyncPage(onBack: () -> Unit) {
         return
     }
 
-    LaunchedEffect(Unit) {
-        RuleSyncCoordinator.refreshStatus()
+    // 邀请串 → 配置。按钮与深链共用同一段，避免两条路径校验不一致。
+    fun applyInvite(text: String): Boolean {
+        val invite = runCatching { FamilyInvite.parse(text) }.getOrElse {
+            localMessage = it.message ?: "邀请无法识别"
+            return false
+        }
+        PendingInvite.put(invite)
+        serverUrl = invite.serverUrl
+        val next = RuleSyncSettings.load(context).copy(
+            serverUrl = invite.serverUrl,
+            ctrlUrl = invite.ctrlUrl,
+            useEmbedded = true,
+        )
+        RuleSyncSettings.save(context, next)
+        config = next
+        if (invite.deviceName.isNotBlank()) deviceName = invite.deviceName
+        inviteText = ""
+        localMessage = "邀请已导入；授权码只在本次运行的内存里，不会写盘。"
+        return true
     }
 
-    SettingsContentPage("家庭同步与备份", onBack) {
+    LaunchedEffect(Unit) {
+        RuleSyncCoordinator.refreshStatus()
+        if (RuleSyncSettings.load(context).useEmbedded) {
+            nodeStatus = TsnetSession.status(context)
+        }
+        // 从 `mymoney://join?invite=…` 进来时直接落配置，省掉在手机上粘一串 200 字的麻烦。
+        PendingInviteText.consume()?.let { applyInvite(it) }
+    }
+
+    // 节点是在配对/同步时才真正起来的；状态行跟着协调器变化重读一次，
+    // 否则一直停在打开页面那一刻的"未启动"。
+    LaunchedEffect(state.busy, state.message) {
+        if (RuleSyncSettings.load(context).useEmbedded) {
+            nodeStatus = TsnetSession.status(context)
+        }
+    }
+
+    SettingsContentPage(title, onBack) {
         InsetGroup {
             ListRow(
                 title = if (config.paired) "已连接家庭服务" else "连接家庭服务",
@@ -80,18 +124,83 @@ fun FamilySyncPage(onBack: () -> Unit) {
             }
         }
 
+        InsetGroup {
+            ListRow(
+                title = "内嵌连接",
+                subtitle = if (config.useEmbedded) "走麦米自己的节点，不依赖系统 VPN，也不需要装 Tailscale。" else "关闭时走系统网络直连家庭服务（与旧版一致）。",
+                trailing = {
+                    AbSwitch(checked = config.useEmbedded) { checked ->
+                        if (checked && !EmbeddedTsnetTransport.isAvailable()) {
+                            localMessage = "此设备是 32 位，内嵌连接需要 arm64-v8a 或 x86_64。"
+                        } else {
+                            val next = RuleSyncSettings.load(context).copy(useEmbedded = checked)
+                            RuleSyncSettings.save(context, next)
+                            config = next
+                            localMessage = if (checked) "已开启内嵌连接：先导入邀请串，再配对。" else "已切回系统直连。"
+                            if (!checked) scope.launch {
+                                val stopped = withContext(Dispatchers.IO) { runCatching { TsnetSession.shutdown() } }
+                                stopped.exceptionOrNull()?.let { localMessage = "关闭内嵌连接失败：${it.message}" }
+                            }
+                        }
+                    }
+                },
+                dividerAbove = true,
+            )
+            if (config.useEmbedded && config.paired && !TsnetIdentity.hasIdentity(context)) {
+                ListRow(
+                    title = "需要重新授权",
+                    subtitle = "节点身份已丢失或被清除。重新导入邀请串后再同步即可，本机账本与规则不受影响。",
+                    dividerAbove = true,
+                )
+            }
+            if (config.useEmbedded) {
+                ListRow(
+                    title = "节点状态",
+                    subtitle = nodeStatus.ifBlank { if (config.paired) "配对后自动启动" else "未启动" },
+                    dividerAbove = true,
+                )
+            }
+        }
+
+        if (config.useEmbedded) {
+            InsetGroup {
+                InputRow("邀请串", inviteText, { inviteText = it }, placeholder = "MMJOIN1.…（家庭服务生成的一次性邀请）")
+            }
+            SecondaryButton(
+                text = "导入邀请",
+                onClick = { applyInvite(inviteText) },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = inviteText.isNotBlank(),
+            )
+            ListRow(
+                title = "说明",
+                subtitle = "邀请只在本机首次入网时用一次；之后节点身份保存在应用私有目录并加密，重启直接复用。",
+            )
+        }
+
         if (!config.paired) {
             InsetGroup {
-                InputRow("服务地址", serverUrl, { serverUrl = it }, placeholder = "http://100.65.248.62:18080")
+                InputRow("服务地址", serverUrl, { serverUrl = it }, placeholder = "http://<家庭服务地址>")
                 InputRow("设备名称", deviceName, { deviceName = it }, placeholder = "手机", dividerAbove = true)
                 InputRow("配对码", pairingCode, { pairingCode = it.uppercase() }, placeholder = "服务端显示的一次性配对码", dividerAbove = true)
             }
             ListRow(
                 title = "地址说明",
-                subtitle = "家庭局域网支持 HTTP；Tailscale 支持 http://100.65.248.62:18080；其他地址须使用 HTTPS。",
+                subtitle = "家庭局域网支持 HTTP；Tailscale 支持 http://<家庭服务地址>；其他地址须使用 HTTPS。",
+            )
+            SecondaryButton(
+                text = "测试连接",
+                onClick = {
+                    scope.launch(Dispatchers.IO) {
+                        RuleSyncCoordinator.testConnection(context)
+                        nodeStatus = if (RuleSyncSettings.load(context).useEmbedded) TsnetSession.status(context) else nodeStatus
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !state.busy && serverUrl.isNotBlank(),
             )
             PrimaryButton(
-                text = if (state.busy) "正在配对…" else "配对并连接",
+                text = if (state.busy) "处理中…" else "配对并连接",
                 onClick = {
                     scope.launch(Dispatchers.IO) {
                         runCatching {

@@ -169,3 +169,4 @@ venv/
 !/docs/FAMILY_BACKUPS.md
 !/deploy/home-sync/README.md
 !/server/README.md
+connect-code.env

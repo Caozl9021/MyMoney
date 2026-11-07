@@ -15,7 +15,7 @@ package io.github.mymoney.data
  */
 object Backup {
 
-    const val FORMAT = 9
+    const val FORMAT = 10
     const val KIND = "MyMoneyBackup"
 
     data class Bill(
@@ -46,6 +46,8 @@ object Backup {
         val productSource: String? = null,
         val noteOrigin: String? = null,
         val noteTemplateSnapshot: String? = null,
+        /** 设备级稳定同步身份（W2 起）；旧格式/旧备份无此字段，恢复时按需生成。 */
+        val syncId: String = "",
     )
 
     data class Ledger(
@@ -132,6 +134,7 @@ object Backup {
                 "aid" to b.accountId, "taid" to b.transferAccountId,
                 "al" to b.assetLinked, "ak" to b.assetKey,
                 "tf" to b.transferFeeCents, "fpk" to b.feeParentKey, "tac" to b.transferAccount,
+                "sid" to b.syncId.takeIf { it.isNotBlank() },
             )
         }
         snapshot.assets?.let { root["assets"] = AssetBackupCodec.encode(it) }
@@ -218,6 +221,7 @@ object Backup {
                 transferFeeCents = if (format >= 3) m.num("tf").also { require(it >= 0) { "转账手续费无效" } } else 0,
                 feeParentKey = if (format >= 3) m.optionalAssetText("fpk") else null,
                 transferAccount = if (format >= 5) m.optionalAssetText("tac") else null,
+                syncId = if (format >= 10) m.optionalAssetText("sid").orEmpty() else "",
             )
         }
         val ledger = (root["ledger"] as? Map<*, *>)?.let { l ->

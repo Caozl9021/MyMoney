@@ -1,3 +1,35 @@
+## 个人云备份部署（App155，服务镜像155；历史X阶段说明保留）
+
+## 155进度复核（2026-11-06，仅文档）
+
+当前候选 **1.9.0/155，Room11/JSON10，pending_acceptance**。删除历史、更多下移右对齐、context请求精简和Go HTTP复用主体已实现；155尚无用户验收。154返回修复/原“更多正常显示”分项通过保留。
+
+本轮复核候选SHA五项通过，现存JVM XML为1180/0/0/0；服务端76 pytest、部署镜像155和Mi10显式直连实测引用原记录，未重跑/操作在线环境。已有实机证据是单选删除，批删能力不等于真实多选已测；内嵌通道和分段耗时未闭环，HTTP请求减少不等于连接慢已解决。
+
+静态待收尾：R1删除重试未保留operationId；R2删后分页仍用旧offset；R3文件已不在时回收状态不能收尾；R4新备份未失效context缓存。详见[实现复核与后续](../../runs/20261106-181513-155-progress-review/outputs/implementation-review.md)。本轮只同步文档，不改源码/APK/旧证据，不操作手机或服务。
+
+按原Y记录，155增量镜像已部署并迁移；本轮只读文档复核，未查询或改动容器。154仅App导航修复，无需为154重启服务或迁移数据库。小米14已安装154成功但未代操作/验收；本轮文档同步不查询或改动容器。
+
+正常升级使用增量schema迁移，**不清表**。本轮清表只源于用户明确授权，已另存数据库快照；未来升级不得照抄清表步骤。
+
+```bash
+# 仓库根目录；Dockerfile.upgrade依赖本机已有home-sync-home-sync基础镜像
+# 若无此历史镜像，应按下面常规Dockerfile准备依赖，不能假设此镜像可移植。
+docker build -f deploy/home-sync/Dockerfile.upgrade -t mymoney-home-sync:cloud-backup-153 .
+docker run --rm --network host --env-file deploy/home-sync/.env mymoney-home-sync:cloud-backup-153 python -m app.migrate
+docker compose -f deploy/home-sync/docker-compose.yml -f deploy/home-sync/docker-compose.cloud-backup.yml up -d --no-build --no-deps home-sync
+```
+
+若旧容器并非Compose创建，需先停下并保留为回退容器，再启动新服务，不能在容器名冲突时删除数据卷。生产迁移前备份schema和备份卷，保持原挂载路径。回退旧容器不会恢复清表前数据；恢复数据库必须另行使用已保存快照并确认范围，不自动覆盖新备份。
+
+管理页为服务地址的 `/admin/cloud-backup`；管理令牌仅在解锁时输入，不放URL、不记浏览器存储。可在本机.env显式配置MYMONEY_SERVER_URL/MYMONEY_CTRL_URL/MYMONEY_TSKEY作为出码默认值（模板见.env.example），或在管理页当前会话填网络授权。**本轮未复制connect-code.env里的密钥到服务配置**。业务码持久化hash、五分钟且一次有效，重启不重置其期限；grant仅登记用途，已完成操作不能回放恢复旧权限。网络入网key有效期独立管理。
+
+管理页当前使用 `http://<家庭服务地址>/admin/cloud-backup`。出码表单“服务地址”必须为 `http://<家庭服务地址>`，不带管理路径；留空会报“缺少家庭服务地址”，这是当前已报告的输入问题，不能据此推断手机配对失败。管理令牌取自本机.env的 `MYMONEY_ADMIN_TOKEN`，不是MMJOIN2或网络key。默认值未配置时由管理者在页面会话填写，不公开凭据；前一次说明未得到新的成功出码回执。
+
+设备来源列表/归档仅管理元数据，不读取备份正文。本设备token只能列出、下载及重试修复自己的快照，同空间其他设备也不例外。服务支持JSON8/9/10；App云备份不再要求规则首次合并。自动备份与扫码后置。
+
+旧部署和历史说明如下，版本与旧接口按当时解释。
+
 # My Money 家庭同步服务
 
 ## 目录与数据库
@@ -105,7 +137,7 @@ docker compose exec -T home-sync python -m app.cli backup-audit
 
 ## 固定 Tailscale 端点
 
-App 1.7.3/129 增加 `http://100.65.248.62:18080` 精确 HTTP 例外，用于配对、规则同步及账本备份。请在 App 服务地址栏填写完整地址；该例外不覆盖其他 Tailscale IP 或端口。服务所在设备与手机仍需通过 Tailscale 互通，服务实际监听端口为 18080 且防火墙允许访问。原私网 HTTP 与 HTTPS 仍可用。
+App 1.7.3/129 增加 `http://<家庭服务地址>` 精确 HTTP 例外，用于配对、规则同步及账本备份。请在 App 服务地址栏填写完整地址；该例外不覆盖其他 Tailscale IP 或端口。服务所在设备与手机仍需通过 Tailscale 互通，服务实际监听端口为 18080 且防火墙允许访问。原私网 HTTP 与 HTTPS 仍可用。
 
 ## 从JSON8服务升级到1.8.0的JSON9兼容服务
 

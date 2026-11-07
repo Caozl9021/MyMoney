@@ -2,7 +2,6 @@ package io.github.mymoney.data.rulesync
 
 import io.github.mymoney.data.MiniJson
 import java.io.IOException
-import java.net.HttpURLConnection
 import java.net.URL
 import java.time.Instant
 
@@ -34,8 +33,14 @@ object RuleSyncApi {
     private const val CONNECT_TIMEOUT = 15_000
     private const val READ_TIMEOUT = 20_000
 
-    fun pair(serverUrl: String, code: String, deviceName: String): RuleSyncPairResponse {
-        val json = request(serverUrl, "POST", "/v1/pair", mapOf("code" to code, "deviceName" to deviceName), null)
+    /** 连接探测：与同步走同一条传输、同一套地址策略，任何异常都向上抛。 */
+    fun health(serverUrl: String, transport: FamilyTransport = DirectHttpTransport()): Boolean {
+        val json = request(serverUrl, "GET", "/health", null, null, transport) as? Map<*, *> ?: return false
+        return json["ok"] == true
+    }
+
+    fun pair(serverUrl: String, code: String, deviceName: String, transport: FamilyTransport = DirectHttpTransport()): RuleSyncPairResponse {
+        val json = request(serverUrl, "POST", "/v1/pair", mapOf("code" to code, "deviceName" to deviceName), null, transport)
         val map = json as? Map<*, *> ?: throw RuleSyncApiException("配对响应格式无效")
         return RuleSyncPairResponse(
             spaceId = text(map, "spaceId"),
@@ -45,8 +50,8 @@ object RuleSyncApi {
         )
     }
 
-    fun snapshot(serverUrl: String, token: String): RuleSyncSnapshotPage {
-        val json = request(serverUrl, "GET", "/v1/sync/snapshot", null, token)
+    fun snapshot(serverUrl: String, token: String, transport: FamilyTransport = DirectHttpTransport()): RuleSyncSnapshotPage {
+        val json = request(serverUrl, "GET", "/v1/sync/snapshot", null, token, transport)
         val map = json as? Map<*, *> ?: throw RuleSyncApiException("规则快照格式无效")
         return RuleSyncSnapshotPage(
             items = items(map["items"]),
@@ -54,14 +59,14 @@ object RuleSyncApi {
         )
     }
 
-    fun push(serverUrl: String, token: String, spaceId: String, epoch: String, items: List<Map<String, Any?>>): List<Map<String, Any?>> {
+    fun push(serverUrl: String, token: String, spaceId: String, epoch: String, items: List<Map<String, Any?>>, transport: FamilyTransport = DirectHttpTransport()): List<Map<String, Any?>> {
         if (items.isEmpty()) return emptyList()
         val json = request(serverUrl, "POST", "/v1/sync/push", mapOf(
             "protocolVersion" to 1,
             "spaceId" to spaceId,
             "epoch" to epoch,
             "items" to items,
-        ), token)
+        ), token, transport)
         val map = json as? Map<*, *> ?: throw RuleSyncApiException("同步响应格式无效")
         val raw = map["items"] as? List<*> ?: throw RuleSyncApiException("同步结果缺少 items")
         return raw.map { row ->
@@ -70,8 +75,8 @@ object RuleSyncApi {
         }
     }
 
-    fun pull(serverUrl: String, token: String, after: Long, limit: Int = 100): RuleSyncPullPage {
-        val json = request(serverUrl, "GET", "/v1/sync/pull?after=$after&limit=$limit", null, token)
+    fun pull(serverUrl: String, token: String, after: Long, limit: Int = 100, transport: FamilyTransport = DirectHttpTransport()): RuleSyncPullPage {
+        val json = request(serverUrl, "GET", "/v1/sync/pull?after=$after&limit=$limit", null, token, transport)
         val map = json as? Map<*, *> ?: throw RuleSyncApiException("同步拉取格式无效")
         val raw = map["changes"] as? List<*> ?: emptyList<Any?>()
         return RuleSyncPullPage(
@@ -90,12 +95,12 @@ object RuleSyncApi {
         )
     }
 
-    fun ack(serverUrl: String, token: String, throughRevision: Long, epoch: String) {
-        request(serverUrl, "POST", "/v1/sync/ack", mapOf("throughRevision" to throughRevision, "epoch" to epoch), token)
+    fun ack(serverUrl: String, token: String, throughRevision: Long, epoch: String, transport: FamilyTransport = DirectHttpTransport()) {
+        request(serverUrl, "POST", "/v1/sync/ack", mapOf("throughRevision" to throughRevision, "epoch" to epoch), token, transport)
     }
 
-    fun revoke(serverUrl: String, token: String) {
-        request(serverUrl, "POST", "/v1/device/revoke", emptyMap<String, Any?>(), token)
+    fun revoke(serverUrl: String, token: String, transport: FamilyTransport = DirectHttpTransport()) {
+        request(serverUrl, "POST", "/v1/device/revoke", emptyMap<String, Any?>(), token, transport)
     }
 
     /** 家庭局域网明文 HTTP 只允许回环或 RFC1918 私网地址；公网地址仍必须 HTTPS。 */
@@ -117,31 +122,35 @@ object RuleSyncApi {
             (isPrivateHttpHost(url.host) || (url.host == "100.65.248.62" && url.port == 18080)))
     }
 
-    private fun request(serverUrl: String, method: String, path: String, body: Any?, token: String?): Any? {
+    internal fun request(
+        serverUrl: String, method: String, path: String, body: Any?, token: String?,
+        transport: FamilyTransport = DirectHttpTransport(),
+    ): Any? {
         val base = serverUrl.trim().trimEnd('/')
         val url = URL(base + path)
         if (!isAllowedServiceUrl(url)) {
-            throw RuleSyncApiException("家庭同步地址须使用 HTTPS、家庭私网 HTTP 或 http://100.65.248.62:18080（不能含账号密码或片段）")
+            throw RuleSyncApiException("家庭同步地址须使用 HTTPS、家庭私网 HTTP 或 http://<家庭服务地址>（不能含账号密码或片段）")
         }
         val payload = body?.let { MiniJson.encode(it) }?.toByteArray(Charsets.UTF_8)
         if (payload != null && payload.size > MAX_BODY) throw RuleSyncApiException("同步请求超过大小限制")
-        val connection = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = method
-            instanceFollowRedirects = false
-            connectTimeout = CONNECT_TIMEOUT
-            readTimeout = READ_TIMEOUT
-            setRequestProperty("Accept", "application/json")
-            if (payload != null) setRequestProperty("Content-Type", "application/json; charset=utf-8")
-            if (token != null) setRequestProperty("Authorization", "Bearer $token")
+        val headers = LinkedHashMap<String, String>()
+        headers["Accept"] = "application/json"
+        if (payload != null) headers["Content-Type"] = "application/json; charset=utf-8"
+        if (token != null) headers["Authorization"] = "Bearer $token"
+        val bodySpec = payload?.let { FamilyTransport.RequestBody.Bytes(it) }
+        val response = try {
+            transport.execute(method, url.toString(), headers, bodySpec, CONNECT_TIMEOUT, READ_TIMEOUT)
+        } catch (e: RuleSyncApiException) {
+            throw e
+        } catch (e: IOException) {
+            throw e
+        } catch (e: Exception) {
+            throw RuleSyncApiException("同步网络请求失败")
         }
         try {
-            if (payload != null) {
-                connection.doOutput = true
-                connection.outputStream.use { it.write(payload) }
-            }
-            val code = connection.responseCode
-            val text = (if (code in 200..299) connection.inputStream else connection.errorStream)
-                ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+            val code = response.status
+            val text = (if (code in 200..299) response.bodyStream() else response.errorStream())
+                .bufferedReader(Charsets.UTF_8).use { it.readText() }
             if (code !in 200..299) {
                 val message = runCatching {
                     val body = MiniJson.decode(text) as? Map<*, *>
@@ -157,7 +166,7 @@ object RuleSyncApi {
             }
             return if (text.isBlank()) emptyMap<String, Any?>() else MiniJson.decode(text)
         } finally {
-            connection.disconnect()
+            response.close()
         }
     }
 

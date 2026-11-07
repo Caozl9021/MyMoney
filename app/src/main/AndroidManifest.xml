@@ -6,6 +6,9 @@
 
     <!-- 仅用户主动检查/下载公开GitHub规则包与 App 更新；采集和账本不联网。 -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 仅用户点「扫码」并授权后启动相机扫连接码；不后台开启，识别确认前不联网。 -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
     <!-- 仅用户点击“安装更新”后交给系统安装器；不在后台静默安装。 -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- 悬浮确认卡片（root 路径下唯一不受后台启动限制的弹窗方式） -->
@@ -87,6 +90,13 @@
             android:name=".ui.MainActivity"
             android:launchMode="singleTop"
             android:exported="true">
+            <!-- 邀请深链：mymoney://join?invite=MMJOIN1.… ，把一次性邀请直接交给家庭同步页。 -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="mymoney" android:host="join" />
+            </intent-filter>
         </activity>
 
         <activity-alias

@@ -33,4 +33,6 @@
     <instrumentation android:name="io.github.mymoney.OcrEngineBenchmarkInstrumentation" android:targetPackage="io.github.mymoney" />
     <instrumentation android:name="io.github.mymoney.OcrManualInstrumentation" android:targetPackage="io.github.mymoney" />
     <instrumentation android:name="io.github.mymoney.OcrFlowInstrumentation" android:targetPackage="io.github.mymoney" />
+    <instrumentation android:name="io.github.mymoney.IslandHostInstrumentation" android:targetPackage="io.github.mymoney" />
+    <instrumentation android:name="io.github.mymoney.CloudBackupIdentityInstrumentation" android:targetPackage="io.github.mymoney" />
 </manifest>

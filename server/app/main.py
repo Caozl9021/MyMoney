@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -7,8 +8,12 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
 from . import service
+from .backups import recycle_pending_backups
 from .backups import router as backups_router
-from .auth import current_device
+from .device_enrollment import router as enrollment_router
+from .backup_admin import router as backup_admin_router
+from .ledger_api import router as ledger_router
+from .auth import current_device, hash_token
 from .config import get_settings
 from .db import connection
 from .models import AckRequest, DeviceRevokeResponse, PairRequest, PairResponse, PushItem, PushRequest, PullResponse
@@ -19,11 +24,31 @@ from .pairing import PAIRING
 async def lifespan(app: FastAPI):
     if get_settings().pairing_code:
         PAIRING.issue()
+    # Deleted backups are tombstoned before their files are unlinked; sweep any
+    # recycle that was interrupted (crash, disk error) before serving requests.
+    try:
+        summary = recycle_pending_backups()
+        if summary["pendingCount"]:
+            logging.getLogger(__name__).warning("backup recycle still pending: %s", summary)
+    except Exception:  # pragma: no cover - startup must not fail on housekeeping
+        logging.getLogger(__name__).exception("backup recycle sweep failed")
     yield
 
 
 app = FastAPI(title="My Money Home Sync", version="0.2.0", lifespan=lifespan)
 app.include_router(backups_router)
+app.include_router(enrollment_router)
+app.include_router(backup_admin_router)
+app.include_router(ledger_router)
+
+
+@app.middleware("http")
+async def private_api_no_store(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith(("/v1/", "/admin")):
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
+    return response
 
 
 @app.get("/health")
@@ -98,11 +123,11 @@ def sync_ack(body: AckRequest, device: dict = Depends(current_device)) -> dict:
 
 
 @app.post("/v1/device/revoke", response_model=DeviceRevokeResponse)
-def revoke_device(device: dict = Depends(current_device)) -> DeviceRevokeResponse:
+def revoke_device(device: dict = Depends(current_device), authorization: str = Header(default="")) -> DeviceRevokeResponse:
     with connection() as conn:
         conn.execute(
-            "UPDATE devices SET revoked_at=now() WHERE space_id=%s AND id=%s",
-            (device["space_id"], device["device_id"]),
+            "UPDATE devices SET revoked_at=now() WHERE space_id=%s AND id=%s AND token_hash=%s",
+            (device["space_id"], device["device_id"], hash_token(authorization.removeprefix("Bearer ").strip())),
         )
         conn.commit()
     return DeviceRevokeResponse(revoked=True)

@@ -1,0 +1,21 @@
+# 正式部署：nginx 反代对外 18080，home-sync 只在 127.0.0.1:18081。
+# 两者都用 host 网络以便与既有部署（内嵌 tsnet 依赖本机端口/回环）保持一致；
+# home-sync 通过 MYMONEY_PORT 监听 18081，nginx 监听 18080。
+services:
+  home-sync:
+    image: mymoney-home-sync:cloud-backup-156
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      MYMONEY_PORT: "18081"
+    volumes:
+      - /srv/mymoney-home/backups:/data/backups:rw
+
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on: [home-sync]
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/proxy_headers.conf:/etc/nginx/conf.d/proxy_headers.conf:ro

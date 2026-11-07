@@ -108,6 +108,16 @@ class Settings(context: Context) {
         get() = prefs.getBoolean(KEY_AUTO_CONFIRM, true)
         set(value) = captureEdit { putBoolean(KEY_AUTO_CONFIRM, value) }
 
+    /**
+     * 超级岛确认实验开关（K 阶段，方案A）。默认关，**纯呈现宿主偏好**：
+     * 改变它不会改变采集准入、等待或去重语义，所以用 uiEdit 而非 captureEdit，
+     * 不递增 captureRevision，避免白白作废已排队工作。开启后 [CaptureConfirmDelivery]
+     * 在能力可用时优先用超级岛呈现待确认账单；点岛/点按钮统一进确认页，岛内不直接写账。
+     */
+    var islandConfirmEnabled: Boolean
+        get() = prefs.getBoolean(KEY_ISLAND_CONFIRM_ENABLED, false)
+        set(value) = uiEdit { putBoolean(KEY_ISLAND_CONFIRM_ENABLED, value) }
+
     /** 同一应用两次识别的最小间隔，防止页面滚动时刷屏 */
     var minIntervalMs: Long
         get() = prefs.getLong(KEY_MIN_INTERVAL, 1_500L)
@@ -243,6 +253,7 @@ class Settings(context: Context) {
         const val KEY_CAPTURE_MODE = "capture_mode"
         const val KEY_ENABLED = "enabled"
         const val KEY_AUTO_CONFIRM = "auto_confirm"
+        const val KEY_ISLAND_CONFIRM_ENABLED = "island_confirm_enabled"
         const val KEY_MIN_INTERVAL = "min_interval_ms"
         const val KEY_WHITELIST = "whitelist"
         /**

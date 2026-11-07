@@ -48,6 +48,19 @@ class FreshBackupRestoreInstrumentation : Instrumentation() {
                     db.assets().accounts(), db.assets().entries(), db.imports().all(),
                     db.assets().meta("pending-restore-config").orEmpty(), db.assets().meta("legacy-accounts-v1").orEmpty())
                 val incoming = Backup.decode(Backup.encode(source()))
+                test("w4-syncid-survives-restore-and-repeat-is-idempotent") { db ->
+                    // 源快照带稳定 syncId；恢复两遍必须同一行、同 syncId、不新增。
+                    val sid = "11111111-2222-3333-4444-555555555555"
+                    val withSid = incoming.copy(bills = incoming.bills.map { it.copy(syncId = sid) })
+                    check(BackupStore.restoreDatabase(db, withSid, BackupStore.Mode.MERGE).first == 1)
+                    val once = db.bills().allOnce()
+                    check(once.size == 1 && once.single().syncId == sid)
+                    check(db.bills().bySyncId(sid) != null)
+                    val before = digest(db)
+                    check(BackupStore.restoreDatabase(db, withSid, BackupStore.Mode.MERGE).first == 0)
+                    check(digest(db) == before)
+                    check(db.bills().allOnce().single().syncId == sid)
+                }
                 test("fresh-production-defaults-merge-restores-and-repeats-idempotently") { db ->
                     check(BackupStore.restoreDatabase(db, incoming, BackupStore.Mode.MERGE).first == 1)
                     check(db.assets().accounts() == incoming.assets!!.accounts)

@@ -1,6 +1,16 @@
 # UI公共组件与当前约束
 
-当前1.9.0/143；以下为源码约束，实测范围单列，不能理解为完整矩阵通过。
+155：主页历史卡片下一行右对齐TextButton“更多”；管理模式选择/删除上限100，确认框目前只显示份数与大小。CONNECTION/BACKUP/HISTORY是共享busy的状态类型，并非并发任务队列；更多及本地入口不受网络busy禁用。
+
+## 155进度复核（2026-11-06，仅文档）
+
+当前候选 **1.9.0/155，Room11/JSON10，pending_acceptance**。删除历史、更多下移右对齐、context请求精简和Go HTTP复用主体已实现；155尚无用户验收。154返回修复/原“更多正常显示”分项通过保留。
+
+本轮复核候选SHA五项通过，现存JVM XML为1180/0/0/0；服务端76 pytest、部署镜像155和Mi10显式直连实测引用原记录，未重跑/操作在线环境。已有实机证据是单选删除，批删能力不等于真实多选已测；内嵌通道和分段耗时未闭环，HTTP请求减少不等于连接慢已解决。
+
+静态待收尾：R1删除重试未保留operationId；R2删后分页仍用旧offset；R3文件已不在时回收状态不能收尾；R4新备份未失效context缓存。详见[实现复核与后续](../runs/20261106-181513-155-progress-review/outputs/implementation-review.md)。本轮只同步文档，不改源码/APK/旧证据，不操作手机或服务。
+
+当前1.9.0/155；以下为源码约束（143 的间距/重复提示项保持不变），实测范围单列，不能理解为完整矩阵通过。
 
 | 组件 | 约束 |
 | --- | --- |
@@ -12,6 +22,8 @@
 | BillActionsHost | 各入口统一账单查看/编辑，删除先确认，持久只读日志；没有5秒撤销或日志恢复 |
 | FloatingHeader | 四Tab普通玻璃材质/中性阴影；账本绿色光晕/虚线状态圈已退出，标题点击仍进自动记账 |
 | SubPageScaffold/BackSurface | 按原父级返回、设置重选回设置首页、保留未保存离开保护；预测返回残影仍按历史未决处理 |
+| 云备份（CloudBackupPage） | 主操作「立即备份」，历史自动加载；主页左上内容区「更多」收纳连接管理/本地备份文件；未连接为连接码+显式粘贴/连接，不暴露旧规则/ledger/互导入口。用户已明确确认「更多」正常显示；本地JSON实际导入/导出不因此验收 |
+| 云备份子路由 | 154主页/历史/连接管理使用SettingsScreen统一栈；系统返回与页面返回共用，去掉内部rememberSaveable page。小米14已安装，用户明确验收返回修复并确认“更多”正常；未逐项报告的手势工程覆盖另列 |
 | SectionColumn/ListRow | 组间距/触控遵循design tokens；内容长/大字可增高，不机械套叠多层padding |
 
-143仅在Waydroid400×890/density160的ConfirmActivity同一演示卡实看间距。其他宿主复用实现，但本轮没有逐个实跑；大字/窄屏/深色完整矩阵、Release UI和完整TalkBack未补齐。用户继续操作的演示卡不自动保存、忽略或清理。详见[143证据](../runs/20261105-151939-duplicate-label-spacing/outputs/verification.md)与[验收清单](ACCEPTANCE.md)。
+153 Mi10已实看云备份/历史及恢复预览；154未代操作小米14。143仅在Waydroid400×890/density160的ConfirmActivity同一演示卡实看间距。其他宿主复用实现，但本轮没有逐个实跑；大字/窄屏/深色完整矩阵、Release UI和完整TalkBack未补齐。用户继续操作的演示卡不自动保存、忽略或清理。详见[143证据](../runs/20261105-151939-duplicate-label-spacing/outputs/verification.md)与[验收清单](ACCEPTANCE.md)。

@@ -9,14 +9,17 @@ data class ImportIdentity(@PrimaryKey val sourceKey: String, val contentHash: St
 @Dao
 interface ImportDao {
     @Query("SELECT * FROM import_identities ORDER BY sourceKey") suspend fun all(): List<ImportIdentity>
+    @Query("SELECT * FROM import_identities WHERE sourceKey = :key LIMIT 1") suspend fun byKey(key: String): ImportIdentity?
     @Insert suspend fun insert(value: ImportIdentity)
     @Query("DELETE FROM import_identities") suspend fun clear()
 }
 
 object ImportIdentityCodec {
+    /** 钱迹导入：qianji:<sha256>；账本跨设备导入：ledger:<ledgerId 前8位>:<sha256>。 */
+    private val sourceKeyRe = Regex("(qianji|ledger:[0-9a-f]{8}):[0-9a-f]{64}")
     fun validate(rows: List<ImportIdentity>) {
         require(rows.size <= 200_000 && rows.map { it.sourceKey }.distinct().size == rows.size) { "导入身份数量超限或重复" }
-        require(rows.all { it.sourceKey.matches(Regex("qianji:[0-9a-f]{64}")) && it.contentHash.matches(Regex("[0-9a-f]{64}")) }) { "导入身份无效" }
+        require(rows.all { it.sourceKey.matches(sourceKeyRe) && it.contentHash.matches(Regex("[0-9a-f]{64}")) }) { "导入身份无效" }
     }
     fun decode(raw: Any?): List<ImportIdentity> = (raw as? List<*> ?: error("导入身份必须为数组")).map {
         val m = it as? Map<*, *> ?: error("导入身份无效")
@@ -26,7 +29,7 @@ object ImportIdentityCodec {
         validate(local); validate(incoming)
         val result = local.associateBy { it.sourceKey }.toMutableMap()
         incoming.forEach { row ->
-            require(result[row.sourceKey]?.let { it == row } != false) { "钱迹导入身份冲突，本次未恢复" }
+            require(result[row.sourceKey]?.let { it == row } != false) { "导入身份冲突（来源内容已变化），本次未恢复" }
             result[row.sourceKey] = row
         }
         return result.values.toList().also(::validate)

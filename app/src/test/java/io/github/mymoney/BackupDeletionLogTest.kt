@@ -26,7 +26,8 @@ class BackupDeletionLogTest {
     @Test fun json9RoundTripKeepsAllFrozenBillFieldsWithoutRevivingBillsOrAssets() {
         val original = snapshot(listOf(log()))
         val encoded = Backup.encode(original)
-        assertTrue(encoded.contains("\"format\":9"))
+        // 删除日志自 format 9 引入；当前导出为 format 10（W4 起含稳定 syncId）。
+        assertTrue(encoded.contains("\"format\":${Backup.FORMAT}"))
         val restored = Backup.decode(encoded)
         assertEquals(original, restored)
         assertTrue(restored.bills.isEmpty())
@@ -43,7 +44,8 @@ class BackupDeletionLogTest {
 
     @Test fun logsCannotBeHiddenInOlderEnvelopeAndNullIsNotAnArray() {
         val encoded = Backup.encode(snapshot(listOf(log())))
-        reject { Backup.decode(encoded.replace("\"format\":9", "\"format\":8")) }
+        // 删除日志最低要求 format 9；降到 8 必须拒绝（无论当前导出格式是几）。
+        reject { Backup.decode(encoded.replace("\"format\":${Backup.FORMAT}", "\"format\":8")) }
         reject { Backup.decode("""{"format":9,"bills":[],"deletions":null}""") }
     }
 

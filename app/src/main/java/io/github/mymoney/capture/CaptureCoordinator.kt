@@ -321,7 +321,7 @@ object CaptureCoordinator {
             throw error
         }
         val state = when {
-            outcome in setOf("overlay", "confirm", "confirm-bg") -> CaptureDeliveryState.ACKNOWLEDGED
+            outcome in setOf("overlay", "confirm", "confirm-bg", "island") -> CaptureDeliveryState.ACKNOWLEDGED
             outcome in setOf("pending-only", "pending-locked", "pending-source-disabled") -> CaptureDeliveryState.SUPPRESSED
             else -> CaptureDeliveryState.FAILED
         }

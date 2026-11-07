@@ -38,7 +38,7 @@ private const val FILTERED_LEDGER_WHERE = """
  */
 @Entity(
     tableName = "bills",
-    indices = [Index("fingerprint"), Index("timeMillis"), Index(value = ["recognitionId"], unique = true)],
+    indices = [Index("fingerprint"), Index("timeMillis"), Index(value = ["recognitionId"], unique = true), Index(value = ["syncId"], unique = true)],
 )
 data class BillEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -68,6 +68,10 @@ data class BillEntity(
     val productSource: String? = null,
     val noteOrigin: String? = null,
     val noteTemplateSnapshot: String? = null,
+    // W2 账本副本同步：稳定跨设备标识 + 更新时间 + 删除墓碑。syncId 不用自增 id/指纹/订单尾号。
+    @androidx.room.ColumnInfo(defaultValue = "''") val syncId: String = "",
+    @androidx.room.ColumnInfo(defaultValue = "0") val updatedAt: Long = 0,
+    val deletedAt: Long? = null,
 )
 
 @Dao
@@ -229,9 +233,31 @@ interface BillDao {
 
     @Query("DELETE FROM bills WHERE id = :id")
     suspend fun delete(id: Long)
+
+    // ---- W2 账本副本同步 ----
+    @Query("SELECT * FROM bills WHERE syncId = :syncId LIMIT 1")
+    suspend fun bySyncId(syncId: String): BillEntity?
+
+    @Query("SELECT * FROM bills")
+    suspend fun listAllForSync(): List<BillEntity>
+
+    /** 只更新同步身份/时间/墓碑，用于把本机旧账单补齐 syncId 或应用远端墓碑，不动业务字段。 */
+    @Query("UPDATE bills SET syncId = :syncId, updatedAt = :updatedAt, deletedAt = :deletedAt WHERE id = :id")
+    suspend fun updateSyncFields(id: Long, syncId: String, updatedAt: Long, deletedAt: Long?)
+
+    /** 应用远端整条账单：按 syncId 定位，写全字段（id 保持本机自增不变）。 */
+    @Query("UPDATE bills SET type = :type, priceCents = :priceCents, timeMillis = :timeMillis, merchant = :merchant, method = :method, orderTail = :orderTail, sourcePkg = :sourcePkg, strategy = :strategy, fingerprint = :fingerprint, createdAt = :createdAt, category = :category, subCategory = :subCategory, account = :account, note = :note, recognitionId = :recognitionId, accountId = :accountId, transferAccountId = :transferAccountId, assetLinked = :assetLinked, assetKey = :assetKey, transferFeeCents = :transferFeeCents, feeParentKey = :feeParentKey, transferAccount = :transferAccount, productName = :productName, productSource = :productSource, noteOrigin = :noteOrigin, noteTemplateSnapshot = :noteTemplateSnapshot, updatedAt = :updatedAt, deletedAt = :deletedAt WHERE syncId = :syncId")
+    suspend fun applyRemoteBySyncId(
+        syncId: String, type: String, priceCents: Long, timeMillis: Long, merchant: String?, method: String?, orderTail: String?,
+        sourcePkg: String, strategy: String, fingerprint: String, createdAt: Long, category: String?, subCategory: String?,
+        account: String?, note: String?, recognitionId: String?, accountId: String?, transferAccountId: String?,
+        assetLinked: Boolean, assetKey: String, transferFeeCents: Long, feeParentKey: String?, transferAccount: String?,
+        productName: String?, productSource: String?, noteOrigin: String?, noteTemplateSnapshot: String?,
+        updatedAt: Long, deletedAt: Long?,
+    ): Int
 }
 
-@Database(entities = [BillEntity::class, RecognitionEntity::class, AssetAccount::class, AssetEntry::class, AssetMeta::class, CaptureAlias::class, CaptureEvidence::class, CaptureDelivery::class, ImportIdentity::class, RuleModelEntity::class, AppDataEntity::class, BillDeletionLog::class], version = 10, exportSchema = false)
+@Database(entities = [BillEntity::class, RecognitionEntity::class, AssetAccount::class, AssetEntry::class, AssetMeta::class, CaptureAlias::class, CaptureEvidence::class, CaptureDelivery::class, ImportIdentity::class, RuleModelEntity::class, AppDataEntity::class, BillDeletionLog::class], version = 11, exportSchema = false)
 abstract class AppDb : RoomDatabase() {
 
     abstract fun deletions(): BillDeletionDao
@@ -366,12 +392,27 @@ abstract class AppDb : RoomDatabase() {
             }
         }
 
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // W2 账本副本同步：账单加稳定 syncId/updatedAt/删除墓碑，资产条目加 updatedAt/删除墓碑。
+                db.execSQL("ALTER TABLE bills ADD COLUMN syncId TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE bills ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE bills ADD COLUMN deletedAt INTEGER")
+                db.execSQL("UPDATE bills SET syncId = 'legacy-' || id WHERE syncId = ''")
+                db.execSQL("UPDATE bills SET updatedAt = createdAt WHERE updatedAt = 0")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_bills_syncId ON bills(syncId)")
+                db.execSQL("ALTER TABLE asset_entries ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE asset_entries ADD COLUMN deletedAt INTEGER")
+                db.execSQL("UPDATE asset_entries SET updatedAt = createdAt WHERE updatedAt = 0")
+            }
+        }
+
         fun get(context: Context): AppDb = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext,
                 AppDb::class.java,
                 "mymoney.db",
-            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10).build().also { instance = it }
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11).build().also { instance = it }
         }
     }
 }

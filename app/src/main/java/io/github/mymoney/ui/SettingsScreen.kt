@@ -111,7 +111,7 @@ private enum class SettingsPage(val title: String) {
     RULE_FILES("识别规则"), MEALS("餐段设置"), STATISTICS("识别统计"),
     PERMISSIONS("权限与后台运行"), ROOT_MODE("Root 状态"),
     PENDING("记录历史"), IMPORT_EXPORT("迁移与备份"), EXPORT_CSV("导出到 iCost"), EXPORT_HELP("导入说明"),
-    QIANJI_IMPORT("导入钱迹账单"), BACKUP("备份与恢复"), FAMILY_SYNC("家庭同步与备份"), APPEARANCE("外观"), ABOUT("关于"), DEVELOPMENT("开发调试"),
+    QIANJI_IMPORT("导入钱迹账单"), BACKUP("备份与恢复"), FAMILY_DATA("云备份"), FAMILY_IMPORT("从其他设备导入"), FAMILY_SYNC("家庭同步与备份"), LEDGER_SYNC_DETAIL("同步详情"), SHARED_RULES("共享规则"), LEDGER_BACKUPS("历史备份"), CLOUD_BACKUP_MANAGE("连接管理"), APPEARANCE("外观"), ABOUT("关于"), DEVELOPMENT("开发调试"),
     HELP("识别帮助"), DEBUG("通知诊断"), PAGE_DEBUG("页面诊断"),
 }
 
@@ -247,6 +247,7 @@ fun SettingsScreen(rootRequest: Long? = null, onRootRequestHandled: (Long) -> Un
     val scope = rememberCoroutineScope()
     var autoConfirm by remember { mutableStateOf(settings.autoConfirm) }
     LaunchedEffect(healthInput.autoConfirm) { autoConfirm = healthInput.autoConfirm }
+    var islandConfirm by remember { mutableStateOf(settings.islandConfirmEnabled) }
     var whitelist by remember { mutableStateOf(settings.whitelist) }
     val serviceBound = healthInput.accessibilityAuthorized && healthInput.accessibilityBound
     var overlayGranted by remember { mutableStateOf(OverlayAnchor.canShow(context)) }
@@ -331,7 +332,7 @@ fun SettingsScreen(rootRequest: Long? = null, onRootRequestHandled: (Long) -> Un
                     SettingsLink("备注", "模板与本地备注建议", AbIcons.Note) { navigate(SettingsPage.NOTE) },
                 )) }
                 item { SettingsNavigationGroup("数据与应用", listOf(
-                    SettingsLink("迁移与备份", "导入导出、家庭同步与备份", AbIcons.Export) { navigate(SettingsPage.IMPORT_EXPORT) },
+                    SettingsLink("迁移与备份", "导入导出与云备份", AbIcons.Export) { navigate(SettingsPage.IMPORT_EXPORT) },
                     SettingsLink("外观", "图标、明暗、文字与动效", AbIcons.Settings) { navigate(SettingsPage.APPEARANCE) },
                     SettingsLink("关于", "版本、App 更新与开发调试", AbIcons.Info) { navigate(SettingsPage.ABOUT) },
                 )) }
@@ -340,6 +341,8 @@ fun SettingsScreen(rootRequest: Long? = null, onRootRequestHandled: (Long) -> Un
         SettingsPage.LEDGER_PERIOD -> LedgerPeriodPage(back)
         SettingsPage.AUTOMATION -> AutomationPage(
             mode = mode, enabled = enabled, health = health, autoConfirm = autoConfirm,
+            islandConfirm = islandConfirm,
+            islandSupported = android.os.Build.VERSION.SDK_INT >= 26,
             capabilities = capabilities, showsLsp = showsLsp, notice = notice,
             onBack = back, onAction = ::handleHealthAction,
             onApplyPreset = { preset ->
@@ -351,6 +354,7 @@ fun SettingsScreen(rootRequest: Long? = null, onRootRequestHandled: (Long) -> Un
                 else CaptureModeManager.setEnabled(context, it)
             },
             onToggleConfirm = { autoConfirm = it; settings.autoConfirm = it },
+            onToggleIsland = { islandConfirm = it; settings.islandConfirmEnabled = it },
             onNavigate = { navigate(settingsPageFor(it)) },
             onDismissNotice = {
                 notice?.let { pending ->
@@ -422,8 +426,7 @@ fun SettingsScreen(rootRequest: Long? = null, onRootRequestHandled: (Long) -> Un
                 SettingsLink("导出到 iCost", "按时间范围生成 CSV", AbIcons.Export) { navigate(SettingsPage.EXPORT_CSV) },
             ),
             "备份与恢复" to listOf(
-                SettingsLink("完整备份与恢复", "保存账单、资产和本地配置", AbIcons.Layers) { navigate(SettingsPage.BACKUP) },
-                SettingsLink("家庭同步与备份", "规则同步、账本备份与恢复", AbIcons.Layers) { navigate(SettingsPage.FAMILY_SYNC) },
+                SettingsLink("云备份", "备份到自己的服务器，查看历史与恢复", AbIcons.Layers) { navigate(SettingsPage.FAMILY_DATA) },
             ),
         ))
         SettingsPage.EXPORT_HELP -> SettingsContentPage("导入说明", back) {
@@ -477,7 +480,19 @@ fun SettingsScreen(rootRequest: Long? = null, onRootRequestHandled: (Long) -> Un
 
         SettingsPage.NOTE_TEMPLATE -> NoteTemplatePage(onBack = back)
 
-        SettingsPage.FAMILY_SYNC -> FamilySyncPage(onBack = back)
+        SettingsPage.FAMILY_DATA, SettingsPage.FAMILY_IMPORT, SettingsPage.LEDGER_SYNC_DETAIL,
+        SettingsPage.SHARED_RULES, SettingsPage.LEDGER_BACKUPS, SettingsPage.FAMILY_SYNC,
+        SettingsPage.CLOUD_BACKUP_MANAGE -> CloudBackupPage(
+            destination = when (shown) {
+                SettingsPage.LEDGER_BACKUPS -> CloudBackupDestination.HISTORY
+                SettingsPage.CLOUD_BACKUP_MANAGE -> CloudBackupDestination.CONNECTION
+                else -> CloudBackupDestination.HOME
+            },
+            onBack = back,
+            onOpenHistory = { navigate(SettingsPage.LEDGER_BACKUPS) },
+            onOpenConnection = { navigate(SettingsPage.CLOUD_BACKUP_MANAGE) },
+            onOpenLocalFiles = { navigate(SettingsPage.BACKUP) },
+        )
         SettingsPage.APPEARANCE -> AppearancePage(onBack = back)
 
         SettingsPage.PERMISSIONS, SettingsPage.BACKGROUND -> PermissionsPage(
@@ -978,6 +993,22 @@ private fun BackupPage(onBack: () -> Unit, onRestored: (Backup.SettingsSnapshot?
         }
     }
 
+    val recoveryPoint = remember { java.io.File(context.filesDir, "ledger-backups").listFiles()
+        ?.filter { it.name.startsWith("pre-restore-") && it.extension == "json" }?.maxByOrNull { it.lastModified() } }
+    val exportRecovery = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null && recoveryPoint != null) {
+            busy = true
+            scope.launch {
+                val result = withContext(Dispatchers.IO) { runCatching {
+                    context.contentResolver.openOutputStream(uri)?.use { output -> recoveryPoint.inputStream().use { it.copyTo(output) } }
+                        ?: error("无法写入所选文件")
+                } }
+                message = if (result.isSuccess) "恢复前快照已导出" else "导出失败：${result.exceptionOrNull()?.message}"
+                busy = false
+            }
+        }
+    }
+
     val openLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
@@ -997,7 +1028,7 @@ private fun BackupPage(onBack: () -> Unit, onRestored: (Backup.SettingsSnapshot?
         }
     }
 
-    SubPageScaffold(title = "备份与恢复", onBack = onBack) { padding ->
+    SubPageScaffold(title = "本地备份文件", onBack = onBack) { padding ->
         io.github.mymoney.ui.design.SectionColumn(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(padding).padding(horizontal = AbSpacing.page)) {
             GroupHeader("备份")
             InsetGroup {
@@ -1009,6 +1040,11 @@ private fun BackupPage(onBack: () -> Unit, onRestored: (Backup.SettingsSnapshot?
                         if (!busy) createLauncher.launch(BackupStore.fileName())
                     },
                 )
+            }
+
+            if (recoveryPoint != null) InsetGroup {
+                ListRow(title = "导出最近恢复前快照", subtitle = "保存恢复前的账本，需要回退时从文件恢复", chevron = true,
+                    onClick = { if (!busy) exportRecovery.launch("MyMoney-pre-restore.json") })
             }
 
             GroupHeader("恢复")

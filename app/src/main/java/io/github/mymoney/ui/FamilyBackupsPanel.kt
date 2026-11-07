@@ -104,7 +104,7 @@ internal fun FamilyBackupsPanel() {
                 SecondaryButton(
                     text = "下载并预览恢复",
                     onClick = { runOperation {
-                        preview = LedgerBackupCoordinator.preview(context, entry)
+                        preview = LedgerBackupCoordinator.prepare(context, entry)
                         restoreConfiguration = false
                         message = "下载与摘要校验通过，请选择恢复方式"
                     } },

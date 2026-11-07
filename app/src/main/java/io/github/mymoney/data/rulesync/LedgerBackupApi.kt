@@ -3,15 +3,15 @@ package io.github.mymoney.data.rulesync
 import io.github.mymoney.data.Backup
 import io.github.mymoney.data.MiniJson
 import java.io.File
-import java.io.FileOutputStream
-import java.net.HttpURLConnection
-import java.net.URL
 import java.security.MessageDigest
 import java.util.UUID
 
 /** Raw private files; tokens never follow redirects and all bodies have an actual byte limit. */
 object LedgerBackupApi {
     const val MAX_BYTES = 200L * 1024 * 1024
+
+    /** Mirrors the server batch cap so the App never sends a request that is rejected wholesale. */
+    const val DELETE_BATCH = 100
     data class Entry(
         val id: String, val deviceName: String, val appVersion: String,
         val sha256: String, val sizeBytes: Long, val billCount: Long,
@@ -28,30 +28,31 @@ object LedgerBackupApi {
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
-    fun upload(config: RuleSyncConfig, token: String, id: String, file: File, version: String): Entry {
+    fun upload(config: RuleSyncConfig, token: String, id: String, file: File, version: String,
+               transport: FamilyTransport = DirectHttpTransport()): Entry {
         UUID.fromString(id)
         require(file.length() in 1..MAX_BYTES) { "快照大小超过限制" }
-        val conn = open(config, token, "/v1/backups/$id", "PUT")
+        val sha = sha256(file)
+        val response = openResponse(config, token, "/v1/backups/$id", "PUT", transport, mapOf(
+            "Content-Type" to "application/json",
+            "X-Content-SHA256" to sha,
+            "X-App-Version" to version,
+            "X-Space-Epoch" to config.epoch,
+        ), FamilyTransport.RequestBody.FromFile(file))
         try {
-            conn.setRequestProperty("Content-Type", "application/json")
-            conn.setRequestProperty("X-Content-SHA256", sha256(file))
-            conn.setRequestProperty("X-App-Version", version)
-            conn.setRequestProperty("X-Space-Epoch", config.epoch)
-            conn.doOutput = true
-            conn.setFixedLengthStreamingMode(file.length())
-            conn.outputStream.use { output -> file.inputStream().use { it.copyTo(output) } }
-            checkStatus(conn)
-            val entry = entry(readObject(conn))
-            require(entry.id == id && entry.sha256 == sha256(file) && entry.sizeBytes == file.length()) { "上传回执与本地快照不一致" }
+            checkStatus(response)
+            val entry = entry(readObject(response))
+            require(entry.id == id && entry.sha256 == sha && entry.sizeBytes == file.length()) { "上传回执与本地快照不一致" }
             return entry
-        } finally { conn.disconnect() }
+        } finally { response.close() }
     }
 
-    fun list(config: RuleSyncConfig, token: String, offset: Int = 0): Page {
-        val conn = open(config, token, "/v1/backups?offset=$offset&limit=30", "GET")
+    fun list(config: RuleSyncConfig, token: String, offset: Int = 0,
+             transport: FamilyTransport = DirectHttpTransport()): Page {
+        val response = openResponse(config, token, "/v1/backups?offset=$offset&limit=30", "GET", transport)
         try {
-            checkStatus(conn)
-            val root = readObject(conn)
+            checkStatus(response)
+            val root = readObject(response)
             require(root["protocolVersion"] == 1L || root["protocolVersion"] == 1) { "家庭备份协议不兼容" }
             require(root["spaceId"] == config.spaceId && root["epoch"] == config.epoch) { "家庭空间已变化，请重新连接对账" }
             val rows = root["items"] as? List<*> ?: error("备份列表无效")
@@ -59,50 +60,97 @@ object LedgerBackupApi {
             val more = root["hasMore"] as? Boolean ?: error("备份分页无效")
             require(!more || next > offset) { "备份分页未推进" }
             return Page(rows.map { entry(it as? Map<*, *> ?: error("备份索引无效")) }, next, more)
-        } finally { conn.disconnect() }
+        } finally { response.close() }
     }
 
-    fun download(config: RuleSyncConfig, token: String, entry: Entry, target: File): Backup.Snapshot {
-        val conn = open(config, token, "/v1/backups/${entry.id}", "GET")
+    /** Server-side deletion receipt; the server caps one batch at 100 ids. */
+    data class DeleteResult(
+        val deletedCount: Int, val deletedBytes: Long, val recycledBytes: Long,
+        val pendingBytes: Long, val recyclePending: Boolean,
+    )
+
+    fun delete(config: RuleSyncConfig, token: String, operationId: String, ids: List<String>,
+               transport: FamilyTransport = DirectHttpTransport()): DeleteResult {
+        require(ids.isNotEmpty()) { "请选择要删除的备份" }
+        val payload = MiniJson.encode(mapOf("operationId" to operationId, "backupIds" to ids))
+        val response = openResponse(config, token, "/v1/backups/delete", "POST", transport,
+            extraHeaders = mapOf("Content-Type" to "application/json; charset=utf-8"),
+            body = FamilyTransport.RequestBody.Bytes(payload.toByteArray(Charsets.UTF_8)))
+        try {
+            checkStatus(response)
+            val root = readObject(response)
+            return DeleteResult(
+                deletedCount = (root["deletedCount"] as? Number)?.toInt() ?: error("删除回执缺少数量"),
+                deletedBytes = (root["deletedBytes"] as? Number)?.toLong() ?: 0L,
+                recycledBytes = (root["recycledBytes"] as? Number)?.toLong() ?: 0L,
+                pendingBytes = (root["pendingBytes"] as? Number)?.toLong() ?: 0L,
+                recyclePending = root["recyclePending"] == true,
+            )
+        } finally { response.close() }
+    }
+
+    /** Re-checks one backup right before the restore confirmation actually writes local data. */
+    fun status(config: RuleSyncConfig, token: String, id: String,
+               transport: FamilyTransport = DirectHttpTransport()): Entry {
+        val response = openResponse(config, token, "/v1/backups/$id/status", "GET", transport)
+        try {
+            checkStatus(response)
+            val entry = entry(readObject(response))
+            require(entry.id == id) { "备份状态与请求不一致" }
+            return entry
+        } finally { response.close() }
+    }
+
+    fun download(config: RuleSyncConfig, token: String, entry: Entry, target: File,
+                 transport: FamilyTransport = DirectHttpTransport(),
+                 operation: DownloadOperation? = null): Backup.Snapshot {
+        val url = java.net.URL(config.serverUrl.trimEnd('/') + "/v1/backups/${entry.id}")
+        require(RuleSyncApi.isAllowedServiceUrl(url)) { "家庭服务地址须使用HTTPS、私网HTTP或http://<家庭服务地址>（不能含账号密码或片段）" }
+        val headers = mapOf("Authorization" to "Bearer $token", "Accept" to "application/json")
         val part = File(target.parentFile, target.name + ".part")
         try {
-            checkStatus(conn)
-            require(conn.contentLengthLong == entry.sizeBytes) { "下载长度与索引不一致" }
-            require(conn.getHeaderField("X-Content-SHA256") == entry.sha256) { "下载摘要与索引不一致" }
-            var size = 0L
-            conn.inputStream.use { input -> FileOutputStream(part).use { output ->
-                val buffer = ByteArray(64 * 1024)
-                while (true) {
-                    val n = input.read(buffer); if (n < 0) break
-                    size += n
-                    require(size <= entry.sizeBytes && size <= MAX_BYTES) { "下载超过大小限制" }
-                    output.write(buffer, 0, n)
-                }
-                output.fd.sync()
-            } }
-            require(size == entry.sizeBytes && sha256(part) == entry.sha256) { "下载文件校验失败" }
+            // Stream straight to the .part file; verifies length + SHA while copying and
+            // never buffers the 200 MiB body in memory (embedded transport does it in Go).
+            if (operation != null) {
+                transport.downloadToFile(operation, url.toString(), headers, part, entry.sizeBytes, entry.sha256, MAX_BYTES, 120_000)
+            } else {
+                transport.downloadToFile(url.toString(), headers, part, entry.sizeBytes, entry.sha256, MAX_BYTES, 120_000)
+            }
+            require(part.length() == entry.sizeBytes) { "下载长度与索引不一致" }
             val snapshot = Backup.decode(part.readText(Charsets.UTF_8))
             require(snapshot.bills.size.toLong() == entry.billCount) { "备份账单数与索引不一致" }
             require(part.renameTo(target)) { "无法保存下载快照" }
             return snapshot
-        } finally { conn.disconnect(); part.delete() }
+        } finally { part.delete() }
     }
 
-    private fun open(config: RuleSyncConfig, token: String, path: String, method: String): HttpURLConnection {
-        val url = URL(config.serverUrl.trimEnd('/') + path)
-        require(RuleSyncApi.isAllowedServiceUrl(url)) { "家庭服务地址须使用HTTPS、私网HTTP或http://100.65.248.62:18080（不能含账号密码或片段）" }
-        return (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = method; instanceFollowRedirects = false
-            connectTimeout = 15_000; readTimeout = 120_000
-            setRequestProperty("Authorization", "Bearer $token")
-            setRequestProperty("Accept", "application/json")
+    private fun openResponse(
+        config: RuleSyncConfig, token: String, path: String, method: String,
+        transport: FamilyTransport, extraHeaders: Map<String, String> = emptyMap(),
+        body: FamilyTransport.RequestBody? = null,
+    ): FamilyTransport.Response {
+        val url = java.net.URL(config.serverUrl.trimEnd('/') + path)
+        require(RuleSyncApi.isAllowedServiceUrl(url)) { "家庭服务地址须使用HTTPS、私网HTTP或http://<家庭服务地址>（不能含账号密码或片段）" }
+        val headers = LinkedHashMap<String, String>()
+        headers["Authorization"] = "Bearer $token"
+        headers["Accept"] = "application/json"
+        headers.putAll(extraHeaders)
+        return try {
+            transport.execute(method, url.toString(), headers, body, 15_000, 120_000)
+        } catch (e: java.io.IOException) {
+            throw e
+        } catch (e: Exception) {
+            throw RuleSyncApiException("家庭备份网络请求失败")
         }
     }
-    private fun checkStatus(conn: HttpURLConnection) {
-        val code = conn.responseCode
+
+    private fun checkStatus(response: FamilyTransport.Response) {
+        val code = response.status
         if (code !in 200..299) throw RuleSyncApiException(when (code) {
             401, 403 -> "家庭连接已失效，请重新配对"
+            404 -> "备份不存在或已删除"
             409 -> "备份或家庭空间已变化，请重新检查"
+            410 -> "此备份已删除，不能重新上传"
             413 -> "备份超过家庭服务大小限制"
             422 -> "家庭服务拒绝了快照格式或摘要；请检查文件，使用新格式时需升级家庭服务"
             507 -> "家庭服务存储空间不足，已有备份已保留"
@@ -110,8 +158,8 @@ object LedgerBackupApi {
             else -> "家庭备份操作失败（$code），可重试"
         }, code)
     }
-    private fun readObject(conn: HttpURLConnection): Map<*, *> {
-        val bytes = conn.inputStream.use { it.readBytesBounded(1024 * 1024) }
+    private fun readObject(response: FamilyTransport.Response): Map<*, *> {
+        val bytes = response.bodyStream().use { it.readBytesBounded(1024 * 1024) }
         return MiniJson.decode(bytes.toString(Charsets.UTF_8)) as? Map<*, *> ?: error("家庭备份响应无效")
     }
     private fun java.io.InputStream.readBytesBounded(limit: Int): ByteArray {
@@ -120,6 +168,7 @@ object LedgerBackupApi {
         while (true) { val n = read(buffer); if (n < 0) break; require(output.size() + n <= limit) { "家庭备份响应过大" }; output.write(buffer, 0, n) }
         return output.toByteArray()
     }
+
     internal fun entry(row: Map<*, *>): Entry {
         fun text(key: String) = row[key] as? String ?: error("备份索引缺少$key")
         val id = text("id").also { UUID.fromString(it) }

@@ -25,6 +25,8 @@ internal fun AutomationPage(
     enabled: Boolean,
     health: CaptureHealth,
     autoConfirm: Boolean,
+    islandConfirm: Boolean,
+    islandSupported: Boolean,
     capabilities: DeviceCapabilities,
     showsLsp: Boolean,
     notice: CapabilityNotice?,
@@ -33,6 +35,7 @@ internal fun AutomationPage(
     onApplyPreset: (CaptureMode) -> Unit,
     onToggleEnabled: (Boolean) -> Unit,
     onToggleConfirm: (Boolean) -> Unit,
+    onToggleIsland: (Boolean) -> Unit,
     onNavigate: (Route) -> Unit,
     onDismissNotice: () -> Unit = {},
 ) {
@@ -89,6 +92,19 @@ internal fun AutomationPage(
                         leading = { SettingsIconBadge("确认卡", AbIcons.Note) },
                         trailing = { AbSwitch(autoConfirm, onToggleConfirm) },
                         onClick = { onToggleConfirm(!autoConfirm) })
+                }
+            }
+            if (islandSupported) {
+                item {
+                    InsetGroup {
+                        ListRow(title = "超级岛确认（实验性）",
+                            subtitle = if (islandConfirm)
+                                "已开启 · 识别后尝试用系统超级岛提醒，点它打开确认页保存。实验功能：图标与细节仍在完善，部分机型/布局可能显示不全或不出岛，异常时自动回落原确认卡。"
+                            else "实验功能，默认关闭 · 识别后尝试用系统超级岛提醒（仅澎湃OS 小米机型）。功能尚不完善，异常时自动回落原确认卡。",
+                            leading = { SettingsIconBadge("超级岛确认", AbIcons.Note) },
+                            trailing = { AbSwitch(islandConfirm, onToggleIsland) },
+                            onClick = { onToggleIsland(!islandConfirm) })
+                    }
                 }
             }
             item {

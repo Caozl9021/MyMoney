@@ -17,6 +17,7 @@ import io.github.mymoney.data.RecognitionStore
 import io.github.mymoney.data.RecognitionStatus
 import io.github.mymoney.overlay.ConfirmOverlay
 import io.github.mymoney.overlay.OverlayAnchor
+import io.github.mymoney.capture.island.IslandHost
 import com.example.billkit.BillDraft
 import java.util.Locale
 
@@ -58,7 +59,22 @@ object ConfirmDelivery {
             (app.getSystemService(Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager)?.isKeyguardLocked != true
         if (!mayShow()) return "pending-source-disabled"
 
-        // ① 有悬浮窗权限：直接盖一张卡，不启动 Activity（不受 BAL 影响）
+        // ① 超级岛确认（K 阶段方案A，实验开关默认关）：仅"启用 + 具备发送前提"时优先用岛呈现。
+        //    岛只做呈现/提醒，点岛/点按钮统一 contentIntent → ConfirmActivity，由确认页保存/忽略。
+        //    "可能重复"在这里查一次账本（与卡片同一套 ±120000ms 时间窗），不重复查。
+        if (io.github.mymoney.data.Settings(app).islandConfirmEnabled && IslandHost.canShow(app)) {
+            val duplicateSuspected = runCatching {
+                io.github.mymoney.data.DuplicateProbe.findSuspects(io.github.mymoney.data.AppDb.get(app), draft).isNotEmpty()
+            }.getOrDefault(false)
+            if (IslandHost.show(app, draft, duplicateSuspected)) {
+                // 岛已投递即视为"送达用户面前"（等同通知级送达）；实际是否上岛由系统决定，
+                // 但已发通知 + 点开会进确认页，不会丢草稿。后续若无可见证据仍由 K6 实机核查。
+                return "island"
+            }
+            // 发送失败：落回下面原 overlay→Activity→通知三段降级，不丢草稿。
+        }
+
+        // ② 有悬浮窗权限：直接盖一张卡，不启动 Activity（不受 BAL 影响）
         if (ConfirmOverlay.canShow(app) && ConfirmOverlay.show(app, draft, allowed = { mayShow() })) {
             return "overlay"
         }
