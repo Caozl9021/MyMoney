@@ -32,3 +32,33 @@
 | SectionColumn/ListRow | 组间距/触控遵循design tokens；内容长/大字可增高，不机械套叠多层padding |
 
 153 Mi10已实看云备份/历史及恢复预览；154未代操作小米14。143仅在Waydroid400×890/density160的ConfirmActivity同一演示卡实看间距。其他宿主复用实现，但本轮没有逐个实跑；大字/窄屏/深色完整矩阵、Release UI和完整TalkBack未补齐。用户继续操作的演示卡不自动保存、忽略或清理。详见[143证据](../runs/20261105-151939-duplicate-label-spacing/outputs/verification.md)与[验收清单](ACCEPTANCE.md)。
+
+## 2026-11-08 P2 UI 弹窗统一（工作区实现，待验收）
+
+> 基线 1.10.0/158；本轮 P2 只处理 UI 收尾，不改变数据库、备份协议、识别规则或云备份接口。工作区未提交、未发布；以下为源码与 Debug 构建约束。
+
+### AppDialog 2.0
+
+| API | 用途 | 约束 |
+| --- | --- | --- |
+| `AppDialog(title, onDismiss, content)` | 自定义内容底座 | `usePlatformDefaultWidth=false`；宽度上限 400dp；圆角 `AbRadius.card`；内容区 `verticalScroll`、最高 560dp、`imePadding` |
+| `AppDialogActions(...)` | 统一按钮行 | 取消左、确认右、等宽；单按钮通栏；`destructive` 用 `DestructiveButton`；`busy` 时取消禁用并显示 `busyLabel` |
+| `AppAlertDialog(...)` | 纯确认/说明 | 标题 + 正文 + 统一按钮行；危险操作传 `destructive=true` |
+| `AppChoiceDialog(...)` | 单选列表 | `InsetGroup` + `ListRow` + 尾勾；选项多时优先于 Segmented |
+| `AppInputDialog(...)` | 单字段输入 | `InsetGroup` + `InputRow`，不引入 M3 `OutlinedTextField`；业务校验由调用方持有 |
+| `AppActionSheet(...)` | 底部动作面板 | 替代 `DropdownMenu`，ListRow 动作 + 取消；按 `WindowInsets.navigationBars` 留出底部安全区，避免“取消”被系统导航栏裁切 |
+
+### 迁移状态
+
+- 34 处 M3 `AlertDialog` 实际调用已全部迁移；页面代码中 `androidx.compose.material3.AlertDialog`、`Checkbox`、`DropdownMenu` 实际调用为 0。
+- `DiscardChangesDialog` 统一使用 `AppDialog` + `AppDialogActions`。
+- `scripts/check-ui-components.sh` 作为防回归闸门，白名单只允许 `ui/design/AppDialog.kt`；`build-all.sh` 在 clean 前执行该检查。
+- 本批保留 `DatePickerDialog`/`DateRangePicker` 与页面内 `TextButton`、`Snackbar`，不把它们纳入本批硬闸门。
+
+### 验证状态
+
+- `./gradlew :app:testDebugUnitTest :billkit:testDebugUnitTest`：app 950 + billkit 239 项，0 失败、0 错误、0 跳过。
+- 真机（Xiaomi 14 / Android 17）：云备份“更多”动作面板修复底部安全区后，`取消` 完整可见、底角圆角正常；截图 `runs/20261108-p2-ui-polish/shots/real-device-more-sheet-fixed.png`。
+- `./gradlew :app:assembleDebug`：BUILD SUCCESSFUL；`./gradlew :app:assembleRelease`：BUILD SUCCESSFUL；`scripts/check-ui-components.sh` 输出 `UI component check passed.`。
+- Waydroid 实看：云备份页、更多动作面板、恢复默认分类弹窗（浅色/深色/特大字号/360dp 窄屏）、分类预设、添加账户、备注模板、识别规则、记录历史、外观深色、相机权限拒绝弹窗；家庭备份页因无家庭服务连接且当前导航不可达，未做页面级实看。
+- 证据：`runs/20261108-p2-ui-polish/`（截图与 verification.md）。

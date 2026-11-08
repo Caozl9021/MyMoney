@@ -44,6 +44,11 @@ else
     rm -f "$HOME/.gradle/.write_test"
 fi
 
+# UI 组件闸门：禁止页面直接回退到 Material3 弹窗/选择控件
+echo ""
+echo "🔎 检查 UI 组件统一性..."
+./scripts/check-ui-components.sh
+
 # 创建 dist 目录
 mkdir -p dist
 

@@ -54,7 +54,7 @@ private fun Modifier.backgroundForNotes():Modifier = this.then(Modifier.backgrou
 @Composable
 private fun NoteModeChoices(mode:NoteFillMode,onChange:(NoteFillMode)->Unit,enabled:Boolean=true) {
     NoteFillMode.entries.forEachIndexed {index,value->
-        ListRow(title=value.label,subtitle=when(value){NoteFillMode.PRODUCT->"每笔读取当次内容；没有商品说明时留空";NoteFillMode.FIXED->"始终使用你填写的文字";NoteFillMode.NONE->"备注留空，仍可手动填写"},dividerAbove=index>0,onClick={if(enabled)onChange(value)},trailing={RadioButton(selected=mode==value,onClick={onChange(value)},enabled=enabled)})
+        ListRow(title=value.label,subtitle=when(value){NoteFillMode.PRODUCT->"每笔读取当次内容；没有商品说明时留空";NoteFillMode.FIXED->"始终使用你填写的文字";NoteFillMode.NONE->"备注留空，仍可手动填写"},dividerAbove=index>0,onClick={if(enabled)onChange(value)},trailing={if(mode==value)Text("✓",color=LocalAbPalette.current.accent)})
     }
 }
 
@@ -99,8 +99,23 @@ internal fun MerchantNoteRuleEditor(initial:MerchantNoteRule?,onClose:()->Unit,o
             }
         }
     }
-    if(discard)AlertDialog(onDismissRequest={discard=false},title={Text("放弃本次修改？")},text={Text("备注规则还没有保存。")},confirmButton={TextButton(onClick=onClose){Text("放弃修改")}},dismissButton={TextButton(onClick={discard=false}){Text("继续编辑")}})
-    if(deleting)AlertDialog(onDismissRequest={deleting=false},title={Text("删除这条备注规则？")},text={Text("已有账单备注不变，之后恢复默认填充方式。")},confirmButton={TextButton(onClick={commit(true)}){Text("删除")}},dismissButton={TextButton(onClick={deleting=false}){Text("取消")}})
+    if(discard) AppAlertDialog(
+        title = "放弃本次修改？",
+        message = "备注规则还没有保存。",
+        onDismiss = { discard=false },
+        confirmLabel = "放弃修改",
+        onConfirm = onClose,
+        dismissLabel = "继续编辑",
+        destructive = true,
+    )
+    if(deleting) AppAlertDialog(
+        title = "删除这条备注规则？",
+        message = "已有账单备注不变，之后恢复默认填充方式。",
+        onDismiss = { deleting=false },
+        confirmLabel = "删除",
+        onConfirm = { commit(true) },
+        destructive = true,
+    )
 }
 
 @Composable

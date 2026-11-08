@@ -9,9 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -33,6 +31,7 @@ import io.github.mymoney.ui.design.AbIcons
 import io.github.mymoney.ui.design.AbSpacing
 import io.github.mymoney.ui.design.AbTextField
 import io.github.mymoney.ui.design.AbType
+import io.github.mymoney.ui.design.AppAlertDialog
 import io.github.mymoney.ui.design.GroupFooter
 import io.github.mymoney.ui.design.GroupHeader
 import io.github.mymoney.ui.design.IconBadge
@@ -160,12 +159,13 @@ internal fun RulesActionDialog(state: RulesSectionsState) {
         RuleBulkAction.CLEAR_STATS -> "清除最近7天按日期、应用和结果记录的识别次数。" +
             "保留账单、记录历史、规则和诊断样本。此操作不可撤销。"
     }
-    AlertDialog(
-        onDismissRequest = state.dismissAction,
-        title = { Text(title, style = AbType.headline, color = p.label) },
-        text = { Text(impact, style = AbType.body, color = p.secondaryLabel) },
-        confirmButton = { TextButton(onClick = state.confirmAction) { Text("确认", color = p.red) } },
-        dismissButton = { TextButton(onClick = state.dismissAction) { Text("取消", color = p.secondaryLabel) } },
+    AppAlertDialog(
+        title = title,
+        message = impact,
+        onDismiss = state.dismissAction,
+        confirmLabel = "确认",
+        onConfirm = state.confirmAction,
+        destructive = true,
     )
 }
 

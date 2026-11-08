@@ -5,10 +5,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
@@ -205,13 +202,20 @@ fun RecognitionHistoryScreen(onBack: () -> Unit, initialFilter: String = "ALL", 
             BillActionsHost(billId = removed.principalId, onClose = { selectedDeletionId = null }, deletedSnapshot = removed)
         }
     }
-    timeline?.let { text -> AlertDialog(onDismissRequest = { timeline = null }, title = { Text("来源与投递记录") },
-        text = { Text(text, modifier = Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState())) },
-        confirmButton = { TextButton(onClick = { timeline = null }) { Text("关闭") } }) }
-    if (confirmClear) AlertDialog(onDismissRequest = { if (!busy) confirmClear = false },
-        title = { Text("清理已忽略记录？") },
-        text = { Text("将永久删除 ${records.count { it.status == RecognitionStatus.IGNORED }} 条已忽略的识别记录，之后无法重新确认。不会删除账本、待处理、已记账或删除历史记录。建议先导出 JSON 备份。") },
-        confirmButton = { DestructiveButton(text = "确认清理", busy = busy, busyLabel = "正在清理…", onClick = {
+    timeline?.let { text -> AppAlertDialog(
+        title = "来源与投递记录",
+        message = text,
+        onDismiss = { timeline = null },
+        confirmLabel = "关闭",
+        dismissLabel = null,
+        onConfirm = { timeline = null },
+    ) }
+    if (confirmClear) AppAlertDialog(
+        title = "清理已忽略记录？",
+        message = "将永久删除 ${records.count { it.status == RecognitionStatus.IGNORED }} 条已忽略的识别记录，之后无法重新确认。不会删除账本、待处理、已记账或删除历史记录。建议先导出 JSON 备份。",
+        onDismiss = { if (!busy) confirmClear = false },
+        confirmLabel = "确认清理",
+        onConfirm = {
             busy = true
             scope.launch {
                 runCatching { RecognitionStore.clearIgnored() }
@@ -220,8 +224,11 @@ fun RecognitionHistoryScreen(onBack: () -> Unit, initialFilter: String = "ALL", 
                 busy = false
                 confirmClear = false
             }
-        }) },
-        dismissButton = { TextButton(enabled = !busy, onClick = { confirmClear = false }) { Text("取消") } })
+        },
+        destructive = true,
+        busy = busy,
+        busyLabel = "正在清理…",
+    )
 }
 
 private fun historyTime(value: Long): String = if (value <= 0L) "未知" else SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.CHINA).format(Date(value))

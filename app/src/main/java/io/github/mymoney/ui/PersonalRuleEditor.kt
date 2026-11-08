@@ -3,9 +3,6 @@ package io.github.mymoney.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -150,24 +147,45 @@ internal fun PersonalRuleEditor(id: String, initial: PersonalRule?, records: Lis
                 }
             }
         }
-        if(chooseSample) AlertDialog(onDismissRequest={chooseSample=false},title={Text("选择未识别记录")},text={
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                val eligible=records.filter { !it.match && PersonalRuleEngine.input(it.app,it.type,it.data)!=null }
-                if(eligible.isEmpty()) Text("暂无可用记录，可以先手工填写示例。只支持当前微信、支付宝的支付页面、标准支付凭证或交易通知。")
-                eligible.forEach { row ->
-                    val value=PersonalRuleEngine.input(row.app,row.type,row.data)!!
-                    TextButton(onClick={
-                        sampleId=row.id;app=row.app;source=row.type
-                        if(keyword.isBlank()) keyword=value.merchant.take(80)
-                        if(name.isBlank()) name=(ruleAppName(row.app)+" · "+value.merchant.ifBlank { "个人规则" }).take(40)
-                        type=when { value.title.contains("退款") -> "Refund"; value.title.contains("收款") -> "Income"; else -> "Expend" }
-                        chooseSample=false
-                    }) { Text("${ruleAppName(row.app)} · ${SimpleDateFormat("MM-dd HH:mm",Locale.US).format(Date(row.time))}\n${value.merchant.ifBlank { value.title }}") }
+        if(chooseSample) {
+            val eligible=records.filter { !it.match && PersonalRuleEngine.input(it.app,it.type,it.data)!=null }
+            AppDialog(title = "选择未识别记录", onDismiss = { chooseSample=false }) {
+                if(eligible.isEmpty()) {
+                    Text("暂无可用记录，可以先手工填写示例。只支持当前微信、支付宝的支付页面、标准支付凭证或交易通知。")
+                } else {
+                    InsetGroup {
+                        eligible.forEachIndexed { index, row ->
+                            val value=PersonalRuleEngine.input(row.app,row.type,row.data)!!
+                            ListRow(
+                                title="${ruleAppName(row.app)} · ${SimpleDateFormat("MM-dd HH:mm",Locale.US).format(Date(row.time))}",
+                                subtitle=value.merchant.ifBlank { value.title },
+                                dividerAbove=index>0,
+                                onClick={
+                                    sampleId=row.id;app=row.app;source=row.type
+                                    if(keyword.isBlank()) keyword=value.merchant.take(80)
+                                    if(name.isBlank()) name=(ruleAppName(row.app)+" · "+value.merchant.ifBlank { "个人规则" }).take(40)
+                                    type=when { value.title.contains("退款") -> "Refund"; value.title.contains("收款") -> "Income"; else -> "Expend" }
+                                    chooseSample=false
+                                },
+                            )
+                        }
+                    }
                 }
+                SecondaryButton("返回填写", onClick = { chooseSample=false }, modifier = Modifier.fillMaxWidth())
             }
-        },confirmButton={TextButton(onClick={chooseSample=false}){Text("返回填写")}})
-        if(showDiscard) AlertDialog(onDismissRequest={showDiscard=false},title={Text("放弃本次修改？")},text={Text("规则还没有保存，离开后需要重新填写。")},confirmButton={TextButton(onClick=onClose){Text("放弃修改")}},dismissButton={TextButton(onClick={showDiscard=false}){Text("继续编辑")}})
-        if(showDelete) AlertDialog(onDismissRequest={showDelete=false},title={Text("删除这条个人规则？")},text={Text("不影响已有账单和其他规则，删除后不再使用这条规则识别新交易。")},
-            confirmButton={TextButton(enabled=!busy,onClick={commit(true)}){Text("删除")}},dismissButton={TextButton(onClick={showDelete=false}){Text("取消")}})
+        }
+        if(showDiscard) DiscardChangesDialog(
+            onContinue = { showDiscard=false },
+            onDiscard = onClose,
+        )
+        if(showDelete) AppAlertDialog(
+            title = "删除这条个人规则？",
+            message = "不影响已有账单和其他规则，删除后不再使用这条规则识别新交易。",
+            onDismiss = { showDelete=false },
+            confirmLabel = "删除",
+            onConfirm = { commit(true) },
+            destructive = true,
+            busy = busy,
+        )
     }
 }

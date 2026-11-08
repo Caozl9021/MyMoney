@@ -298,23 +298,31 @@ internal fun EmptyLedgerPickerActions(label: String, enabled: Boolean, onAdd: (S
             androidx.compose.material3.TextButton(enabled = enabled, onClick = { restoreError = null; restoring = true }) { Text("恢复默认清单") }
         }
     }
-    if (adding) androidx.compose.material3.AlertDialog(
-        onDismissRequest = { adding = false },
-        title = { Text("新增$label") },
-        text = { Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-            androidx.compose.material3.OutlinedTextField(value = name, onValueChange = { name = it; addError = null },
-                label = { Text("${label}名") }, singleLine = true, isError = addError != null)
-            if (addError != null) InlineMessage(addError.orEmpty(), isError = true, announce = true)
-        } },
-        confirmButton = { androidx.compose.material3.TextButton(enabled = name.isNotBlank() && enabled,
-            onClick = {
+    if (adding) AppDialog(title = "新增$label", onDismiss = { adding = false }) {
+        Text("${label}名", style = AbType.footnote, color = p.secondaryLabel)
+        Box(
+            Modifier.fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(p.fill)
+                .padding(horizontal = AbSpacing.m, vertical = 12.dp),
+        ) {
+            AbTextField(value = name, onValueChange = { name = it; addError = null },
+                placeholder = "例如：${label}名",
+                modifier = Modifier.fillMaxWidth())
+        }
+        if (addError != null) InlineMessage(addError.orEmpty(), isError = true, announce = true)
+        AppDialogActions(
+            confirmLabel = "添加",
+            onConfirm = {
                 addError = null
                 runCatching { onAdd(name.trim()) }
                     .onSuccess { name = ""; adding = false }
                     .onFailure { addError = it.message ?: "新增${label}失败，请重试" }
-            }) { Text("添加") } },
-        dismissButton = { androidx.compose.material3.TextButton(onClick = { adding = false }) { Text("取消") } },
-    )
+            },
+            onDismiss = { adding = false },
+            confirmEnabled = name.isNotBlank() && enabled,
+        )
+    }
     if (restoring) RestoreLedgerDefaultsDialog(
         onDismiss = { restoring = false },
         errorMessage = restoreError,

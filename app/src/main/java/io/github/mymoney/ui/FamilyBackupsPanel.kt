@@ -2,15 +2,8 @@ package io.github.mymoney.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
-import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,6 +16,12 @@ import io.github.mymoney.data.BackupStore
 import io.github.mymoney.data.rulesync.LedgerBackupApi
 import io.github.mymoney.data.rulesync.RuleSyncCoordinator
 import io.github.mymoney.data.rulesync.LedgerBackupCoordinator
+import io.github.mymoney.ui.design.AbSwitch
+import io.github.mymoney.ui.design.AppAlertDialog
+import io.github.mymoney.ui.design.AppChoiceDialog
+import io.github.mymoney.ui.design.AppDialog
+import io.github.mymoney.ui.design.AppDialogActions
+import io.github.mymoney.ui.design.AppDialogChoice
 import io.github.mymoney.ui.design.InsetGroup
 import io.github.mymoney.ui.design.ListRow
 import io.github.mymoney.ui.design.PrimaryButton
@@ -44,6 +43,7 @@ internal fun FamilyBackupsPanel() {
     var hasMore by remember { mutableStateOf(false) }
     var listed by remember { mutableStateOf(false) }
     var preview by remember { mutableStateOf<LedgerBackupCoordinator.Preview?>(null) }
+    var showRestoreMode by remember { mutableStateOf(false) }
     var restoreConfiguration by remember { mutableStateOf(false) }
     var mode by remember { mutableStateOf<BackupStore.Mode?>(null) }
     var recoveryPoint by remember { mutableStateOf(File(context.filesDir, "ledger-backups").listFiles()
@@ -127,37 +127,61 @@ internal fun FamilyBackupsPanel() {
     if (message.isNotBlank()) ListRow(title = "账本备份状态", subtitle = message)
 
     val current = preview
-    if (current != null && mode == null) AlertDialog(
-        onDismissRequest = { if (!busy) preview = null },
-        title = { Text("账本恢复预览") },
-        text = { Column(Modifier.verticalScroll(rememberScrollState())) { Text("来源：${current.entry.deviceName}\n日期：${backupDate(current.entry.snapshotAt)}\n账单 ${current.snapshot.bills.size} 笔，识别记录 ${current.snapshot.history.orEmpty().size} 条、删除记录 ${current.snapshot.deletions.orEmpty().size} 条，资产账户 ${current.snapshot.assets?.accounts.orEmpty().size} 个。\n\n合并会跳过已有账单；覆盖会替换当前账本。恢复前将保存本机快照。当前规则、分类与备注设置、设备权限及家庭连接默认保留。")
-            if (current.snapshot.ledger != null) Row {
-                Checkbox(checked = restoreConfiguration, onCheckedChange = { restoreConfiguration = it })
-                Text("同时恢复分类、记账周期和备注配置；备注规则会作为本机修改参与家庭同步。")
+    if (current != null && !showRestoreMode && mode == null) AppDialog(
+        title = "账本恢复预览",
+        onDismiss = { if (!busy) { preview = null; restoreConfiguration = false } },
+    ) {
+        Text("来源：${current.entry.deviceName}\n日期：${backupDate(current.entry.snapshotAt)}\n账单 ${current.snapshot.bills.size} 笔，识别记录 ${current.snapshot.history.orEmpty().size} 条、删除记录 ${current.snapshot.deletions.orEmpty().size} 条，资产账户 ${current.snapshot.assets?.accounts.orEmpty().size} 个。\n\n合并会跳过已有账单；覆盖会替换当前账本。恢复前将保存本机快照。当前规则、分类与备注设置、设备权限及家庭连接默认保留。")
+        if (current.snapshot.ledger != null) {
+            InsetGroup {
+                ListRow(
+                    title = "同时恢复分类、记账周期和备注配置",
+                    subtitle = "备注规则会作为本机修改参与家庭同步。",
+                    trailing = { AbSwitch(restoreConfiguration) { restoreConfiguration = it } },
+                    onClick = { restoreConfiguration = !restoreConfiguration },
+                )
             }
-        } },
-        confirmButton = { TextButton(onClick = { mode = BackupStore.Mode.MERGE }) { Text("选择合并") } },
-        dismissButton = { Column {
-            TextButton(onClick = { mode = BackupStore.Mode.REPLACE }) { Text("选择覆盖") }
-            TextButton(onClick = { preview = null }) { Text("取消") }
-        } },
+        }
+        AppDialogActions(
+            confirmLabel = "继续",
+            onConfirm = { showRestoreMode = true },
+            dismissLabel = "取消",
+            onDismiss = { preview = null; restoreConfiguration = false },
+            busy = busy,
+        )
+    }
+    if (current != null && showRestoreMode) AppChoiceDialog(
+        title = "选择恢复方式",
+        options = listOf(
+            AppDialogChoice("merge", "合并", "跳过已有账单，冲突时停止并保留当前账本。"),
+            AppDialogChoice("replace", "覆盖", "用所选快照替换当前账单、资产与识别记录。"),
+        ),
+        selectedKey = null,
+        onChoose = { key ->
+            mode = if (key == "replace") BackupStore.Mode.REPLACE else BackupStore.Mode.MERGE
+            showRestoreMode = false
+        },
+        onDismiss = { showRestoreMode = false },
     )
     val selected = mode
-    if (current != null && selected != null) AlertDialog(
-        onDismissRequest = { if (!busy) mode = null },
-        title = { Text(if (selected == BackupStore.Mode.REPLACE) "确认覆盖本机账本？" else "确认合并账本？") },
-        text = { Text((if (selected == BackupStore.Mode.REPLACE)
+    if (current != null && selected != null) AppAlertDialog(
+        title = if (selected == BackupStore.Mode.REPLACE) "确认覆盖本机账本？" else "确认合并账本？",
+        message = (if (selected == BackupStore.Mode.REPLACE)
             "将用所选快照替换当前账单、资产与识别记录；删除日志按事件合并，保留本机日志。先保存本机恢复前快照；保存失败将停止恢复。请确认来源和日期正确。"
             else "将按账单与资产身份合并；冲突时停止并保留当前账本。先保存本机恢复前快照。") +
-            if (restoreConfiguration) "\n已选择恢复个人配置；备注配置会参与家庭同步。设备权限与家庭连接保留。" else "") },
-        confirmButton = { TextButton(enabled = !busy, onClick = { runOperation {
+            if (restoreConfiguration) "\n已选择恢复个人配置；备注配置会参与家庭同步。设备权限与家庭连接保留。" else "",
+        onDismiss = { if (!busy) { mode = null; preview = null } },
+        confirmLabel = "确认恢复",
+        onConfirm = { runOperation {
             val result = LedgerBackupCoordinator.restore(context, current, selected, restoreConfiguration)
             RuleSyncCoordinator.refreshStatus()
             message = "恢复完成：新增 ${result.stats.bills} 笔。恢复前快照已在本机保留，可导出。${result.stats.assetWarning.orEmpty()}"
             recoveryPoint = result.preRestoreFile
-            preview = null; mode = null
-        } }) { Text(if (busy) "正在恢复…" else "确认恢复") } },
-        dismissButton = { TextButton(enabled = !busy, onClick = { mode = null; preview = null }) { Text("取消") } },
+            preview = null; mode = null; restoreConfiguration = false
+        } },
+        destructive = selected == BackupStore.Mode.REPLACE,
+        busy = busy,
+        busyLabel = "正在恢复…",
     )
 }
 

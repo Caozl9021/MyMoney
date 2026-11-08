@@ -236,17 +236,21 @@ fun BillActionsHost(
         if (linkConfirm && bill != null && deletedSnapshot == null) {
             val linkedAccount = assetAccounts.firstOrNull { it.id == bill.accountId }
                 ?: assetAccounts.firstOrNull { it.name == bill.account }
-            androidx.compose.material3.AlertDialog(onDismissRequest = { if (!linking) linkConfirm = false },
-                title = { Text("将这笔账单计入余额？") },
-                text = { Text("${linkedAccount?.name ?: bill.account ?: "未指定账户"}\n本次余额变动 ${assetMoney(io.github.mymoney.data.AssetMath.delta(bill.type, bill.priceCents))}\n若当前余额已包含这笔账单，请取消，以免重复扣算。") },
-                confirmButton = { TextButton(enabled = !linking, onClick = {
+            AppAlertDialog(
+                title = "将这笔账单计入余额？",
+                message = "${linkedAccount?.name ?: bill.account ?: "未指定账户"}\n本次余额变动 ${assetMoney(io.github.mymoney.data.AssetMath.delta(bill.type, bill.priceCents))}\n若当前余额已包含这笔账单，请取消，以免重复扣算。",
+                onDismiss = { if (!linking) linkConfirm = false },
+                confirmLabel = "确认计入",
+                onConfirm = {
                     linking = true
                     BillWriter.linkAsset(app, bill.id) { result ->
                         linking = false
                         result.onSuccess { linkConfirm = false }.onFailure { deleteError = it.message ?: "计入余额失败"; linkConfirm = false }
                     }
-                }) { Text(if (linking) "处理中…" else "确认计入") } },
-                dismissButton = { TextButton(enabled = !linking, onClick = { linkConfirm = false }) { Text("取消") } })
+                },
+                busy = linking,
+                busyLabel = "处理中…",
+            )
         }
         parentId?.let { id -> BillActionsHost(id, onClose = { parentId = null }) }
         if (editing && bill != null && deletedSnapshot == null) {

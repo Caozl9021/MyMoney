@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -38,6 +37,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import io.github.mymoney.ui.design.AppAlertDialog
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -149,10 +149,12 @@ private fun CameraPreview(
 /** 权限被拒时的轻提示对话框：引导用户改用粘贴连接码或去系统设置授权。 */
 @Composable
 internal fun CameraPermissionDialog(onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("需要相机权限") },
-        text = { Text("扫码连接需要相机权限。若不方便授权，可返回改用「粘贴连接码」。") },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("知道了") } },
+    AppAlertDialog(
+        title = "需要相机权限",
+        message = "扫码连接需要相机权限。若不方便授权，可返回改用「粘贴连接码」。",
+        onDismiss = onDismiss,
+        confirmLabel = "知道了",
+        dismissLabel = null,
+        onConfirm = onDismiss,
     )
 }

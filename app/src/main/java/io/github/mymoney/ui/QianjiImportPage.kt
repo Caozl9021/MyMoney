@@ -8,10 +8,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -207,11 +205,13 @@ internal fun QianjiImportPage(onBack: () -> Unit) {
             }
         }
     }
-    if (confirm) AlertDialog(onDismissRequest = { if (!busy) confirm = false }, title = { Text("导入到当前账本？") },
-        text = { Text("将新增 ${report?.count(QianjiImport.State.READY) ?: 0} 条账单，跳过其余记录。原账本名称和预览列出的附加信息不会保留，资产余额保持不变。") },
-        dismissButton = { TextButton(enabled = !busy, onClick = { confirm = false }) { Text("取消") } },
-        confirmButton = { TextButton(enabled = !busy, onClick = {
-            val doc = report?.document ?: return@TextButton
+    if (confirm) AppAlertDialog(
+        title = "导入到当前账本？",
+        message = "将新增 ${report?.count(QianjiImport.State.READY) ?: 0} 条账单，跳过其余记录。原账本名称和预览列出的附加信息不会保留，资产余额保持不变。",
+        onDismiss = { if (!busy) confirm = false },
+        confirmLabel = "确认导入",
+        onConfirm = {
+            val doc = report?.document ?: return@AppAlertDialog
             busy = true; error = null
             scope.launch {
                 runCatching { withContext(Dispatchers.IO) { QianjiImport.commit(AppDb.get(context), doc) } }
@@ -222,7 +222,10 @@ internal fun QianjiImportPage(onBack: () -> Unit) {
                     }.onFailure { error = "导入失败，本次未写入：${it.message}" }
                 busy = false; confirm = false
             }
-        }) { Text(if (busy) "正在导入…" else "确认导入") } })
+        },
+        busy = busy,
+        busyLabel = "正在导入…",
+    )
 }
 
 private fun qianjiTypeLabel(type: String) = when(type) { "EXPENSE" -> "支出"; "INCOME" -> "收入"; else -> "转账" }

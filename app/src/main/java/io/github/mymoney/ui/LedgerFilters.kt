@@ -207,9 +207,10 @@ private fun LedgerSearchField(
 
 @Composable
 private fun LedgerChoiceDialog(title: String, onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
-    AlertDialog(onDismissRequest = onDismiss, title = { Text(title) }, text = {
-        Column(Modifier.fillMaxWidth().heightIn(max = 400.dp).verticalScroll(rememberScrollState()), content = content)
-    }, confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } })
+    AppDialog(title = title, onDismiss = onDismiss) {
+        content()
+        SecondaryButton("关闭", onClick = onDismiss, modifier = Modifier.fillMaxWidth())
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

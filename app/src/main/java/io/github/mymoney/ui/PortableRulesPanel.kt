@@ -3,9 +3,6 @@ package io.github.mymoney.ui
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -154,25 +151,50 @@ internal fun PortableRulesPanel(showAdvanced: Boolean, onAdvancedChanged: (Boole
             }
         }
     }
-    if(pendingZip!=null || pendingPersonal!=null) AlertDialog(onDismissRequest={if(!busy){pendingZip=null;pendingPersonal=null}},title={Text("导入这些规则？")},
-        text={Text(description,modifier=Modifier.verticalScroll(rememberScrollState()))},
-        confirmButton={TextButton(enabled=!busy,onClick={action {
+    if(pendingZip!=null || pendingPersonal!=null) AppAlertDialog(
+        title = "导入这些规则？",
+        message = description,
+        onDismiss = { if(!busy){pendingZip=null;pendingPersonal=null} },
+        confirmLabel = "确认导入",
+        onConfirm = { action {
             val zip=pendingZip;val text=pendingPersonal
             if(zip!=null) SpecRuleStore.importPackage(context,zip) else SpecRuleStore.importPersonalRules(context,requireNotNull(text))
             pendingZip=null;pendingPersonal=null;"规则已导入，接下来的交易会使用新规则"
-        }}){Text("确认导入")}},dismissButton={TextButton(enabled=!busy,onClick={pendingZip=null;pendingPersonal=null}){Text("取消")}})
-    confirm?.let { title -> AlertDialog(onDismissRequest={confirm=null},title={Text("$title？")},text={Text("个人规则、已有账单和用户设置都会保留，不重新处理历史交易。")},
-        confirmButton={TextButton(enabled=!busy,onClick={action {
+        } },
+        busy = busy,
+    )
+    confirm?.let { title -> AppAlertDialog(
+        title = "$title？",
+        message = "个人规则、已有账单和用户设置都会保留，不重新处理历史交易。",
+        onDismiss = { confirm=null },
+        confirmLabel = "确认",
+        onConfirm = { action {
             if(title=="恢复上一版官方规则") SpecRuleStore.rollbackPackage(context) else SpecRuleStore.restoreBuiltin(context)
             confirm=null;"$title 已完成"
-        }}){Text("确认")}},dismissButton={TextButton(onClick={confirm=null}){Text("取消")}}) }
-    details?.let { value -> AlertDialog(onDismissRequest={details=null},title={Text("规则说明")},text={Text(value,modifier=Modifier.verticalScroll(rememberScrollState()))},confirmButton={TextButton(onClick={details=null}){Text("知道了")}}) }
+        } },
+        busy = busy,
+    ) }
+    details?.let { value -> AppAlertDialog(
+        title = "规则说明",
+        message = value,
+        onDismiss = { details=null },
+        confirmLabel = "知道了",
+        dismissLabel = null,
+        onConfirm = { details=null },
+    ) }
     if(noteRules) NoteFillRulesPage(onBack={noteRules=false})
     editorId?.let { id -> PersonalRuleEditor(id,state.personalRules.firstOrNull { it.id==id },records,onClose={editorId=null},onSaved={message=it;editorId=null}) }
-    if(showSamples) AlertDialog(onDismissRequest={showSamples=false},title={Text("选择记录")},text={Column(Modifier.verticalScroll(rememberScrollState())) {
-        if(records.isEmpty()) Text("暂无保存的记录")
-        records.forEach { row -> TextButton(enabled=!busy,onClick={ action { val result=SpecRuleStore.preview(context,row);showSamples=false;result } }) {
-            Text("${ruleAppName(row.app)} · ${if(row.match) "已识别" else "未识别"}记录 #${row.id}")
-        } }
-    }},confirmButton={TextButton(onClick={showSamples=false}){Text("关闭")}})
+    if(showSamples) AppDialog(title = "选择记录", onDismiss = { showSamples=false }) {
+        InsetGroup {
+            if(records.isEmpty()) ListRow(title="暂无保存的记录")
+            records.forEachIndexed { index, row ->
+                ListRow(
+                    title = "${ruleAppName(row.app)} · ${if(row.match) "已识别" else "未识别"}记录 #${row.id}",
+                    dividerAbove = index > 0,
+                    onClick = { action { val result=SpecRuleStore.preview(context,row);showSamples=false;result } },
+                )
+            }
+        }
+        SecondaryButton("关闭", onClick = { showSamples=false }, modifier = Modifier.fillMaxWidth())
+    }
 }

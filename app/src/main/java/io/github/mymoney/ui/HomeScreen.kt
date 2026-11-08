@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -44,6 +43,7 @@ import io.github.mymoney.data.BillEntity
 import io.github.mymoney.data.RecognitionStore
 import io.github.mymoney.data.RecognitionStatus
 import io.github.mymoney.ui.design.AbIcons
+import io.github.mymoney.ui.design.AppDialog
 import io.github.mymoney.ui.design.AbRadius
 import io.github.mymoney.ui.design.AbSpacing
 import io.github.mymoney.ui.design.AbType
@@ -57,6 +57,7 @@ import io.github.mymoney.ui.design.ListRow
 import io.github.mymoney.ui.design.LocalAbPalette
 import io.github.mymoney.ui.design.PageScaffold
 import io.github.mymoney.ui.design.formatAmount
+import io.github.mymoney.ui.design.SecondaryButton
 
 /** 首页：紧凑月概览、待处理与按完整自然日分组的账单卡片。 */
 @Composable
@@ -261,17 +262,15 @@ fun HomeScreen(
         }
         }
     }
-    if (healthDetails) AlertDialog(
-        onDismissRequest = { healthDetails = false },
-        title = { Text("识别状态") },
-        text = { CaptureHealthCard(health) { action ->
+    if (healthDetails) AppDialog(title = "识别状态", onDismiss = { healthDetails = false }) {
+        CaptureHealthCard(health) { action ->
             healthDetails = false
             performCaptureAction(context, action, onOpenSettings) {
                 historyFilter = RecognitionStatus.PENDING; historyOpen = true
             }
-        } },
-        confirmButton = { TextButton(onClick = { healthDetails = false }) { Text("关闭") } },
-    )
+        }
+        SecondaryButton("关闭", onClick = { healthDetails = false }, modifier = Modifier.fillMaxWidth())
+    }
     selectedId?.let { id ->
         Box(Modifier.fillMaxSize().zIndex(10f)) {
             BillActionsHost(billId = id, onClose = { selectedId = null; sourcePreview = null }, sourcePreview = sourcePreview)

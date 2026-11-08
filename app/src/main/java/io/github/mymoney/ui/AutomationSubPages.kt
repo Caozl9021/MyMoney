@@ -118,12 +118,15 @@ private fun ScreenTextConsentRow() {
             } }, onClick = if (!io.github.mymoney.ocr.LocalOcrEngine.isSupported) null else ({ explain = true }))
         error?.let { ListRow(title = it) }
     }
-    if (explain) androidx.compose.material3.AlertDialog(onDismissRequest = { explain = false },
-        title = { Text("允许页面文字补全？") },
-        text = { Text("仅在微信、支付宝可确认的付款或账单页面，必要时读取截图并在本机识别。不上传、不永久保存原图，也不自动保存账单。密码和验证页面会跳过；已有识别方式继续可用。") },
-        confirmButton = { androidx.compose.material3.TextButton(onClick = {
+    if (explain) AppAlertDialog(
+        title = "允许页面文字补全？",
+        message = "仅在微信、支付宝可确认的付款或账单页面，必要时读取截图并在本机识别。不上传、不永久保存原图，也不自动保存账单。密码和验证页面会跳过；已有识别方式继续可用。",
+        onDismiss = { explain = false },
+        confirmLabel = "同意并开启",
+        onConfirm = {
             if (io.github.mymoney.ocr.LocalOcrEngine.isSupported && prefs.setEnabled(true)) { enabled = true; explain = false }
             else { error = "当前无法启用，请检查系统版本或稍后重试"; explain = false }
-        }) { Text("同意并开启") } },
-        dismissButton = { androidx.compose.material3.TextButton(onClick = { explain = false }) { Text("暂不开启") } })
+        },
+        dismissLabel = "暂不开启",
+    )
 }

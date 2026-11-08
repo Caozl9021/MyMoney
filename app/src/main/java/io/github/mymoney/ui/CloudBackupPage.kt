@@ -6,11 +6,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -230,16 +225,19 @@ internal fun CloudBackupPage(
     scannedText?.let { raw ->
         val invite = remember(raw) { runCatching { FamilyInvite.parse(raw) }.getOrNull() }
         val okCode = invite != null && FamilyInvite.isConnectCode(invite)
-        AlertDialog(onDismissRequest = { scannedText = null; scannedError = "" },
-            title = { Text(if (okCode) "扫描到连接码" else "这不是有效的连接码") },
-            text = { Text(if (okCode) "设备：${invite!!.deviceName.ifBlank { "未命名" }}\n服务器：${invite.serverUrl}\n\n确认后将连接并登记此设备；接替原设备时可保留历史备份。" else "请确认扫的是服务器管理页「连接新设备」生成的二维码，或改用粘贴连接码。") },
-            confirmButton = {
-                if (okCode) TextButton(enabled = !busy, onClick = {
+        AppAlertDialog(
+            title = if (okCode) "扫描到连接码" else "这不是有效的连接码",
+            message = if (okCode) "设备：${invite!!.deviceName.ifBlank { "未命名" }}\n服务器：${invite.serverUrl}\n\n确认后将连接并登记此设备；接替原设备时可保留历史备份。" else "请确认扫的是服务器管理页「连接新设备」生成的二维码，或改用粘贴连接码。",
+            onDismiss = { scannedText = null; scannedError = "" },
+            confirmLabel = if (okCode) "连接" else "重扫",
+            confirmEnabled = !busy,
+            onConfirm = {
+                if (okCode) {
                     val toConnect = raw; scannedText = null
                     operate { doConnect(toConnect) }
-                }) { Text("连接") } else TextButton(onClick = { scannedText = null }) { Text("重扫") }
+                } else scannedText = null
             },
-            dismissButton = { TextButton(onClick = { scannedText = null; scannedError = "" }) { Text("取消") } })
+        )
         return
     }
     if (showPermissionHint) {
@@ -272,10 +270,16 @@ internal fun CloudBackupPage(
             // file screen and connection management stay reachable while the server is unreachable.
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = { menuExpanded = true }) { Text("更多") }
-                DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-                    DropdownMenuItem(text = { Text("连接管理") }, onClick = { menuExpanded = false; onOpenConnection() })
-                    DropdownMenuItem(text = { Text("本地备份文件") }, onClick = { menuExpanded = false; onOpenLocalFiles() })
-                }
+            }
+            if (menuExpanded) {
+                AppActionSheet(
+                    title = "更多",
+                    actions = listOf(
+                        AppAction("连接管理") { onOpenConnection() },
+                        AppAction("本地备份文件") { onOpenLocalFiles() },
+                    ),
+                    onDismiss = { menuExpanded = false },
+                )
             }
         }
         if ((destination == CloudBackupDestination.HOME || destination == CloudBackupDestination.CONNECTION) && needsAuthorization && enrollment == null) {
@@ -378,24 +382,38 @@ internal fun CloudBackupPage(
         }
         if (message.isNotBlank()) InsetGroup { ListRow(title = "状态", subtitle = message) }
     }
-    sourceToReplace?.let { source -> AlertDialog(onDismissRequest = { if (!busy) sourceToReplace = null },
-        title = { Text("接替“${source.name}”？") },
-        text = { Text("原安装将失去访问权限，历史备份完整保留。若原设备仍在使用，请确认没有选错。") },
-        confirmButton = { TextButton(enabled = !busy, onClick = { operate { finishConnection(if (enrollmentLocked) submittedSource else source) } }) { Text(if (enrollmentLocked) "重试确认连接" else "确认接替") } },
-        dismissButton = { TextButton(enabled = !busy, onClick = { sourceToReplace = null }) { Text("取消") } }) }
-    if (showSignOut) AlertDialog(onDismissRequest = { if (!busy) showSignOut = false }, title = { Text("退出云备份连接？") },
-        text = { Text("撤销此安装的访问权限，服务器上的历史备份保留。再次连接需要授权接替原设备。") },
-        confirmButton = { TextButton(enabled = !busy, onClick = { operate {
-            CloudBackupCoordinator.disconnect(context); showSignOut = false; verified = false; needsAuthorization = true
-            lastBackup = "尚未备份"; entries = emptyList(); message = "已退出，历史备份保留"
-        } }) { Text("退出连接") } }, dismissButton = { TextButton(enabled = !busy, onClick = { showSignOut = false }) { Text("取消") } })
+    sourceToReplace?.let { source -> AppAlertDialog(
+        title = "接替“${source.name}”？",
+        message = "原安装将失去访问权限，历史备份完整保留。若原设备仍在使用，请确认没有选错。",
+        onDismiss = { if (!busy) sourceToReplace = null },
+        confirmLabel = if (enrollmentLocked) "重试确认连接" else "确认接替",
+        onConfirm = { operate { finishConnection(if (enrollmentLocked) submittedSource else source) } },
+        destructive = true,
+        busy = busy,
+    ) }
+    if (showSignOut) AppAlertDialog(
+        title = "退出云备份连接？",
+        message = "撤销此安装的访问权限，服务器上的历史备份保留。再次连接需要授权接替原设备。",
+        onDismiss = { if (!busy) showSignOut = false },
+        confirmLabel = "退出连接",
+        onConfirm = {
+            operate {
+                CloudBackupCoordinator.disconnect(context); showSignOut = false; verified = false; needsAuthorization = true
+                lastBackup = "尚未备份"; entries = emptyList(); message = "已退出，历史备份保留"
+            }
+        },
+        destructive = true,
+        busy = busy,
+    )
     if (confirmDelete) {
         val chosen = entries.filter { it.id in selected }
         val totalBytes = chosen.sumOf { it.sizeBytes }
-        AlertDialog(onDismissRequest = { if (!busy) confirmDelete = false },
-            title = { Text("删除 ${chosen.size} 份服务器备份？") },
-            text = { Text("将删除服务器上的 ${chosen.size} 份备份，共约 ${cloudBackupSize(totalBytes)}。删除不可恢复，也不影响本机账本与恢复前快照。") },
-            confirmButton = { TextButton(enabled = !busy, onClick = {
+        AppAlertDialog(
+            title = "删除 ${chosen.size} 份服务器备份？",
+            message = "将删除服务器上的 ${chosen.size} 份备份，共约 ${cloudBackupSize(totalBytes)}。删除不可恢复，也不影响本机账本与恢复前快照。",
+            onDismiss = { if (!busy) confirmDelete = false },
+            confirmLabel = "确认删除",
+            onConfirm = {
                 val ids = chosen.map { it.id }
                 confirmDelete = false
                 operate(CloudBackupBusy.HISTORY) {
@@ -410,53 +428,64 @@ internal fun CloudBackupPage(
                         append("；本机账本未改动")
                     }
                 }
-            }) { Text(if (busy) "正在删除…" else "确认删除") } },
-            dismissButton = { TextButton(enabled = !busy, onClick = { confirmDelete = false }) { Text("取消") } })
+            },
+            destructive = true,
+            busy = busy,
+            busyLabel = "正在删除…",
+        )
     }
     // AA1 step 1: metadata-only detail. Nothing is downloaded until "恢复此备份".
     detailEntry?.let { entry ->
         val preparing = preparePhase != PreparePhase.IDLE
-        AlertDialog(onDismissRequest = { if (!busy && !preparing) detailEntry = null },
-            title = { Text("备份详情") },
-            text = { Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text("${cloudBackupDate(entry.snapshotAt)}\n账单 ${entry.billCount}笔 · ${cloudBackupSize(entry.sizeBytes)}\n服务器接收：${cloudBackupDate(entry.uploadedAt)}")
-                when (preparePhase) {
-                    PreparePhase.DOWNLOADING -> {
-                        val pct = if (progressTotal > 0) (progressReceived * 100 / progressTotal).toInt() else 0
-                        Text("\n\n正在下载备份… ${cloudBackupSize(progressReceived)} / ${cloudBackupSize(progressTotal)}（$pct%）")
-                    }
-                    PreparePhase.VERIFYING -> Text("\n\n正在校验…")
-                    PreparePhase.PARSING -> Text("\n\n正在解析…")
-                    else -> Text("\n\n恢复前只读取这份备份，不会改动本机账本。")
+        AppDialog(title = "备份详情", onDismiss = { if (!busy && !preparing) detailEntry = null }) {
+            Text("${cloudBackupDate(entry.snapshotAt)}\n账单 ${entry.billCount}笔 · ${cloudBackupSize(entry.sizeBytes)}\n服务器接收：${cloudBackupDate(entry.uploadedAt)}")
+            when (preparePhase) {
+                PreparePhase.DOWNLOADING -> {
+                    val pct = if (progressTotal > 0) (progressReceived * 100 / progressTotal).toInt() else 0
+                    Text("正在下载备份… ${cloudBackupSize(progressReceived)} / ${cloudBackupSize(progressTotal)}（$pct%）")
                 }
-            } },
-            confirmButton = {
-                if (preparing) TextButton(onClick = { cancelPrepare() }) { Text("取消下载") }
-                else TextButton(enabled = !busy, onClick = {
-                    val target = entry; detailEntry = null
-                    startPrepare(target)
-                }) { Text("恢复此备份") }
-            },
-            dismissButton = { if (!preparing) TextButton(enabled = !busy, onClick = { detailEntry = null }) { Text("取消") } })
+                PreparePhase.VERIFYING -> Text("正在校验…")
+                PreparePhase.PARSING -> Text("正在解析…")
+                else -> Text("恢复前只读取这份备份，不会改动本机账本。")
+            }
+            if (preparing) {
+                SecondaryButton("取消下载", onClick = { cancelPrepare() }, modifier = Modifier.fillMaxWidth())
+            } else {
+                AppDialogActions(
+                    confirmLabel = "恢复此备份",
+                    onConfirm = { val target = entry; detailEntry = null; startPrepare(target) },
+                    dismissLabel = "取消",
+                    onDismiss = { detailEntry = null },
+                    busy = busy,
+                )
+            }
+        }
     }
     // AA1 step 2/3: content preview after download, then final restore confirmation.
-    preview?.let { current -> AlertDialog(onDismissRequest = { if (!busy) { preview = null; confirmRestore = false } },
-        title = { Text(if (confirmRestore) "确认恢复此备份？" else "内容预览") },
-        text = { Column(Modifier.verticalScroll(rememberScrollState())) {
-            Text("${cloudBackupDate(current.entry.snapshotAt)}\n账单 ${current.snapshot.bills.size}笔，识别记录 ${current.snapshot.history?.size ?: 0}条，账户 ${current.snapshot.assets?.accounts?.size ?: 0}个。" +
-                (if (current.fromCache) "\n（本机缓存副本）" else "") + "\n\n" +
-                if (confirmRestore) "将替换当前账单；备份含资产/识别记录时也会替换对应内容，不含时保留本机内容。删除日志按事件合并，配置和连接保留。会先保存恢复前快照，保存失败则停止恢复。"
-                else "请核对日期和内容，下一步仍需确认。设备连接与权限不会随备份替换。")
-        } },
-        confirmButton = { TextButton(enabled = !busy, onClick = {
-            if (!confirmRestore) confirmRestore = true
-            else operate(CloudBackupBusy.BACKUP) {
-                val restored = LedgerBackupCoordinator.restore(context, current, BackupStore.Mode.REPLACE)
-                preview = null; confirmRestore = false
-                message = "恢复完成。恢复前快照已保留，可在本地备份文件中导出。${restored.stats.assetWarning.orEmpty()}"
-            }
-        }) { Text(if (busy) "正在恢复…" else if (confirmRestore) "确认恢复" else "继续恢复") } },
-        dismissButton = { TextButton(enabled = !busy, onClick = { preview = null; confirmRestore = false }) { Text("取消") } }) }
+    preview?.let { current -> AppDialog(
+        title = if (confirmRestore) "确认恢复此备份？" else "内容预览",
+        onDismiss = { if (!busy) { preview = null; confirmRestore = false } },
+    ) {
+        Text("${cloudBackupDate(current.entry.snapshotAt)}\n账单 ${current.snapshot.bills.size}笔，识别记录 ${current.snapshot.history?.size ?: 0}条，账户 ${current.snapshot.assets?.accounts?.size ?: 0}个。" +
+            (if (current.fromCache) "\n（本机缓存副本）" else "") + "\n\n" +
+            if (confirmRestore) "将替换当前账单；备份含资产/识别记录时也会替换对应内容，不含时保留本机内容。删除日志按事件合并，配置和连接保留。会先保存恢复前快照，保存失败则停止恢复。"
+            else "请核对日期和内容，下一步仍需确认。设备连接与权限不会随备份替换。")
+        AppDialogActions(
+            confirmLabel = if (confirmRestore) "确认恢复" else "继续恢复",
+            onConfirm = {
+                if (!confirmRestore) confirmRestore = true
+                else operate(CloudBackupBusy.BACKUP) {
+                    val restored = LedgerBackupCoordinator.restore(context, current, BackupStore.Mode.REPLACE)
+                    preview = null; confirmRestore = false
+                    message = "恢复完成。恢复前快照已保留，可在本地备份文件中导出。${restored.stats.assetWarning.orEmpty()}"
+                }
+            },
+            dismissLabel = "取消",
+            onDismiss = { preview = null; confirmRestore = false },
+            busy = busy,
+            busyLabel = "正在恢复…",
+        )
+    } }
 }
 
 /** 小备份也用 KiB 说人话，别把 3 KiB 说成「1 MiB」。 */

@@ -80,6 +80,8 @@ import io.github.mymoney.ui.design.AbRadius
 import io.github.mymoney.ui.design.AbSpacing
 import io.github.mymoney.ui.design.AbSwitch
 import io.github.mymoney.ui.design.AbTextField
+import io.github.mymoney.ui.design.AppDialog
+import io.github.mymoney.ui.design.AppDialogActions
 import io.github.mymoney.ui.design.AbType
 import io.github.mymoney.ui.design.CapsuleChip
 import io.github.mymoney.ui.design.EmptyState
@@ -1077,33 +1079,30 @@ private fun BackupPage(onBack: () -> Unit, onRestored: (Backup.SettingsSnapshot?
             else java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US)
                 .format(java.util.Date(snap.exportedAt))
         }
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { pending = null; confirmReplace = false },
-            title = { Text("恢复备份", style = AbType.headline, color = p.label) },
-            text = {
-                Text(
-                    if (confirmReplace) {
-                        "覆盖恢复会替换现有的全部账单，导入 ${snap.bills.size} 条账单。" +
-                            (if (snap.history != null) "同时替换全部识别记录，导入 ${snap.history.size} 条。删除日志按事件合并，保留本机日志。" else "这是不含识别记录的旧备份：保留现有记录历史，失效的账单关联会解除，已记账状态保留。") +
-                            (if (snap.assets != null) "同时覆盖全部账户与资产流水，导入 ${snap.assets.accounts.size} 个账户、${snap.assets.entries.size} 条分录。显式空资产将清空当前资产。" else "此备份不含资产：保留当前余额与流水，导入账单不联动，恢复后请对账。") +
-                            "钱迹导入身份${snap.imports?.let { "将覆盖为 ${it.size} 条（含删除标记）" } ?: "未包含，将保留本机身份"}。如备份含分类账户和设置，也会恢复这些配置。建议先导出当前备份；此操作不可撤销，确定吗？"
-                    } else {
-                        "备份时间：${whenText}\n账单：${snap.bills.size} 条\n" +
-                            "识别记录：${snap.history?.let { "${it.size} 条" } ?: "旧格式未包含，保留本机历史"}\n" +
-                            "删除记录：${snap.deletions?.let { "${it.size} 条，按事件合并" } ?: "未包含，保留本机日志"}\n" +
-                            "资产：${snap.assets?.let { "${it.accounts.size} 个账户、${it.entries.size} 条分录" } ?: "旧格式未包含，保留本机资产；导入后请对账"}\n" +
-                            "分类账户清单：${if (snap.ledger != null) "有" else "无"}\n" +
-                            "记账周期：${snap.ledger?.monthStartDay?.let { "每月${it}日" } ?: "备份未包含，保留本机周期"}\n" +
-                            "钱迹导入身份：${snap.imports?.let { "${it.size} 条（含删除标记）" } ?: "旧格式未包含，跨旧备份重复识别可能不完整"}\n" +
-                            "默认合并账单与历史，已有已记账状态保留；分类账户和设置按备份恢复。"
-                    },
-                    style = AbType.body,
-                    color = p.secondaryLabel,
-                )
-            },
-            confirmButton = {
+        AppDialog(title = "恢复备份", onDismiss = { pending = null; confirmReplace = false }) {
+            Text(
                 if (confirmReplace) {
-                    androidx.compose.material3.TextButton(onClick = {
+                    "覆盖恢复会替换现有的全部账单，导入 ${snap.bills.size} 条账单。" +
+                        (if (snap.history != null) "同时替换全部识别记录，导入 ${snap.history.size} 条。删除日志按事件合并，保留本机日志。" else "这是不含识别记录的旧备份：保留现有记录历史，失效的账单关联会解除，已记账状态保留。") +
+                        (if (snap.assets != null) "同时覆盖全部账户与资产流水，导入 ${snap.assets.accounts.size} 个账户、${snap.assets.entries.size} 条分录。显式空资产将清空当前资产。" else "此备份不含资产：保留当前余额与流水，导入账单不联动，恢复后请对账。") +
+                        "钱迹导入身份${snap.imports?.let { "将覆盖为 ${it.size} 条（含删除标记）" } ?: "未包含，将保留本机身份"}。如备份含分类账户和设置，也会恢复这些配置。建议先导出当前备份；此操作不可撤销，确定吗？"
+                } else {
+                    "备份时间：${whenText}\n账单：${snap.bills.size} 条\n" +
+                        "识别记录：${snap.history?.let { "${it.size} 条" } ?: "旧格式未包含，保留本机历史"}\n" +
+                        "删除记录：${snap.deletions?.let { "${it.size} 条，按事件合并" } ?: "未包含，保留本机日志"}\n" +
+                        "资产：${snap.assets?.let { "${it.accounts.size} 个账户、${it.entries.size} 条分录" } ?: "旧格式未包含，保留本机资产；导入后请对账"}\n" +
+                        "分类账户清单：${if (snap.ledger != null) "有" else "无"}\n" +
+                        "记账周期：${snap.ledger?.monthStartDay?.let { "每月${it}日" } ?: "备份未包含，保留本机周期"}\n" +
+                        "钱迹导入身份：${snap.imports?.let { "${it.size} 条（含删除标记）" } ?: "旧格式未包含，跨旧备份重复识别可能不完整"}\n" +
+                        "默认合并账单与历史，已有已记账状态保留；分类账户和设置按备份恢复。"
+                },
+                style = AbType.body,
+                color = p.secondaryLabel,
+            )
+            if (confirmReplace) {
+                AppDialogActions(
+                    confirmLabel = "确认覆盖",
+                    onConfirm = {
                         pending = null
                         confirmReplace = false
                         busy = true
@@ -1118,41 +1117,31 @@ private fun BackupPage(onBack: () -> Unit, onRestored: (Backup.SettingsSnapshot?
                             result.getOrNull()?.let { onRestored(it.settings) }
                             busy = false
                         }
-                    }) { Text("确认覆盖", color = p.red) }
-                } else {
-                    androidx.compose.material3.TextButton(onClick = {
-                        pending = null
-                        busy = true
-                        scope.launch {
-                            val result = runCatching {
-                                BackupStore.restore(context, json, BackupStore.Mode.MERGE)
-                            }
-                            message = result.fold(
-                                onSuccess = { "已合并导入账单 ${it.bills} 条、识别记录 ${it.history} 条（已有记录不重复导入）" + (if (it.assets) "；资产已恢复" else "") + (it.assetWarning?.let { warning -> "\n$warning" } ?: "") },
-                                onFailure = { "恢复失败：${it.message}" },
-                            )
-                            result.getOrNull()?.let { onRestored(it.settings) }
-                            busy = false
+                    },
+                    dismissLabel = "返回",
+                    onDismiss = { confirmReplace = false },
+                    destructive = true,
+                    busy = busy,
+                )
+            } else {
+                PrimaryButton("合并导入", onClick = {
+                    pending = null
+                    busy = true
+                    scope.launch {
+                        val result = runCatching {
+                            BackupStore.restore(context, json, BackupStore.Mode.MERGE)
                         }
-                    }) { Text("合并导入") }
-                }
-            },
-            dismissButton = {
-                androidx.compose.material3.TextButton(onClick = {
-                    if (confirmReplace) {
-                        confirmReplace = false
-                    } else {
-                        pending = null
+                        message = result.fold(
+                            onSuccess = { "已合并导入账单 ${it.bills} 条、识别记录 ${it.history} 条（已有记录不重复导入）" + (if (it.assets) "；资产已恢复" else "") + (it.assetWarning?.let { warning -> "\n$warning" } ?: "") },
+                            onFailure = { "恢复失败：${it.message}" },
+                        )
+                        result.getOrNull()?.let { onRestored(it.settings) }
+                        busy = false
                     }
-                }) { Text(if (confirmReplace) "返回" else "取消", color = p.secondaryLabel) }
-            },
-        )
-        // 覆盖是"先清空"的危险路径，单独给一个入口，不和合并挤在一起
-        if (!confirmReplace) {
-            androidx.compose.material3.TextButton(
-                onClick = { confirmReplace = true },
-                modifier = Modifier.padding(start = AbSpacing.page),
-            ) { Text("改为覆盖恢复…", style = AbType.footnote, color = p.red) }
+                }, modifier = Modifier.fillMaxWidth(), enabled = !busy)
+                SecondaryButton("改为覆盖恢复…", onClick = { confirmReplace = true }, modifier = Modifier.fillMaxWidth(), enabled = !busy)
+                SecondaryButton("取消", onClick = { pending = null }, modifier = Modifier.fillMaxWidth(), enabled = !busy)
+            }
         }
     }
 }
@@ -1400,28 +1389,21 @@ private fun DebugPage(onBack: () -> Unit, notifications: Boolean) {
         }
     }
     notificationPreview?.let { preview ->
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { if (!notificationSaving) notificationPreview = null },
-            title = { Text("通知脱敏样本预览") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-                    Box(Modifier.fillMaxWidth().heightIn(max = 340.dp).verticalScroll(rememberScrollState())) {
-                        Text(preview, style = AbType.mono, color = p.secondaryLabel)
-                    }
-                }
-            },
-            confirmButton = {
-                androidx.compose.material3.TextButton(enabled = !notificationSaving, onClick = {
+        AppDialog(title = "通知脱敏样本预览", onDismiss = { if (!notificationSaving) notificationPreview = null }) {
+            Text(preview, style = AbType.mono, color = p.secondaryLabel)
+            AppDialogActions(
+                confirmLabel = "保存到文件",
+                onConfirm = {
                     notificationSaving = true
                     notificationExport = preview
                     notificationExportLauncher.launch("麦米-notification-${System.currentTimeMillis()}.json")
-                }) { Text(if (notificationSaving) "保存中…" else "保存到文件") }
-            },
-            dismissButton = {
-                androidx.compose.material3.TextButton(enabled = !notificationSaving,
-                    onClick = { notificationPreview = null }) { Text("取消") }
-            },
-        )
+                },
+                dismissLabel = "取消",
+                onDismiss = { notificationPreview = null },
+                busy = notificationSaving,
+                busyLabel = "保存中…",
+            )
+        }
     }
 
 }

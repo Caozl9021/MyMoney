@@ -33,6 +33,7 @@ import io.github.mymoney.data.PendingLearning
 import io.github.mymoney.data.RuleSource
 import io.github.mymoney.data.Settings
 import io.github.mymoney.ui.design.AbIcons
+import io.github.mymoney.ui.design.AppAlertDialog
 import io.github.mymoney.ui.design.AbSpacing
 import io.github.mymoney.ui.design.AbSwitch
 import io.github.mymoney.ui.design.AbTextField
@@ -376,51 +377,29 @@ internal fun RecognitionRulesPage(
 
     pendingDelete?.let { id ->
         val rule = ruleState.learned.firstOrNull { it.id == id }
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { pendingDelete = null },
-            title = { Text("删除这条记忆？", style = AbType.headline, color = p.label) },
-            text = {
-                Text(
-                    "${rule?.merchant ?: "这条记忆"}的偏好会被移除，后续推荐不再使用它；要重新累计确认次数。" +
-                        "账单、记录历史和其他记忆不受影响。",
-                    style = AbType.body, color = p.secondaryLabel,
-                )
+        AppAlertDialog(
+            title = "删除这条记忆？",
+            message = "${rule?.merchant ?: "这条记忆"}的偏好会被移除，后续推荐不再使用它；要重新累计确认次数。账单、记录历史和其他记忆不受影响。",
+            onDismiss = { pendingDelete = null },
+            confirmLabel = "删除",
+            onConfirm = {
+                LocalRuleStore.deleteLearned(id)
+                pendingDelete = null
             },
-            confirmButton = {
-                androidx.compose.material3.TextButton(onClick = {
-                    LocalRuleStore.deleteLearned(id)
-                    pendingDelete = null
-                }) { Text("删除", color = p.red) }
-            },
-            dismissButton = {
-                androidx.compose.material3.TextButton(onClick = { pendingDelete = null }) {
-                    Text("取消", color = p.secondaryLabel)
-                }
-            },
+            destructive = true,
         )
     }
     if (confirmClearLearned) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { confirmClearLearned = false },
-            title = { Text("清空全部学习记忆？", style = AbType.headline, color = p.label) },
-            text = {
-                Text(
-                    "删除全部 ${ruleState.learned.size} 条已记住的偏好及 ${effectivePending.size} 条待生效确认，" +
-                        "后续从头学习。保留账单、记录历史、导入规则和餐段设置。此操作不可撤销。",
-                    style = AbType.body, color = p.secondaryLabel,
-                )
+        AppAlertDialog(
+            title = "清空全部学习记忆？",
+            message = "删除全部 ${ruleState.learned.size} 条已记住的偏好及 ${effectivePending.size} 条待生效确认，后续从头学习。保留账单、记录历史、导入规则和餐段设置。此操作不可撤销。",
+            onDismiss = { confirmClearLearned = false },
+            confirmLabel = "清空",
+            onConfirm = {
+                LocalRuleStore.clearLearned()
+                confirmClearLearned = false
             },
-            confirmButton = {
-                androidx.compose.material3.TextButton(onClick = {
-                    LocalRuleStore.clearLearned()
-                    confirmClearLearned = false
-                }) { Text("清空", color = p.red) }
-            },
-            dismissButton = {
-                androidx.compose.material3.TextButton(onClick = { confirmClearLearned = false }) {
-                    Text("取消", color = p.secondaryLabel)
-                }
-            },
+            destructive = true,
         )
     }
 }

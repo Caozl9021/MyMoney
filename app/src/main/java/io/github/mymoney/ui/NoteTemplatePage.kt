@@ -2,6 +2,7 @@ package io.github.mymoney.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
@@ -21,7 +22,6 @@ import io.github.mymoney.ui.design.*
 import com.example.billkit.BillDraft
 import com.example.billkit.BillType
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun NoteTemplatePage(onBack: () -> Unit) {
     val palette = LocalAbPalette.current
@@ -56,7 +56,11 @@ internal fun NoteTemplatePage(onBack: () -> Unit) {
                     BasicTextField(value = value, onValueChange = { value = it }, textStyle = AbType.body.copy(color = palette.label),
                         cursorBrush = SolidColor(palette.accent), modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(AbSpacing.m))
                 }
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(AbSpacing.s), verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
+                // 变量：单行横滑的快捷工具条（不换行成网格墙，和分类横滑同款交互）。
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
+                ) {
                     NoteTemplate.TOKENS.forEach { token ->
                         CapsuleChip(text = token, selected = false, onClick = {
                             val start = value.selection.min; val end = value.selection.max
@@ -68,11 +72,8 @@ internal fun NoteTemplatePage(onBack: () -> Unit) {
             }
             io.github.mymoney.ui.design.SectionColumn {
                 GroupHeader("实时预览 · 示例")
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-                    listOf("普通", "缺少字段", "已点选商品").forEachIndexed { index, label ->
-                        CapsuleChip(label, selected = example == index, onClick = { example = index })
-                    }
-                }
+                val exampleLabels = listOf("普通", "缺少字段", "已点选商品")
+                Segmented(options = exampleLabels, selected = example, onSelect = { example = it })
                 InsetGroup { ListRow(title = NoteTemplate.render(sample, value.text, includeProduct = example == 2).ifBlank { "（空）" },
                     subtitle = if (example == 2) "商品自动填充由“备注填充”设置控制，此处仅预览模板" else "按账单发生日期生成，不修改已有备注") }
             }

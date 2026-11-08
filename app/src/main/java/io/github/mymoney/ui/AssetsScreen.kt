@@ -7,9 +7,9 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -410,25 +410,24 @@ private fun AssetAccountForm(original: AssetAccount?, onBack: () -> Unit, onSave
                 val missing = AccountPresets.all.filterNot { it.name in existingNames }
                 if (missing.isNotEmpty()) {
                     item(contentType = io.github.mymoney.ui.design.SectionRole.HEADER) { GroupHeader("常用账户") }
-                    item {
+                    itemsIndexed(missing) { index, preset ->
                         InsetGroup {
-                            Column(Modifier.padding(AbCardDensity.content), verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-                                missing.chunked(3).forEach { row ->
-                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-                                        row.forEach { preset ->
-                                            CapsuleChip(
-                                                text = preset.name,
-                                                selected = name == preset.name,
-                                                onClick = {
-                                                    name = preset.name
-                                                    kind = preset.kind
-                                                    if (aliases.isBlank()) aliases = preset.aliases
-                                                },
-                                            )
-                                        }
-                                    }
-                                }
-                            }
+                            ListRow(
+                                title = preset.name,
+                                dividerAbove = index > 0,
+                                leading = {
+                                    io.github.mymoney.ui.design.AccountAvatar(
+                                        name = preset.name,
+                                        size = io.github.mymoney.ui.design.AbCardDensity.settingsIcon,
+                                    )
+                                },
+                                trailing = { if (name == preset.name) Text("✓", color = LocalAbPalette.current.accent) },
+                                onClick = {
+                                    name = preset.name
+                                    kind = preset.kind
+                                    if (aliases.isBlank()) aliases = preset.aliases
+                                },
+                            )
                         }
                     }
                 }
