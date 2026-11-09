@@ -62,3 +62,13 @@
 - `./gradlew :app:assembleDebug`：BUILD SUCCESSFUL；`./gradlew :app:assembleRelease`：BUILD SUCCESSFUL；`scripts/check-ui-components.sh` 输出 `UI component check passed.`。
 - Waydroid 实看：云备份页、更多动作面板、恢复默认分类弹窗（浅色/深色/特大字号/360dp 窄屏）、分类预设、添加账户、备注模板、识别规则、记录历史、外观深色、相机权限拒绝弹窗；家庭备份页因无家庭服务连接且当前导航不可达，未做页面级实看。
 - 证据：`runs/20261108-p2-ui-polish/`（截图与 verification.md）。
+
+## 2026-11-09 页边与视觉对齐统一（用户验收通过）
+
+- **用户结论**：Release 包覆盖安装至 Xiaomi 14 后，用户于 2026-11-09 明确确认**“验收通过”**。
+- **页边与对齐约束**：
+  - `FloatingHeaderAction`：保持 `48.dp` 触控热区，视觉 `38.dp` 玻璃圆胶囊向右补偿 `+5.dp`，使右上角胶囊右边缘与左上角标题胶囊左边缘、下方卡片左右边缘统一对齐 `AbSpacing.page (16.dp)`。
+  - `StatsScreen`：通过 `contentPadding(top = padding.calculateTopPadding())` 让滚动内容自然穿过顶部悬浮玻璃胶囊并触发折射/模糊，消除半空视口硬裁切。
+  - `GroupHeader` / `GroupFooter` / 首页日期 / `AssetGroupTitle` / `LedgerDayHeader` / `LedgerFilters` 摘要：水平内缩统一为 `AbSpacing.m (12.dp)`，避开卡片 `AbRadius.group (20.dp)` 圆角弧度并与卡片内边距对齐。
+  - `SubPageBar`：补齐底部 `0.5.dp` `p.separator` 分隔细线；`BillsScreen` 统计下钻范围说明补齐 `padding(horizontal = AbSpacing.page, vertical = AbSpacing.xs)` 并移除列表底部冗余的 `+ 64.dp` 留白。
+- **验证**：`scripts/check-ui-components.sh` 通过，`:app:testDebugUnitTest` + `:billkit:testDebugUnitTest` 全绿，`:app:assembleRelease` 构建并安装真机验收通过。

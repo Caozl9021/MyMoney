@@ -151,7 +151,9 @@ fun BillsScreen(requestAdd: Int = 0, onEditorVisibilityChanged: (Boolean) -> Uni
         ) { padding ->
             Column(Modifier.fillMaxSize().imePadding()) {
                 if (statisticsScope != null) {
-                    GroupFooter("${statisticsScope.periodLabel} · ${when (statisticsScope.type) { "INCOME" -> "收入"; "REFUND" -> "退款"; else -> "支出" }} · ${statisticsScope.groupName}")
+                    Box(Modifier.fillMaxWidth().padding(horizontal = AbSpacing.page, vertical = AbSpacing.xs)) {
+                        GroupFooter("${statisticsScope.periodLabel} · ${when (statisticsScope.type) { "INCOME" -> "收入"; "REFUND" -> "退款"; else -> "支出" }} · ${statisticsScope.groupName}")
+                    }
                 } else LedgerFilters(keyword, { keyword = it; changed() }, dateMode, start, end, clock.date,
                     { mode, from, to -> dateMode = mode; start = from; end = to; changed() },
                     category, categoryOptions, { category = it; changed() }, type, { type = it; changed() }, active, { clear() },
@@ -167,7 +169,7 @@ fun BillsScreen(requestAdd: Int = 0, onEditorVisibilityChanged: (Boolean) -> Uni
                     } else LazyColumn(state = listState,
                         modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth().align(Alignment.TopCenter),
                         contentPadding = PaddingValues(start = AbSpacing.page, end = AbSpacing.page,
-                            top = AbSpacing.xs, bottom = padding.calculateBottomPadding() + 64.dp),
+                            top = AbSpacing.xs, bottom = padding.calculateBottomPadding()),
                     ) {
                         item(key = "summary") { GroupFooter(ledgerSummaryLabel(window.summary!!, active)) }
                         if (!window.loading && window.error == null && bills.isEmpty()) item(key = "empty") {
@@ -257,7 +259,7 @@ private fun LedgerDayHeader(day: LocalDate, clock: LedgerClock, query: LedgerQue
         }
     } }
     val p = LocalAbPalette.current
-    Column(Modifier.fillMaxWidth().padding(start = AbSpacing.xs, end = AbSpacing.xs, top = AbSpacing.m, bottom = AbSpacing.xs),
+    Column(Modifier.fillMaxWidth().padding(start = AbSpacing.m, end = AbSpacing.m, top = AbSpacing.m, bottom = AbSpacing.xs),
         verticalArrangement = Arrangement.spacedBy(2.dp)) {
         val pattern = if (day.year == clock.date.year) "M月d日 EEEE" else "yyyy年M月d日 EEEE"
         val daySummary = state.first

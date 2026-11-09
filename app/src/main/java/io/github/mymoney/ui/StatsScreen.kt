@@ -130,8 +130,8 @@ fun StatsScreen(onOpenDetails: () -> Unit = {}, onOpenGroup: (StatisticsDrilldow
     ) { padding ->
         LazyColumn(
             state = listState,
-            // Keep sticky period/type controls below the floating capsules at every scroll offset.
-            modifier = Modifier.fillMaxWidth().padding(top = padding.calculateTopPadding()).pointerInput(range) {
+            // Pass topPadding through contentPadding so scrolled cards glide under the floating glass header.
+            modifier = Modifier.fillMaxWidth().pointerInput(range) {
                 var distance = 0f
                 detectHorizontalDragGestures(
                     onDragStart = { distance = 0f },
@@ -144,13 +144,13 @@ fun StatsScreen(onOpenDetails: () -> Unit = {}, onOpenGroup: (StatisticsDrilldow
                 )
             },
             contentPadding = PaddingValues(start = AbSpacing.page, end = AbSpacing.page,
-                top = AbSpacing.xs, bottom = padding.calculateBottomPadding()),
+                top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding()),
             verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
             // Navigation keeps the same structure in current and historical periods.
             // At large font sizes the period moves to its own row without squeezing the label.
-            stickyHeader(key = "period-and-type") {
-                Column(Modifier.background(p.pageBg).padding(bottom = AbSpacing.s),
+            item(key = "period-and-type") {
+                Column(Modifier.padding(bottom = AbSpacing.s),
                     verticalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
                     BoxWithConstraints(Modifier.fillMaxWidth()) {
                         val stacked = maxWidth < 350.dp * LocalDensity.current.fontScale.coerceAtLeast(1f)

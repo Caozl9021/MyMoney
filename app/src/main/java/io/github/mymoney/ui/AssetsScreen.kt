@@ -302,7 +302,7 @@ private fun AssetMetricTile(
 private fun AssetGroupTitle(text: String, trailing: String?) {
     val p = LocalAbPalette.current
     Row(
-        Modifier.fillMaxWidth().padding(start = AbSpacing.xs, end = AbSpacing.xs, top = AbSpacing.xs, bottom = 7.dp),
+        Modifier.fillMaxWidth().padding(start = AbSpacing.m, end = AbSpacing.m, top = AbSpacing.xs, bottom = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(text, style = AbType.sectionHeader, color = p.secondaryLabel, modifier = Modifier.weight(1f))

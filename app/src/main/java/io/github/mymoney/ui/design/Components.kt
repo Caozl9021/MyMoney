@@ -177,7 +177,7 @@ fun GroupHeader(text: String, modifier: Modifier = Modifier) {
         text = text,
         style = AbType.sectionHeader,
         color = p.secondaryLabel,
-        modifier = modifier.layoutId(SectionRole.HEADER).padding(start = AbSpacing.xs),
+        modifier = modifier.layoutId(SectionRole.HEADER).padding(start = AbSpacing.m, end = AbSpacing.m),
     )
 }
 
@@ -189,7 +189,7 @@ fun GroupFooter(text: String, modifier: Modifier = Modifier) {
         text = text,
         style = AbType.caption1,
         color = p.secondaryLabel,
-        modifier = modifier.layoutId(SectionRole.FOOTER).padding(start = AbSpacing.xs, end = AbSpacing.xs),
+        modifier = modifier.layoutId(SectionRole.FOOTER).padding(start = AbSpacing.m, end = AbSpacing.m),
     )
 }
 

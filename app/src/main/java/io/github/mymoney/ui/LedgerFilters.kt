@@ -97,7 +97,7 @@ internal fun LedgerFilters(
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
             Text(summaryLabel, style = AbType.caption1, color = palette.secondaryLabel,
-                modifier = Modifier.weight(1f))
+                modifier = Modifier.weight(1f).padding(start = AbSpacing.m))
             if (active) TextButton(onClick = onClear, modifier = Modifier.heightIn(min = 48.dp)) { Text("清除筛选") }
         }
     }

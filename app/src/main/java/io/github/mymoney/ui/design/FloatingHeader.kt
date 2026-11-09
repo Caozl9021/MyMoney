@@ -122,7 +122,8 @@ fun FloatingHeaderAction(icon: ImageVector, label: String, onClick: () -> Unit) 
     val p = LocalAbPalette.current
     // Keep hit testing on a stable, standard foreground button. Sampling and press
     // transforms belong to separate children and cannot move its touch coordinates.
-    Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+    // Offset +5dp so the 38dp visual capsule's right edge aligns with AbSpacing.page (16dp).
+    Box(Modifier.offset(x = 5.dp).size(48.dp), contentAlignment = Alignment.Center) {
         HeaderGlassCapsule(Modifier.size(38.dp)) { }
         IconButton(onClick = onClick, interactionSource = interactions,
             modifier = Modifier.matchParentSize().semantics { contentDescription = label }) {

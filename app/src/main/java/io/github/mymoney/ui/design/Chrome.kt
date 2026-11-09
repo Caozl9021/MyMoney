@@ -454,8 +454,23 @@ fun SubPageBar(
 ) {
     val p = LocalAbPalette.current
     val reduce = LocalReduceTransparency.current
+    val separatorColor = p.separator
     // The title owns the geometric centre, independently of trailing actions.
-    androidx.compose.ui.layout.SubcomposeLayout(modifier.fillMaxWidth().background(if (reduce) p.cardBg else p.glassTint).statusBarsPadding()) { constraints ->
+    androidx.compose.ui.layout.SubcomposeLayout(
+        modifier
+            .fillMaxWidth()
+            .background(if (reduce) p.cardBg else p.glassTint)
+            .drawBehind {
+                val stroke = 0.5.dp.toPx()
+                drawLine(
+                    color = separatorColor,
+                    start = Offset(0f, size.height - stroke / 2f),
+                    end = Offset(size.width, size.height - stroke / 2f),
+                    strokeWidth = stroke,
+                )
+            }
+            .statusBarsPadding()
+    ) { constraints ->
         val inset = AbSpacing.page.roundToPx()
         val available = (constraints.maxWidth - inset * 2).coerceAtLeast(0)
         val action = subcompose("actions") {

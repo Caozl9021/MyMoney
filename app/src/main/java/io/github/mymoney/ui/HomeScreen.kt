@@ -164,7 +164,7 @@ fun HomeScreen(
             item(key = "today-date") {
                 Text(clock.date.format(java.time.format.DateTimeFormatter.ofPattern("M月d日 · EEEE", java.util.Locale.CHINA)),
                     style = AbType.caption1, color = p.secondaryLabel,
-                    modifier = Modifier.padding(start = AbSpacing.xs, bottom = AbSpacing.xs))
+                    modifier = Modifier.padding(start = AbSpacing.m, end = AbSpacing.m, bottom = AbSpacing.xs))
             }
             // 本期支出保持主视觉，日期移到正文，不撑高四页统一顶栏。
             homeCardItem(key = "summary") {
