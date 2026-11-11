@@ -183,9 +183,12 @@ object LedgerImport {
                 productSource = src.productSource,
                 noteOrigin = src.noteOrigin,
                 noteTemplateSnapshot = src.noteTemplateSnapshot,
+                reimburseStatus = src.reimburseStatus,
+                reimbursedAt = src.reimbursedAt,
+                reimburseAccountId = src.reimburseAccountId,
             )
             // AssetStore 生成流水并回填 accountId/assetKey/assetLinked（等价于手工/导入的落库路径）
-            val linked = AssetStore.syncBill(db, null, bill)!!.withSyncIdentity(now)
+            val linked = AssetStore.syncReimbursement(db, AssetStore.syncBill(db, null, bill)!!).withSyncIdentity(now)
             val principal = linked.copy(id = dao.insert(linked))
             // 手续费成组：仅在来源确有费用时导入，一次计入余额
             item.fee?.let { feeSrc ->

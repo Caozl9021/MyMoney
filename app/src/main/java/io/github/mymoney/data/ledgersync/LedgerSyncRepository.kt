@@ -2,7 +2,9 @@ package io.github.mymoney.data.ledgersync
 
 import android.content.Context
 import io.github.mymoney.data.AppDb
+import io.github.mymoney.data.AssetStore
 import io.github.mymoney.data.BillEntity
+import io.github.mymoney.data.Reimburse
 import io.github.mymoney.data.MiniJson
 import java.util.UUID
 
@@ -158,12 +160,19 @@ object LedgerSyncRepository {
                 transferAccount = bill.transferAccount, productName = bill.productName, productSource = bill.productSource,
                 noteOrigin = bill.noteOrigin, noteTemplateSnapshot = bill.noteTemplateSnapshot,
                 updatedAt = bill.updatedAt, deletedAt = bill.deletedAt,
+                reimburseStatus = bill.reimburseStatus, reimbursedAt = bill.reimbursedAt,
+                reimburseAccountId = bill.reimburseAccountId,
             )
         } else {
             // 新条目：插入时保留其 syncId，id 由本机自增。deletedAt 的远端墓碑若本机没有对应账单则忽略。
             if (bill.deletedAt == null) {
                 dao.insert(bill)
             }
+        }
+        val saved = dao.bySyncId(bill.syncId)
+        if (saved != null) {
+            val basis = if (saved.deletedAt != null) saved.copy(reimburseStatus = Reimburse.NONE) else saved
+            AssetStore.syncReimbursement(appDb(context), basis)
         }
         noteRevision(bill.syncId, remote.revision)
     }

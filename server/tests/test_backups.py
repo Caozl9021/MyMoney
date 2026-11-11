@@ -81,7 +81,7 @@ def test_invalid_uploads_never_create_ready_index(client):
     assert c.put(f"/v1/backups/{backup_id}", content=raw, headers=bad).status_code == 413
     bad = dict(h, **{"X-Space-Epoch": str(uuid4())})
     assert c.put(f"/v1/backups/{backup_id}", content=raw, headers=bad).status_code == 409
-    for data in (b'{}', raw.replace(b'"format": 8', b'"format": 11'), raw_snapshot([{"p": -1}]), b'{'):
+    for data in (b'{}', raw.replace(b'"format": 8', b'"format": 13'), raw_snapshot([{"p": -1}]), b'{'):
         assert c.put(f"/v1/backups/{backup_id}", content=data, headers=headers(pair, data)).status_code == 422
     assert c.get("/v1/backups", headers=h).json()["items"] == []
     assert not list(directory.rglob("*.part")) and not list(directory.rglob("*.json"))

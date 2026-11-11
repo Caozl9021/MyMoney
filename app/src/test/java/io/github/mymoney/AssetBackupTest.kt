@@ -32,10 +32,12 @@ class AssetBackupTest {
 
     @Test fun duplicateAccountsAndAnyPostingDisqualifyDefaultInitialization() {
         val original = defaults()
+        val first = original.accounts.first()
+        // 多一个账户或写入流水都不再算「未动过的默认快照」
         assertFalse(AssetBackupCodec.isUntouchedDefaultSnapshot(original.copy(accounts =
-            listOf(original.accounts.first()) + original.accounts.dropLast(1)), LedgerConfig.DEFAULT_ACCOUNTS))
+            listOf(first, first.copy(id = "dup-id", name = "钱包副本"))), LedgerConfig.DEFAULT_ACCOUNTS))
         assertFalse(AssetBackupCodec.isUntouchedDefaultSnapshot(original.copy(entries =
-            listOf(entry(accountId = original.accounts.first().id))), LedgerConfig.DEFAULT_ACCOUNTS))
+            listOf(entry(accountId = first.id))), LedgerConfig.DEFAULT_ACCOUNTS))
     }
 
     @Test fun defaultEligibilityDoesNotRelaxStrictUuidMerge() {

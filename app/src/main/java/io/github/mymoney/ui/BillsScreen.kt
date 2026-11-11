@@ -5,7 +5,9 @@ import kotlinx.coroutines.launch
 import android.widget.Toast
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -46,7 +48,7 @@ private data class BillWindowState(
 
 /** Complete ledger, grown in windows while every bill remains an independent lazy item. */
 @Composable
-fun BillsScreen(requestAdd: Int = 0, onEditorVisibilityChanged: (Boolean) -> Unit = {}, onBack: (() -> Unit)? = null, statisticsScope: StatisticsDrilldown? = null) {
+fun BillsScreen(requestAdd: Int = 0, applyPendingFilter: Boolean = false, onPendingFilterApplied: () -> Unit = {}, onEditorVisibilityChanged: (Boolean) -> Unit = {}, onBack: (() -> Unit)? = null, statisticsScope: StatisticsDrilldown? = null) {
     val app = LocalContext.current.applicationContext
     val dao = remember(app) { AppDb.get(app).bills() }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -59,22 +61,30 @@ fun BillsScreen(requestAdd: Int = 0, onEditorVisibilityChanged: (Boolean) -> Uni
     var end by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf<String?>(null) }
     var type by rememberSaveable { mutableStateOf<String?>(null) }
+    var reimburse by rememberSaveable { mutableStateOf<String?>(null) }
+    var reimburseBill by remember { mutableStateOf<BillEntity?>(null) }
     var limit by rememberSaveable { mutableStateOf(100) }
     var resetPosition by rememberSaveable { mutableStateOf(false) }
     var retry by remember { mutableStateOf(0) }
     val dateWindow = remember(dateMode, start, end, clock, monthStartDay) { ledgerFilterWindow(dateMode, start, end, clock.date, clock.zone, monthStartDay) }
-    val query = remember(keyword, dateWindow, category, type, statisticsScope) {
-        statisticsScope?.query(keyword) ?: LedgerQuery(keyword, dateWindow.fromMillis, dateWindow.toMillis, category, type)
+    val query = remember(keyword, dateWindow, category, type, reimburse, statisticsScope) {
+        statisticsScope?.query(keyword) ?: LedgerQuery(keyword, dateWindow.fromMillis, dateWindow.toMillis, category, type, reimburse = reimburse)
     }
-    val active = keyword.isNotBlank() || dateMode != "ALL" || category != null || type != null
+    val active = keyword.isNotBlank() || dateMode != "ALL" || category != null || type != null || reimburse != null
     fun changed() { limit = 100; resetPosition = true }
-    fun clear() { keyword = ""; dateMode = "ALL"; category = null; type = null; changed() }
+    fun clear() { keyword = ""; dateMode = "ALL"; category = null; type = null; reimburse = null; changed() }
+    LaunchedEffect(applyPendingFilter) {
+        if (applyPendingFilter) {
+            keyword = ""; dateMode = "ALL"; category = null; type = null; reimburse = Reimburse.PENDING; changed()
+            onPendingFilterApplied()
+        }
+    }
     val rawWindow by produceState(BillWindowState(), dao, lifecycle, query, limit, retry) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             value = if (value.query == query) value.copy(loading = true, error = null) else BillWindowState(query = query)
             combine(
-                dao.observeFilteredWindow(query.likePattern, query.fromMillis, query.toMillis, query.category, query.type, limit, query.statisticsCategory, query.statisticsAccount),
-                dao.observeFilteredSummary(query.likePattern, query.fromMillis, query.toMillis, query.category, query.type, query.statisticsCategory, query.statisticsAccount),
+                dao.observeFilteredWindow(query.likePattern, query.fromMillis, query.toMillis, query.category, query.type, limit, query.statisticsCategory, query.statisticsAccount, query.reimburse),
+                dao.observeFilteredSummary(query.likePattern, query.fromMillis, query.toMillis, query.category, query.type, query.statisticsCategory, query.statisticsAccount, query.reimburse),
                 dao.observeCount(),
             ) { bills, summary, total -> BillWindowState(query, bills, summary, total, loading = false) }
                 .catch { value = BillWindowState(query = query, loading = false, error = it.message ?: "读取账单失败") }
@@ -156,7 +166,8 @@ fun BillsScreen(requestAdd: Int = 0, onEditorVisibilityChanged: (Boolean) -> Uni
                     }
                 } else LedgerFilters(keyword, { keyword = it; changed() }, dateMode, start, end, clock.date,
                     { mode, from, to -> dateMode = mode; start = from; end = to; changed() },
-                    category, categoryOptions, { category = it; changed() }, type, { type = it; changed() }, active, { clear() },
+                    category, categoryOptions, { category = it; changed() }, type, { type = it; changed() },
+                    reimburse, { reimburse = it; changed() }, active, { clear() },
                     monthStartDay = monthStartDay, summaryLabel = window.summary?.let { "${if (active) "匹配" else "共"} ${it.count} 笔" }
                         ?: if (window.error != null) "读取失败" else "正在读取账单…")
                 Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -197,7 +208,8 @@ fun BillsScreen(requestAdd: Int = 0, onEditorVisibilityChanged: (Boolean) -> Uni
                                         if (index > 0) InsetDivider()
                                         SwipeableBillRow(bill, onAmountBounds = {}, hideAmount = false,
                                             onEdit = { openBill(bill.id); newSource = null },
-                                            onDelete = { deleteId = bill.id })
+                                            onDelete = { deleteId = bill.id },
+                                            onLongPress = { if (Reimburse.eligible(bill)) reimburseBill = bill })
                                     }
                                 }
                             }
@@ -216,6 +228,7 @@ fun BillsScreen(requestAdd: Int = 0, onEditorVisibilityChanged: (Boolean) -> Uni
             }
         }
         deleteId?.let { id -> DeleteBillDialog(id, origin = "ledger", onDismiss = { deleteId = null }, onDeleted = { deleteId = null }) }
+        reimburseBill?.let { bill -> ReimburseChoiceDialog(bill) { reimburseBill = null } }
         if (historyOpen) Box(Modifier.fillMaxSize().zIndex(9f)) {
             RecognitionHistoryScreen(onBack = { historyOpen = false }, reserveDock = false)
         }
@@ -309,14 +322,14 @@ private fun LedgerDayHeader(day: LocalDate, clock: LedgerClock, query: LedgerQue
 }
 
 /** 左滑请求删除确认；取消时保持原账单。 */
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-private fun SwipeableBillRow(bill: BillEntity, onEdit: () -> Unit, onDelete: () -> Unit, onAmountBounds: (Rect) -> Unit, hideAmount: Boolean) {
+private fun SwipeableBillRow(bill: BillEntity, onEdit: () -> Unit, onDelete: () -> Unit, onLongPress: () -> Unit, onAmountBounds: (Rect) -> Unit, hideAmount: Boolean) {
     val haptic = rememberAbHaptic()
     val reduceMotion = LocalReduceMotion.current
     if (reduceMotion) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            BillListRow(bill, modifier = Modifier.weight(1f).clickable(onClick = onEdit),
+            BillListRow(bill, modifier = Modifier.weight(1f).combinedClickable(onClick = onEdit, onLongClick = onLongPress),
                 onAmountBounds = onAmountBounds, hideAmount = hideAmount)
             IconButton(onClick = { haptic.warn(); onDelete() }) {
                 Icon(AbIcons.Close, contentDescription = "删除账单，需确认", tint = LocalAbPalette.current.red)
@@ -349,7 +362,7 @@ private fun SwipeableBillRow(bill: BillEntity, onEdit: () -> Unit, onDelete: () 
                 .clip(RoundedCornerShape(0.dp))
                 .background(LocalAbPalette.current.cardBg),
         ) {
-            BillListRow(bill, modifier = Modifier.clickable(onClick = onEdit), onAmountBounds = onAmountBounds, hideAmount = hideAmount)
+            BillListRow(bill, modifier = Modifier.combinedClickable(onClick = onEdit, onLongClick = onLongPress), onAmountBounds = onAmountBounds, hideAmount = hideAmount)
         }
     }
 }

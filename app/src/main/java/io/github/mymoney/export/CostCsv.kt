@@ -28,7 +28,7 @@ object CostCsv {
 
     val HEADER = listOf(
         "日期", "类型", "金额", "一级分类", "二级分类",
-        "账户1", "账户2", "备注", "货币", "标签",
+        "账户1", "账户2", "备注", "货币", "标签", "报销状态", "退回账户",
     )
 
     data class Profile(
@@ -79,6 +79,12 @@ object CostCsv {
                 bill.note.orEmpty().replace("\n", " "),
                 profile.currency,
                 profile.tags,
+                when (bill.reimburseStatus) {
+                    "PENDING" -> "待报销"
+                    "REIMBURSED" -> "已报销"
+                    else -> ""
+                },
+                bill.reimburseAccount.orEmpty(),
             )
             check(row.size == HEADER.size) { "列数必须与表头一致: ${row.size} != ${HEADER.size}" }
             builder.append(escape(row)).append('\n')

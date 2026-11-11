@@ -121,7 +121,7 @@ object AssetMath {
         val reversed = HashSet<String>()
         entries.forEach { e ->
             require(e.id.isNotBlank() && e.operationId.isNotBlank() && e.accountId in ids) { "资产流水引用无效" }
-            require(e.kind in listOf("OPENING", "ADJUSTMENT", "BILL", "TRANSFER", "REVERSAL")) { "资产流水类型无效" }
+            require(e.kind in listOf("OPENING", "ADJUSTMENT", "BILL", "TRANSFER", "REVERSAL", "REIMBURSE")) { "资产流水类型无效" }
             require(e.deltaCents != Long.MIN_VALUE) { "资产金额超出范围" }
             e.reversalOf?.let { target ->
                 val original = byId[target] ?: error("资产冲销引用不存在")

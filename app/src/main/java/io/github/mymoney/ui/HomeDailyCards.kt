@@ -1,7 +1,9 @@
 package io.github.mymoney.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -23,6 +25,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import io.github.mymoney.data.AppDb
+import io.github.mymoney.data.BillEntity
 import io.github.mymoney.ui.design.*
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.CancellationException
@@ -71,10 +74,12 @@ internal fun LazyListScope.homeCardItem(key: Any, content: @Composable () -> Uni
 }
 
 /** One logical daily card, composed as lazy header/rows so a thousand-row day stays lazy. */
+@OptIn(ExperimentalFoundationApi::class)
 internal fun LazyListScope.homeDailyCards(
     snapshot: HomeDailySnapshot,
     clock: LedgerClock,
     onBillClick: (Long) -> Unit,
+    onBillLongPress: (BillEntity) -> Unit = {},
 ) {
     snapshot.days.forEach { day ->
         item(key = "home-day-${day.date}", contentType = "home-day-header") {
@@ -91,7 +96,10 @@ internal fun LazyListScope.homeDailyCards(
                 bottomEnd = if (last) AbRadius.group else 0.dp)
             Column(Modifier.fillMaxWidth().padding(bottom = if (last) AbCardDensity.gap else 0.dp)
                 .clip(shape).background(LocalAbPalette.current.cardBg)) {
-                BillListRow(bill, modifier = Modifier.clickable { onBillClick(bill.id) })
+                BillListRow(bill, modifier = Modifier.combinedClickable(
+                    onClick = { onBillClick(bill.id) },
+                    onLongClick = if (io.github.mymoney.data.Reimburse.eligible(bill)) ({ onBillLongPress(bill) }) else null,
+                ))
                 if (!last) InsetDivider(inset = AbSpacing.l + AbCardDensity.icon + AbSpacing.m)
             }
         }

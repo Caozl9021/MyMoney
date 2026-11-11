@@ -3,21 +3,15 @@ package io.github.mymoney.ui
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.VectorConverter
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
-import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -28,13 +22,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
@@ -42,13 +35,30 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import io.github.mymoney.ui.design.*
 import kotlin.math.roundToInt
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.first
 
 internal data class CategoryPickerRequest(val group: String, val subs: List<String>, val anchor: Rect,
     val original: String?, val sliding: Boolean, val row: Rect = anchor)
+
+/** 1–2 横排，3 等边三角形，4 正方形，其后按约定行数；超过 10 个每行 4 个。 */
+internal fun subcategoryRowCounts(count: Int): List<Int> = when (count) {
+    0 -> emptyList()
+    1, 2 -> listOf(count)
+    3 -> listOf(1, 2)
+    4 -> listOf(2, 2)
+    5 -> listOf(3, 2)
+    6 -> listOf(3, 3)
+    7 -> listOf(2, 3, 2)
+    8 -> listOf(2, 3, 3)
+    9 -> listOf(3, 3, 3)
+    10 -> listOf(3, 4, 3)
+    else -> List((count + 3) / 4) { index -> minOf(4, count - index * 4) }
+}
+
+/** 一行贴住分类行；两行用第一行；三行及以上用中间那一行。 */
+internal fun subcategoryAlignRow(rowCount: Int): Int = when {
+    rowCount <= 2 -> 0
+    else -> rowCount / 2
+}
 
 @Stable
 internal class CategoryPickerState {
@@ -170,114 +180,78 @@ internal fun BoxScope.CategoryPicker(
         state.onHoverEnter = enter
         onDispose { if (state.onHoverEnter === enter) state.onHoverEnter = null }
     }
-    val list = rememberScrollState()
     val currentSelect by rememberUpdatedState(onSelect)
     val duration = if (reduce) 0 else AbMotion.fast
     val visibleRegions = state.regions.toMap()
     LaunchedEffect(visibleRegions, state.viewport) { state.pointer?.let(state::move) }
-    LaunchedEffect(state.open, request, state.pointer, state.viewport) {
-        if (!state.open || !request.sliding) return@LaunchedEffect
-        while (true) {
-            val point = state.pointer ?: break
-            val viewport = state.viewport
-            val edge = with(density) { 24.dp.toPx() }
-            val delta = when {
-                point.y < viewport.top || point.y >= viewport.bottom -> 0f
-                point.x >= viewport.left && point.x < viewport.left + edge -> -8f
-                point.x < viewport.right && point.x > viewport.right - edge -> 8f
-                else -> 0f
-            }
-            if (delta == 0f || list.scrollBy(delta) == 0f) break
-            delay(32)
-        }
-    }
-    LaunchedEffect(state.open, state.generation) {
-        if (state.open) {
-            list.scrollTo(0)
-            if (!request.sliding && request.original != null) {
-                val (viewport, item) = snapshotFlow { state.viewport to state.regions[request.original] }
-                    .first { (viewport, item) -> viewport.width > 0f && item != null }
-                item?.let { list.scrollBy((it.left - viewport.left - with(density) { 4.dp.toPx() }).coerceAtLeast(0f)) }
-            }
-        }
-    }
     AnimatedVisibility(visible = state.open, enter = fadeIn(tween(duration)), exit = fadeOut(tween(duration)),
         modifier = Modifier.matchParentSize()) {
-        // Transparent interaction shield; never dim the entire sheet for a category choice.
         Box(Modifier.fillMaxSize().clickable { state.cancel() }.semantics { contentDescription = "取消二级分类选择" })
     }
     BoxWithConstraints(Modifier.matchParentSize()) {
-        val margin = with(density) { 20.dp.toPx() }
-        val row = request.row.takeIf { it.width > 0f } ?: request.anchor
-        val x = (row.left - hostOrigin.x + with(density) { 8.dp.toPx() }).coerceIn(margin, (constraints.maxWidth - margin - 48f).coerceAtLeast(margin))
-        val width = (constraints.maxWidth - margin - x).coerceAtLeast(48f)
-        val y = (request.anchor.top - hostOrigin.y).coerceAtLeast(WindowInsets.safeDrawing.getTop(density).toFloat())
+        val margin = with(density) { 12.dp.toPx() }
+        val maxW = constraints.maxWidth.toFloat()
+        val maxH = constraints.maxHeight.toFloat()
+        val counts = subcategoryRowCounts(request.subs.size)
+        val alignIndex = subcategoryAlignRow(counts.size)
+        val widest = counts.maxOrNull()?.coerceAtLeast(1) ?: 1
+        val bubbleW = with(density) { (widest * 78).dp.coerceAtMost((maxW - margin * 2f).toDp()) }
+        val bubbleH = (counts.size * 52).dp
+        val bubbleHpx = with(density) { bubbleH.toPx() }
+        val alignCenter = bubbleHpx * (alignIndex + 0.5f) / counts.size.coerceAtLeast(1)
+        var bubbleWidth by remember(state.generation) { mutableFloatStateOf(with(density) { bubbleW.toPx() }) }
+        var bubbleHeight by remember(state.generation) { mutableFloatStateOf(bubbleHpx) }
+        val anchor = request.anchor
+        val safeTop = WindowInsets.safeDrawing.getTop(density).toFloat()
+        val x = (anchor.center.x - hostOrigin.x - bubbleWidth / 2f)
+            .coerceIn(margin, (maxW - margin - bubbleWidth).coerceAtLeast(margin))
+        val anchorMid = anchor.center.y - hostOrigin.y
+        val y = (anchorMid - alignCenter).coerceIn(safeTop, (maxH - margin - bubbleHeight).coerceAtLeast(safeTop))
         AnimatedVisibility(visible = state.open,
             enter = fadeIn(tween(duration)), exit = fadeOut(tween(duration)),
-            modifier = Modifier.offset { IntOffset(x.roundToInt(), y.roundToInt()) }) {
+            modifier = Modifier.offset { IntOffset(x.roundToInt(), y.roundToInt()) }.onSizeChanged {
+                bubbleWidth = it.width.toFloat()
+                bubbleHeight = it.height.toFloat()
+            }) {
             key(state.generation) {
-            val outerShape = RoundedCornerShape(28.dp)
+            val outerShape = ClusterShape()
             Box(
-                modifier = Modifier.widthIn(max = with(density) { width.toDp() })
-                    .shadow(if (reduce) 0.dp else 6.dp, outerShape)
+                modifier = Modifier.size(bubbleW, bubbleH)
+                    .shadow(if (reduce) 0.dp else 8.dp, outerShape)
                     .clip(outerShape).background(p.elevatedBg)
-                    .border(0.5.dp, p.separator.copy(alpha = .18f), outerShape)
+                    .border(0.5.dp, p.separator.copy(alpha = .22f), outerShape)
                     .onGloballyPositioned { state.viewport = it.boundsInRoot() }
                     .semantics { paneTitle = "二级分类"; isTraversalGroup = true }
                     .testTag("category-inline-bubble"),
             ) {
                 val activeName = if (request.sliding) state.hovered else request.original
-                val target = activeName?.let { state.regions[it] }?.takeIf { state.viewport.width > 0f }?.let {
-                    // Content coordinates stay stable during scrolling: the fill tracks its text without lag.
-                    it.translate(Offset(list.value.toFloat() - state.viewport.left, -state.viewport.top))
+                val grid = Size(with(density) { bubbleW.toPx() }, bubbleHpx)
+                val gap = clusterGap(grid)
+                Canvas(Modifier.matchParentSize()) {
+                    val activeIndex = request.subs.indexOf(activeName)
+                    if (activeIndex < 0 || size.minDimension <= 0f) return@Canvas
+                    val cellGap = clusterGap(size)
+                    drawPath(clusterCell(request.subs.size, activeIndex, size, cellGap), p.accent.copy(alpha = 0.36f))
                 }
-                CategorySelectionSlider(target, list.value, state.open)
-                Row(Modifier.horizontalScroll(list).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    request.subs.forEach { name -> key(name) {
-                        val active = activeName == name
-                        val foreground by animateColorAsState(if (active) p.accent else p.label,
-                            tween(if (reduce) 0 else 100), label = "category-foreground")
-                        DisposableEffect(name, request) { onDispose { state.regions.remove(name) } }
-                        Box(Modifier.heightIn(min = 48.dp).widthIn(min = 64.dp)
+                request.subs.forEachIndexed { index, name -> key(name) {
+                    val active = activeName == name
+                    val foreground by animateColorAsState(if (active) p.accent else p.label,
+                        tween(if (reduce) 0 else 100), label = "category-foreground")
+                    val rect = clusterCellRect(request.subs.size, index, grid, gap)
+                    DisposableEffect(name, request) { onDispose { state.regions.remove(name) } }
+                    Box(
+                        Modifier.offset { IntOffset(rect.left.roundToInt(), rect.top.roundToInt()) }
+                            .size(with(density) { rect.width.toDp() }, with(density) { rect.height.toDp() })
                             .onGloballyPositioned { state.regions[name] = it.boundsInRoot() }
                             .clickable(enabled = !request.sliding) { if (state.open) { state.cancel(); currentSelect(request.group, name) } }
-                            .semantics { selected = active; role = Role.Button; contentDescription = "二级分类：$name" }
-                            .padding(horizontal = 14.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
-                            Text(name, style = AbType.footnote, color = foreground,
-                                modifier = Modifier.widthIn(max = 220.dp))
-                        }
-                    } }
-                }
+                            .semantics { selected = active; role = Role.Button; contentDescription = "二级分类：$name" },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(name, style = AbType.footnote, color = foreground, maxLines = 1)
+                    }
+                } }
             }
             }
-        }
-    }
-}
-
-/** One decorative fill moves between measured candidates; its animation never changes hit regions. */
-@Composable
-private fun BoxScope.CategorySelectionSlider(target: Rect?, scroll: Int, open: Boolean) {
-    val p = LocalAbPalette.current
-    val reduce = LocalReduceMotion.current
-    val frame = remember { Animatable(Rect.Zero, Rect.VectorConverter) }
-    val alpha = remember { Animatable(0f) }
-    var placed by remember { mutableStateOf(false) }
-    LaunchedEffect(target, reduce, open) {
-        if (target == null || !open) {
-            alpha.animateTo(0f, tween(if (reduce) 0 else 80))
-        } else coroutineScope {
-            launch { alpha.animateTo(1f, tween(if (reduce) 0 else 90)) }
-            if (!placed || reduce) { frame.snapTo(target); placed = true }
-            else frame.animateTo(target, spring(dampingRatio = .72f, stiffness = 520f))
-        }
-    }
-    Canvas(Modifier.matchParentSize().clearAndSetSemantics { }) {
-        if (!placed || alpha.value <= 0f) return@Canvas
-        val rect = frame.value.translate(Offset(-scroll.toFloat(), 0f))
-        val inset = 4.dp.toPx()
-        clipRect(left = inset, top = inset, right = (size.width - inset).coerceAtLeast(inset), bottom = (size.height - inset).coerceAtLeast(inset)) {
-            drawRoundRect(p.accent.copy(alpha = .15f * alpha.value), rect.topLeft, rect.size, CornerRadius(24.dp.toPx()))
-            drawRoundRect(p.accent.copy(alpha = .10f * alpha.value), rect.topLeft, rect.size, CornerRadius(24.dp.toPx()), style = Stroke(.6.dp.toPx()))
         }
     }
 }

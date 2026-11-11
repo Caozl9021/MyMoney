@@ -47,10 +47,8 @@ object LedgerConfig {
         CategoryGroup("其他"),
     )
 
-    val DEFAULT_ACCOUNTS = listOf(
-        "微信钱包", "微信零钱通", "支付宝", "余额宝", "花呗", "白条",
-        "储蓄卡", "信用卡", "现金", "数字人民币",
-    )
+    /** 新安装只播一个无品牌兜底账户；品牌账户由用户从常用预设自行添加。 */
+    val DEFAULT_ACCOUNTS = listOf("钱包")
 
     /** 备注模板可用的占位符 */
     val NOTE_TOKENS get() = NoteTemplate.TOKENS
@@ -109,10 +107,32 @@ object LedgerConfig {
 
     fun moveGroup(type: BillType, from: Int, to: Int) = writeGroups(type, Reorder.move(groupsFor(type), from, to))
 
+    fun reorderGroups(type: BillType, orderedNames: List<String>) {
+        val current = groupsFor(type)
+        require(orderedNames.toSet() == current.map { it.name }.toSet()) { "分类清单不一致" }
+        val byName = current.associateBy { it.name }
+        writeGroups(type, orderedNames.map { byName.getValue(it) })
+    }
+
     fun moveSub(type: BillType, group: String, from: Int, to: Int) =
         writeGroups(type, groupsFor(type).map { if (it.name == group) it.copy(subs = Reorder.move(it.subs, from, to)) else it })
 
-    fun moveAccount(from: Int, to: Int) = AssetStore.changeCandidates(Reorder.move(accounts, from, to))
+    fun reorderSubs(type: BillType, group: String, orderedSubs: List<String>) {
+        writeGroups(type, groupsFor(type).map {
+            if (it.name != group) it
+            else {
+                require(orderedSubs.toSet() == it.subs.toSet()) { "二级分类清单不一致" }
+                it.copy(subs = orderedSubs)
+            }
+        })
+    }
+
+    fun moveAccount(from: Int, to: Int) {
+        val ids = AssetStore.accounts.value.filterNot { it.archived }.map { it.id }
+        AssetStore.moveAmongActive(ids, from, to)
+    }
+
+    fun reorderAccounts(orderedIds: List<String>) = AssetStore.reorderActive(orderedIds)
 
     fun subsOf(type: BillType, group: String?): List<String> =
         groupsFor(type).firstOrNull { it.name == group }?.subs.orEmpty()

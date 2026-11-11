@@ -103,6 +103,9 @@ import io.github.mymoney.R
 import io.github.mymoney.data.LedgerConfig
 import io.github.mymoney.data.NoteTemplate
 import io.github.mymoney.data.NoteSuggester
+import io.github.mymoney.ui.design.CompactAbSwitch
+import io.github.mymoney.ui.design.AppDialog
+import io.github.mymoney.ui.design.AppDialogActions
 import io.github.mymoney.ui.design.amountTint
 import io.github.mymoney.ui.design.AbIcons
 import io.github.mymoney.ui.design.AbMotion
@@ -184,6 +187,8 @@ fun ConfirmSheet(
     val haptic = rememberAbHaptic()
 
     var type by rememberSaveable { mutableStateOf(draft.type) }
+    var reimbursable by rememberSaveable { mutableStateOf(draft.reimbursable && draft.type == BillType.EXPENSE) }
+    var pendingType by remember { mutableStateOf<BillType?>(null) }
     val historyRecords by io.github.mymoney.data.RecognitionStore.records.collectAsStateWithLifecycle()
     val liveRow = historyRecords.firstOrNull { it.id == draft.historyId &&
         it.status == io.github.mymoney.data.RecognitionStatus.PENDING }
@@ -230,7 +235,16 @@ fun ConfirmSheet(
 
     var configVersion by remember { mutableStateOf(0) }
     val groups = remember(type, configVersion) { LedgerConfig.groupsFor(type) }
-    val accounts = remember(configVersion) { LedgerConfig.accounts }
+    val assetAccounts by io.github.mymoney.data.AssetStore.accounts.collectAsStateWithLifecycle()
+    // 确认卡只列已设余额账户 + 兜底「钱包」，避免旧默认占位刷一排未设置。
+    val accounts = remember(assetAccounts, configVersion) {
+        val visible = assetAccounts
+            .filter { !it.archived && (it.initialized || it.name == "钱包") }
+            .sortedWith(compareBy({ it.sortOrder }, { it.createdAt }, { it.id }))
+            .map { it.name }
+            .distinct()
+        visible.ifEmpty { listOf("钱包") }
+    }
     val subs = remember(category, groups) { groups.firstOrNull { it.name == category }?.subs.orEmpty() }
 
     // ---- 金额：新建为空（0.00 只是占位）；已有金额首次点入全选，直接键入即替换 ----
@@ -258,6 +272,7 @@ fun ConfirmSheet(
         note = note.trim().ifBlank { null },
         noteOrigin = noteOrigin, noteTemplateSnapshot = templateSnapshot,
         captureVersion = evidenceVersion, captureTouchedFields = touched,
+        reimbursable = reimbursable && type == BillType.EXPENSE,
     )
     LaunchedEffect(liveRow) {
         liveRow?.let { row ->
@@ -507,12 +522,39 @@ fun ConfirmSheet(
                             if (!locked) {
                                 touch(io.github.mymoney.data.CaptureFields.TYPE or io.github.mymoney.data.CaptureFields.CATEGORY or io.github.mymoney.data.CaptureFields.SUBCATEGORY)
                                 val next = BillType.entries[index]
-                                if (type != next) { haptic.tick(); picker.cancel(); type = next; category = null; subCategory = null }
+                                if (type != next) {
+                                    haptic.tick(); picker.cancel()
+                                    if (reimbursable && type == BillType.EXPENSE) pendingType = next
+                                    else { type = next; category = null; subCategory = null }
+                                }
                                 importError = null
                             }
                         }, modifier = Modifier.padding(horizontal = AbSpacing.xl),
                     )
-                    val assetAccounts by io.github.mymoney.data.AssetStore.accounts.collectAsStateWithLifecycle()
+                    val reimburseSwitch: (@Composable () -> Unit)? = if (type == BillType.EXPENSE) {
+                        {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = AbSpacing.s, end = AbSpacing.s)) {
+                                Text("可报销", style = AbType.caption1, color = p.secondaryLabel)
+                                CompactAbSwitch(checked = reimbursable, onCheckedChange = { if (!locked) reimbursable = it })
+                            }
+                        }
+                    } else null
+                    pendingType?.let { next ->
+                        AppDialog(title = "改为${typeLabel(next)}", onDismiss = { pendingType = null }) {
+                            Text("这笔将不再可报销，已有的报销退回会在保存时撤销。", style = AbType.footnote, color = p.secondaryLabel)
+                            AppDialogActions(
+                                confirmLabel = "继续",
+                                onConfirm = {
+                                    reimbursable = false
+                                    type = next
+                                    category = null
+                                    subCategory = null
+                                    pendingType = null
+                                },
+                                onDismiss = { pendingType = null },
+                            )
+                        }
+                    }
                     val assetAccount = assetAccounts.firstOrNull { it.name == account }
                     val transferEligible = assetAccounts.filter { !it.archived && it.initialized }
                     val fromTransfer = transferEligible.firstOrNull { it.name == account }
@@ -539,9 +581,14 @@ fun ConfirmSheet(
                         onSlideRelease = { picker.release()?.let { (group, sub) -> currentSelectSub(group, sub) } }, onSlideCancel = picker::cancel,
                         onOpenSub = { name, anchor -> currentOpenPicker(name, anchor, false) },
                         onToggle = { name -> if (!currentLocked) { touch(io.github.mymoney.data.CaptureFields.CATEGORY or io.github.mymoney.data.CaptureFields.SUBCATEGORY); haptic.tick(); category = if (category == name) null else name; subCategory = null } },
+                        trailing = reimburseSwitch,
                     )
-                    if (accounts.isEmpty()) EmptyLedgerPickerActions("账户", !locked,
-                        onAdd = { LedgerConfig.addAccount(it); configVersion++ }, onRestored = { configVersion++ })
+                    if (accounts.isEmpty()) Text(
+                        "请先在资产中添加账户",
+                        style = AbType.caption1,
+                        color = p.secondaryLabel,
+                        modifier = Modifier.padding(horizontal = AbSpacing.xl),
+                    )
                     ChipRow(label = "账户", items = accounts, selected = account, enabled = !locked,
                         onToggle = { name -> touch(io.github.mymoney.data.CaptureFields.ACCOUNT); haptic.tick(); account = if (account == name) null else name })
                     }
@@ -667,9 +714,55 @@ private fun ReceiptSummaryRow(label: String, value: String, expanded: Boolean, e
 }
 
 /**
- * 一行横滑的胶囊：左侧固定小标签，右侧 LazyRow 不换行。
+ * 一行横滑的胶囊：左侧固定小标签，右侧可以左右滑动。
  * 打开时和选中项变化时自动把选中项滚进可视区（N1.3：当前项可见）。
  */
+@Composable
+private fun CategoryChoiceChip(
+    name: String,
+    selected: String?,
+    enabled: Boolean,
+    displayName: (String) -> String,
+    slideFor: (String) -> Boolean,
+    tintFor: ((String) -> Color)?,
+    onStart: (String, Rect) -> Unit,
+    onMove: (Offset) -> Unit,
+    onRelease: () -> Unit,
+    onCancel: () -> Unit,
+    onOpen: (String, Rect) -> Unit,
+    onToggle: (String) -> Unit,
+) {
+    var suppressHeldClick by remember { mutableStateOf(false) }
+    val gestureScope = rememberCoroutineScope()
+    fun endHeldClick() { gestureScope.launch { withFrameNanos { }; suppressHeldClick = false } }
+    var coordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    val hasSubs = slideFor(name)
+    SheetChip(
+        displayName(name), selected == name, tintFor?.invoke(name), enabled = enabled,
+        modifier = Modifier.onGloballyPositioned { coordinates = it }
+            .categorySlide(
+                name, enabled && hasSubs, { coordinates },
+                onStart = { suppressHeldClick = true; onStart(name, it) },
+                onMove = onMove,
+                onRelease = { onRelease(); endHeldClick() },
+                onCancel = { onCancel(); endHeldClick() },
+                onPress = { suppressHeldClick = false },
+            )
+            .semantics {
+                if (hasSubs && enabled) customActions = listOf(
+                    androidx.compose.ui.semantics.CustomAccessibilityAction("选择${name}二级分类") {
+                        coordinates?.takeIf { it.isAttached }?.let { onOpen(name, it.boundsInRoot()) }
+                        true
+                    },
+                )
+            },
+    ) {
+        if (suppressHeldClick) return@SheetChip
+        if (hasSubs && selected == name) coordinates?.takeIf { it.isAttached }?.let { onOpen(name, it.boundsInRoot()) }
+        else onToggle(name)
+    }
+}
+
 @Composable
 private fun ChipRow(
     label: String,
@@ -688,11 +781,12 @@ private fun ChipRow(
     onLabelClick: ((Rect) -> Unit)? = null,
     displayName: (String) -> String = { it },
     onViewport: (Rect) -> Unit = {},
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     val p = LocalAbPalette.current
     val reduceMotion = LocalReduceMotion.current
     // Empty category/account lists already expose their local add/reset actions above.
-    if (items.isEmpty()) return
+    if (items.isEmpty() && trailing == null) return
     val state = remember(key) { androidx.compose.foundation.lazy.LazyListState() }
     LaunchedEffect(key, selected, items) {
         val index = items.indexOf(selected)
@@ -723,38 +817,18 @@ private fun ChipRow(
                 }.semantics { contentDescription = "选择二级分类"; role = Role.Button } else Modifier)
                 .padding(start = AbSpacing.xl).widthIn(min = 30.dp).wrapContentHeight(),
         )
-        LazyRow(
+        if (items.isNotEmpty()) LazyRow(
             state = state,
-            contentPadding = PaddingValues(start = AbSpacing.s, end = AbSpacing.xl),
+            contentPadding = PaddingValues(start = AbSpacing.s, end = if (trailing == null) AbSpacing.xl else AbSpacing.s),
             horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
             modifier = Modifier.weight(1f).onGloballyPositioned { onViewport(it.boundsInRoot()) },
         ) {
             itemsIndexed(items, key = { _, name -> name }) { _, name ->
-                var suppressHeldClick by remember { mutableStateOf(false) }
-                val gestureScope = rememberCoroutineScope()
-                fun endHeldClick() { gestureScope.launch { withFrameNanos { }; suppressHeldClick = false } }
-                var coordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
-                val hasSubs = slideFor(name)
-                SheetChip(displayName(name), selected == name, tintFor?.invoke(name), enabled = enabled,
-                    modifier = Modifier.onGloballyPositioned { coordinates = it }
-                        .categorySlide(name, enabled && hasSubs, { coordinates },
-                            onStart = { suppressHeldClick = true; currentStart(name, it) }, onMove = { currentMove(it) },
-                            onRelease = { currentRelease(); endHeldClick() }, onCancel = { currentCancel(); endHeldClick() },
-                            onPress = { suppressHeldClick = false })
-                        .semantics {
-                            if (hasSubs && enabled) customActions = listOf(
-                                androidx.compose.ui.semantics.CustomAccessibilityAction("选择${name}二级分类") {
-                                    coordinates?.takeIf { it.isAttached }?.let { currentOpen(name, it.boundsInRoot()) }
-                                    true
-                                })
-                        },
-                ) {
-                    if (suppressHeldClick) return@SheetChip
-                    if (hasSubs && selected == name) coordinates?.takeIf { it.isAttached }?.let { currentOpen(name, it.boundsInRoot()) }
-                    else onToggle(name)
-                }
+                CategoryChoiceChip(name, selected, enabled, displayName, slideFor, tintFor,
+                    currentStart, currentMove, currentRelease, currentCancel, currentOpen, onToggle)
             }
-        }
+        } else Spacer(Modifier.weight(1f))
+        trailing?.invoke()
     }
 }
 

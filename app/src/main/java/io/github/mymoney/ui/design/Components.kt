@@ -309,18 +309,29 @@ fun ListRow(
 
 /** iOS 观感的开关：开=品牌绿，关=浅灰，滑块永远白色。 */
 @Composable
-fun AbSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+fun AbSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit) = SwitchCanvas(checked, compact = false, onCheckedChange)
+
+@Composable
+fun CompactAbSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit) = SwitchCanvas(checked, compact = true, onCheckedChange)
+
+@Composable
+private fun SwitchCanvas(checked: Boolean, compact: Boolean, onCheckedChange: (Boolean) -> Unit) {
     val p = LocalAbPalette.current
     val position by animateFloatAsState(
         targetValue = if (checked) 1f else 0f,
         animationSpec = tween(if (LocalReduceMotion.current) 0 else AbMotion.fast),
         label = "switchPosition",
     )
+    val width = if (compact) 40.dp else 52.dp
+    val height = if (compact) 32.dp else 48.dp
+    val track = if (compact) 22.dp else 30.dp
+    val knob = if (compact) 8.dp else 12.dp
     Canvas(
-        Modifier.size(width = 52.dp, height = 48.dp)
-            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange),
+        Modifier.size(width = width, height = height)
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
+            .semantics { contentDescription = if (checked) "可报销，已打开" else "可报销，已关闭" },
     ) {
-        val trackHeight = 30.dp.toPx()
+        val trackHeight = track.toPx()
         val top = (size.height - trackHeight) / 2f
         drawRoundRect(
             color = if (checked) p.accent else p.barTrack,
@@ -328,8 +339,8 @@ fun AbSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
             size = androidx.compose.ui.geometry.Size(size.width, trackHeight),
             cornerRadius = androidx.compose.ui.geometry.CornerRadius(trackHeight / 2f),
         )
-        val radius = 12.dp.toPx()
-        val inset = 3.dp.toPx() + radius
+        val radius = knob.toPx()
+        val inset = (if (compact) 2.dp else 3.dp).toPx() + radius
         val center = androidx.compose.ui.geometry.Offset(inset + (size.width - inset * 2f) * position, size.height / 2f)
         drawCircle(Color.White, radius, center)
         if (checked) drawCircle(p.accent.copy(alpha = 0.5f), radius, center,

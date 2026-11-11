@@ -4,6 +4,7 @@ import io.github.mymoney.data.AssetAccount
 import io.github.mymoney.data.AssetEntry
 import io.github.mymoney.data.BillEntity
 import io.github.mymoney.data.MiniJson
+import io.github.mymoney.data.Reimburse
 
 /**
  * W2 账本同步条目的 payload 编解码。payload 是同步单元，独立于备份格式（JSON9/10），
@@ -44,6 +45,9 @@ object LedgerPayloadCodec {
             "noteTemplateSnapshot" to b.noteTemplateSnapshot,
             "updatedAt" to b.updatedAt,
             "deletedAt" to b.deletedAt,
+            "reimburseStatus" to b.reimburseStatus,
+            "reimbursedAt" to b.reimbursedAt,
+            "reimburseAccountId" to b.reimburseAccountId,
         )
     }
 
@@ -80,6 +84,10 @@ object LedgerPayloadCodec {
             syncId = syncId,
             updatedAt = (payload["updatedAt"] as? Number)?.toLong() ?: fallbackUpdatedAt,
             deletedAt = (payload["deletedAt"] as? Number)?.toLong(),
+            reimburseStatus = Reimburse.normalize(str(payload["reimburseStatus"])),
+            reimbursedAt = (payload["reimbursedAt"] as? Number)?.toLong(),
+            reimburseAccountId = str(payload["reimburseAccountId"])
+                ?: str(payload["accountId"])?.takeIf { Reimburse.normalize(str(payload["reimburseStatus"])) == Reimburse.REIMBURSED },
         )
     }
 

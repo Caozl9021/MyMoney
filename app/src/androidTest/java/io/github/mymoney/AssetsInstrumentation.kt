@@ -257,5 +257,48 @@ class AssetsInstrumentation : Instrumentation() {
             check(runCatching { db.withTransaction { BillWriter.restoreGroupInTransaction(db, group) } }.isFailure)
             check(db.assets().entries() == before && db.bills().byId(group.first().id) == null)
         }
+        test("wizard_open_empty_balance_and_credit_debt_and_reject_duplicate") { db ->
+            suspend fun open(name: String, kind: String, position: Long): AssetAccount {
+                val now = System.currentTimeMillis()
+                check(db.assets().accounts().none { !it.archived && it.name == name })
+                val row = AssetAccount(UUID.randomUUID().toString(), name, kind,
+                    initialized = true, createdAt = now, updatedAt = now)
+                db.assets().upsertAccount(row)
+                db.assets().insertEntry(AssetEntry(UUID.randomUUID().toString(), UUID.randomUUID().toString(),
+                    row.id, position, "OPENING", "开通账户", now))
+                AssetMath.validate(AssetSnapshot(db.assets().accounts(), db.assets().entries()))
+                return row
+            }
+            val cash = open("现金", "CASH", 0L)
+            check(cash.initialized && balance(db, cash) == 0L)
+            val credit = open("花呗", "CREDIT", -1_230L)
+            check(balance(db, credit) == -1_230L)
+            check(runCatching { open("现金", "CASH", 0L) }.isFailure)
+            val summary = AssetMath.summary(db.assets().accounts(), db.assets().entries())
+            check(summary.assets == 0L && summary.debts == 1_230L && summary.unknown == 0)
+        }
+        test("open_unlinked_unset_placeholders_as_zero_keeps_linked_unset") { db ->
+            val orphan = account(db, "旧占位", null)
+            val linkedUnset = account(db, "有账单未设", null)
+            save(db, draft(linkedUnset.name, 500))
+            check(!orphan.initialized && !linkedUnset.initialized)
+            db.withTransaction {
+                val entryIds = db.assets().entries().map { it.accountId }.toSet()
+                val bills = db.bills().allOnce()
+                val billAccountIds = bills.flatMap { listOfNotNull(it.accountId, it.transferAccountId) }.toSet()
+                val billNames = bills.mapNotNull { it.account?.trim()?.takeIf(String::isNotEmpty) }.toSet()
+                db.assets().accounts().filter { !it.initialized && !it.archived }.forEach { acc ->
+                    val linked = acc.id in entryIds || acc.id in billAccountIds || acc.name in billNames
+                    if (!linked) {
+                        db.assets().upsertAccount(acc.copy(initialized = true, updatedAt = System.currentTimeMillis()))
+                        db.assets().insertEntry(AssetEntry(UUID.randomUUID().toString(), UUID.randomUUID().toString(),
+                            acc.id, 0L, "OPENING", "开通账户", System.currentTimeMillis()))
+                    }
+                }
+            }
+            check(db.assets().account(orphan.id)!!.initialized && balance(db, orphan) == 0L)
+            check(!db.assets().account(linkedUnset.id)!!.initialized)
+            check(db.bills().allOnce().single().assetLinked == false)
+        }
     }
 }

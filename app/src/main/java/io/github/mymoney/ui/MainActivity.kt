@@ -17,6 +17,9 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.getValue
@@ -313,6 +316,7 @@ private fun AppContent(tabState: MutableIntState, requestAdd: Int, settingsRootR
     var detailsOpen by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     var detailScope by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<io.github.mymoney.data.StatisticsDrilldown?>(null) }
     var detailAddRequest by androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(0) }
+    var pendingFilter by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     var consumedAddRequest by androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(0) }
     androidx.compose.runtime.LaunchedEffect(requestAdd) {
         if (requestAdd != 0 && requestAdd != consumedAddRequest) {
@@ -387,6 +391,11 @@ private fun AppContent(tabState: MutableIntState, requestAdd: Int, settingsRootR
                         onEditorVisibilityChanged = { editorChanged(0, it) },
                         onOpenAssets = { tabState.intValue = 2 },
                         onOpenSettings = { destination -> captureSettingsDestination = destination; tabState.intValue = 3 },
+                        onOpenPending = {
+                            detailScope = null
+                            pendingFilter = true
+                            detailsOpen = true
+                        },
                     )
                     1 -> StatsScreen(onOpenDetails = { openDetails() }, onOpenGroup = { openDetails(it) })
                     2 -> AssetsScreen(onBack = { tabState.intValue = 0 }, isTab = true,
@@ -399,9 +408,11 @@ private fun AppContent(tabState: MutableIntState, requestAdd: Int, settingsRootR
         }
         }
         if (detailsOpen) {
-            BillsScreen(requestAdd = detailAddRequest, onBack = { detailsOpen = false },
+            BillsScreen(requestAdd = detailAddRequest, applyPendingFilter = pendingFilter,
+                onPendingFilterApplied = { pendingFilter = false }, onBack = { detailsOpen = false },
                 onEditorVisibilityChanged = { editorChanged(4, it) }, statisticsScope = detailScope)
         }
+        ReimburseNoticeBar(Modifier.align(Alignment.BottomCenter).padding(start = 16.dp, end = 16.dp, bottom = 96.dp))
     }
     }
 }

@@ -40,12 +40,19 @@ internal fun AccountBalanceCard(account: AssetAccount, balance: Long, hidden: Bo
                 }
             }
             Text("账户余额（CNY）", style = AbType.footnote, color = p.secondaryLabel)
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.fillMaxWidth()
+                    .clickable(onClick = onEditBalance)
+                    .semantics {
+                        contentDescription = if (account.initialized) "调整余额" else "设置当前余额"
+                    },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 AmountText(if (!account.initialized) "未设置" else if (hidden) "••••" else assetMoney(balance),
                     AbType.amountHero, p.label, Modifier.weight(1f))
-                Box(Modifier.size(48.dp).clickable(onClick = onEditBalance)
-                    .semantics { contentDescription = if (account.initialized) "调整余额" else "设置当前余额" },
-                    contentAlignment = Alignment.Center) { Icon(AbIcons.Pencil, null, Modifier.size(20.dp), tint = p.secondaryLabel) }
+                Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                    Icon(AbIcons.Pencil, null, Modifier.size(20.dp), tint = p.secondaryLabel)
+                }
             }
         }
     }
@@ -108,7 +115,7 @@ internal fun LazyListScope.accountPeriodCards(periods: List<AccountHistoryPeriod
                 val entry = row.entry
                 val manual = bill == null
                 val title = bill?.let { it.subCategory ?: it.category ?: "未分类" }
-                    ?: when (entry?.kind) { "OPENING" -> "余额起点"; "REVERSAL" -> "调整撤销"; else -> "余额调整" }
+                    ?: when (entry?.kind) { "OPENING" -> "余额起点"; "REIMBURSE" -> "报销退回"; "REVERSAL" -> "调整撤销"; else -> "余额调整" }
                 val tint = when (bill?.type) { "EXPENSE" -> p.expense; "INCOME", "REFUND" -> p.income; else -> p.accent }
                 ListRow(title = title, subtitle = buildString {
                     append(Instant.ofEpochMilli(row.at).atZone(zone).format(DateTimeFormatter.ofPattern("HH:mm")))

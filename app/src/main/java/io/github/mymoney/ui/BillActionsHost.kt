@@ -71,6 +71,7 @@ fun BillActionsHost(
     var deleting by remember(billId) { mutableStateOf(false) }
     var deleteError by remember(billId) { mutableStateOf<String?>(null) }
     var linkConfirm by remember(billId) { mutableStateOf(false) }
+    var returnPicker by remember(billId) { mutableStateOf(false) }
     var linking by remember(billId) { mutableStateOf(false) }
     var parentId by remember(billId) { mutableStateOf<Long?>(null) }
     val assetAccounts by io.github.mymoney.data.AssetStore.accounts.collectAsStateWithLifecycle()
@@ -188,6 +189,18 @@ fun BillActionsHost(
                                     }
                                     bill.note?.takeIf { it.isNotBlank() }?.let { BillField("备注", it) }
                                     BillField("账单时间", billTime(bill.timeMillis))
+                                    if (io.github.mymoney.data.Reimburse.eligible(bill) || bill.reimburseStatus != io.github.mymoney.data.Reimburse.NONE) {
+                                        BillField("报销", when (bill.reimburseStatus) {
+                                            io.github.mymoney.data.Reimburse.PENDING -> "待报销"
+                                            io.github.mymoney.data.Reimburse.REIMBURSED -> "已报销"
+                                            else -> "未标记"
+                                        })
+                                        bill.reimbursedAt?.takeIf { bill.reimburseStatus == io.github.mymoney.data.Reimburse.REIMBURSED }?.let { at ->
+                                            val accountName = assetAccounts.firstOrNull { account -> account.id == bill.reimburseAccountId }?.name
+                                                ?: if (bill.reimburseAccountId == null) assetAccounts.firstOrNull { account -> account.id == bill.accountId }?.name ?: bill.account else null
+                                            BillField("退回", "${formatAmount(bill.priceCents)} 已于 ${billTime(at)} 退回 ${accountName ?: "退回账户"}")
+                                        }
+                                    }
                                     BillField("分类", bill.category)
                                     BillField("账户", if (deletedSnapshot != null) bill.account else assetAccounts.firstOrNull { it.id == bill.accountId }?.name ?: bill.account)
                                     if (bill.type == "TRANSFER") BillField("转入账户", if (deletedSnapshot != null) bill.transferAccount ?: "未补全" else assetAccounts.firstOrNull { it.id == bill.transferAccountId }?.name ?: bill.transferAccount ?: "未补全")
@@ -196,6 +209,19 @@ fun BillActionsHost(
                             }
                             item("actions") {
                                 InsetGroup {
+                                    if (io.github.mymoney.data.Reimburse.eligible(bill)) {
+                                        when (bill.reimburseStatus) {
+                                            io.github.mymoney.data.Reimburse.PENDING -> {
+                                                ListRow(title = "已报销", onClick = { markReimbursed(app, bill, assetAccounts) { returnPicker = true } })
+                                                ListRow(title = "取消可报销", dividerAbove = true, onClick = { requestReimbursement(app, bill, io.github.mymoney.data.Reimburse.NONE) })
+                                            }
+                                            io.github.mymoney.data.Reimburse.REIMBURSED -> {
+                                                if (paymentReady(bill, assetAccounts)) ListRow(title = "更改退回账户", onClick = { returnPicker = true })
+                                                ListRow(title = "撤销报销", dividerAbove = paymentReady(bill, assetAccounts), onClick = { requestReimbursement(app, bill, io.github.mymoney.data.Reimburse.PENDING) })
+                                            }
+                                            else -> ListRow(title = "标为可报销", onClick = { requestReimbursement(app, bill, io.github.mymoney.data.Reimburse.PENDING) })
+                                        }
+                                    }
                                     if (bill.feeParentKey != null) {
                                         val parent = allBills.firstOrNull { it.assetKey == bill.feeParentKey }
                                         ListRow(title = "手续费随原转账一同修改 / 删除", subtitle = "保持本金、手续费与双账户余额一致",
@@ -232,6 +258,7 @@ fun BillActionsHost(
                 }
             }
         }
+        if (returnPicker && bill != null) ReturnAccountDialog(bill, assetAccounts) { returnPicker = false }
         if (deleting && deletedSnapshot == null) DeleteBillDialog(billId, origin = "bill_detail", onDismiss = { deleting = false }, onDeleted = { deleting = false; close() })
         if (linkConfirm && bill != null && deletedSnapshot == null) {
             val linkedAccount = assetAccounts.firstOrNull { it.id == bill.accountId }

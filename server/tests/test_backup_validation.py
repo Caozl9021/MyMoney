@@ -41,7 +41,7 @@ def validate(tmp_path, value):
     return validate_snapshot(path)
 
 
-@pytest.mark.parametrize("version", [8, 9, 10])
+@pytest.mark.parametrize("version", [8, 9, 10, 11, 12])
 def test_supported_versions_keep_actual_schema_and_exclude_log_snapshots_from_bill_count(tmp_path, version):
     value = snapshot(format=version)
     if version == 8:
@@ -87,7 +87,7 @@ def test_incomplete_or_conflicting_audit_groups_are_rejected(tmp_path):
     event = deletion()
     cases = [snapshot(deletions=[event, copy.deepcopy(event)]),
              snapshot(format=8, deletions=[event]), snapshot(deletions=None),
-             snapshot(format=11),
+             snapshot(format=13),
              snapshot(deletions=[deletion([bill(type="TRANSFER", transferFeeCents=50)])]),
              snapshot(deletions=[deletion([bill(), bill(2, feeParentKey="fixture-key")])]),
              snapshot(deletions=[deletion([bill(type="TRANSFER", transferFeeCents=50, accountId="from"),

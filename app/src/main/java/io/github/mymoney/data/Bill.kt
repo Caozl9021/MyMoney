@@ -30,6 +30,7 @@ private const val FILTERED_LEDGER_WHERE = """
       AND (:type IS NULL OR type = :type)
       AND (:statisticsCategory IS NULL OR (""" + CATEGORY_GROUP_SQL + """) = :statisticsCategory)
       AND (:statisticsAccount IS NULL OR (""" + ACCOUNT_GROUP_SQL + """) = :statisticsAccount)
+      AND (:reimburse IS NULL OR reimburseStatus = :reimburse)
 """
 
 /**
@@ -72,6 +73,10 @@ data class BillEntity(
     @androidx.room.ColumnInfo(defaultValue = "''") val syncId: String = "",
     @androidx.room.ColumnInfo(defaultValue = "0") val updatedAt: Long = 0,
     val deletedAt: Long? = null,
+    @androidx.room.ColumnInfo(defaultValue = "'NONE'") val reimburseStatus: String = Reimburse.NONE,
+    val reimbursedAt: Long? = null,
+    /** 报销退回记入的资产账户。空表示还没选；159 已报销的迁移成原支付账户。 */
+    val reimburseAccountId: String? = null,
 )
 
 @Dao
@@ -87,20 +92,27 @@ interface BillDao {
     @Query("SELECT * FROM bills " + FILTERED_LEDGER_WHERE + " ORDER BY timeMillis DESC, id DESC LIMIT :limit")
     fun observeFilteredWindow(
         pattern: String, from: Long, to: Long, category: String?, type: String?, limit: Int,
-        statisticsCategory: String? = null, statisticsAccount: String? = null,
+        statisticsCategory: String? = null, statisticsAccount: String? = null, reimburse: String? = null,
     ): Flow<List<BillEntity>>
 
     @Query("""
         SELECT COUNT(*) AS count,
-            COALESCE(SUM(CASE WHEN type = 'EXPENSE' THEN priceCents ELSE 0 END), 0) AS expense,
+            COALESCE(SUM(CASE WHEN type = 'EXPENSE' AND COALESCE(reimburseStatus, 'NONE') != 'REIMBURSED' THEN priceCents ELSE 0 END), 0) AS expense,
             COALESCE(SUM(CASE WHEN type = 'INCOME' THEN priceCents ELSE 0 END), 0) AS income,
             COALESCE(SUM(CASE WHEN type = 'REFUND' THEN priceCents ELSE 0 END), 0) AS refund
         FROM bills
     """ + FILTERED_LEDGER_WHERE)
     fun observeFilteredSummary(
         pattern: String, from: Long, to: Long, category: String?, type: String?,
-        statisticsCategory: String? = null, statisticsAccount: String? = null,
+        statisticsCategory: String? = null, statisticsAccount: String? = null, reimburse: String? = null,
     ): Flow<BillQuerySummary>
+
+    @Query("""
+        SELECT COUNT(*) AS count, COALESCE(SUM(priceCents), 0) AS cents
+        FROM bills
+        WHERE type = 'EXPENSE' AND reimburseStatus = 'PENDING' AND feeParentKey IS NULL
+    """)
+    fun observePendingReimbursement(): Flow<PendingReimbursement>
 
     /** Includes historical categories and folds SQL NULL into the unclassified empty value. */
     @Query("SELECT DISTINCT COALESCE(category, '') FROM bills ORDER BY COALESCE(category, '')")
@@ -246,18 +258,18 @@ interface BillDao {
     suspend fun updateSyncFields(id: Long, syncId: String, updatedAt: Long, deletedAt: Long?)
 
     /** 应用远端整条账单：按 syncId 定位，写全字段（id 保持本机自增不变）。 */
-    @Query("UPDATE bills SET type = :type, priceCents = :priceCents, timeMillis = :timeMillis, merchant = :merchant, method = :method, orderTail = :orderTail, sourcePkg = :sourcePkg, strategy = :strategy, fingerprint = :fingerprint, createdAt = :createdAt, category = :category, subCategory = :subCategory, account = :account, note = :note, recognitionId = :recognitionId, accountId = :accountId, transferAccountId = :transferAccountId, assetLinked = :assetLinked, assetKey = :assetKey, transferFeeCents = :transferFeeCents, feeParentKey = :feeParentKey, transferAccount = :transferAccount, productName = :productName, productSource = :productSource, noteOrigin = :noteOrigin, noteTemplateSnapshot = :noteTemplateSnapshot, updatedAt = :updatedAt, deletedAt = :deletedAt WHERE syncId = :syncId")
+    @Query("UPDATE bills SET type = :type, priceCents = :priceCents, timeMillis = :timeMillis, merchant = :merchant, method = :method, orderTail = :orderTail, sourcePkg = :sourcePkg, strategy = :strategy, fingerprint = :fingerprint, createdAt = :createdAt, category = :category, subCategory = :subCategory, account = :account, note = :note, recognitionId = :recognitionId, accountId = :accountId, transferAccountId = :transferAccountId, assetLinked = :assetLinked, assetKey = :assetKey, transferFeeCents = :transferFeeCents, feeParentKey = :feeParentKey, transferAccount = :transferAccount, productName = :productName, productSource = :productSource, noteOrigin = :noteOrigin, noteTemplateSnapshot = :noteTemplateSnapshot, updatedAt = :updatedAt, deletedAt = :deletedAt, reimburseStatus = :reimburseStatus, reimbursedAt = :reimbursedAt, reimburseAccountId = :reimburseAccountId WHERE syncId = :syncId")
     suspend fun applyRemoteBySyncId(
         syncId: String, type: String, priceCents: Long, timeMillis: Long, merchant: String?, method: String?, orderTail: String?,
         sourcePkg: String, strategy: String, fingerprint: String, createdAt: Long, category: String?, subCategory: String?,
         account: String?, note: String?, recognitionId: String?, accountId: String?, transferAccountId: String?,
         assetLinked: Boolean, assetKey: String, transferFeeCents: Long, feeParentKey: String?, transferAccount: String?,
         productName: String?, productSource: String?, noteOrigin: String?, noteTemplateSnapshot: String?,
-        updatedAt: Long, deletedAt: Long?,
+        updatedAt: Long, deletedAt: Long?, reimburseStatus: String, reimbursedAt: Long?, reimburseAccountId: String?,
     ): Int
 }
 
-@Database(entities = [BillEntity::class, RecognitionEntity::class, AssetAccount::class, AssetEntry::class, AssetMeta::class, CaptureAlias::class, CaptureEvidence::class, CaptureDelivery::class, ImportIdentity::class, RuleModelEntity::class, AppDataEntity::class, BillDeletionLog::class], version = 11, exportSchema = false)
+@Database(entities = [BillEntity::class, RecognitionEntity::class, AssetAccount::class, AssetEntry::class, AssetMeta::class, CaptureAlias::class, CaptureEvidence::class, CaptureDelivery::class, ImportIdentity::class, RuleModelEntity::class, AppDataEntity::class, BillDeletionLog::class], version = 13, exportSchema = false)
 abstract class AppDb : RoomDatabase() {
 
     abstract fun deletions(): BillDeletionDao
@@ -407,12 +419,26 @@ abstract class AppDb : RoomDatabase() {
             }
         }
 
+        val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE bills ADD COLUMN reimburseStatus TEXT NOT NULL DEFAULT 'NONE'")
+                db.execSQL("ALTER TABLE bills ADD COLUMN reimbursedAt INTEGER")
+            }
+        }
+
+        val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE bills ADD COLUMN reimburseAccountId TEXT")
+                db.execSQL("UPDATE bills SET reimburseAccountId = accountId WHERE reimburseStatus = 'REIMBURSED' AND accountId IS NOT NULL")
+            }
+        }
+
         fun get(context: Context): AppDb = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext,
                 AppDb::class.java,
                 "mymoney.db",
-            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11).build().also { instance = it }
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13).build().also { instance = it }
         }
     }
 }

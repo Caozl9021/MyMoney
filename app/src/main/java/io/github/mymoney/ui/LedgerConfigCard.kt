@@ -3,11 +3,6 @@ package io.github.mymoney.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,50 +10,52 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.billkit.BillType
+import io.github.mymoney.data.AssetStore
 import io.github.mymoney.data.CategoryGroup
 import io.github.mymoney.data.LedgerConfig
 import io.github.mymoney.ui.design.AbCardDensity
-import io.github.mymoney.ui.design.AppDialog
-import io.github.mymoney.ui.design.AppDialogActions
 import io.github.mymoney.ui.design.AbIcons
 import io.github.mymoney.ui.design.AbRadius
 import io.github.mymoney.ui.design.AbSize
 import io.github.mymoney.ui.design.AbSpacing
 import io.github.mymoney.ui.design.AbType
+import io.github.mymoney.ui.design.AppDialog
+import io.github.mymoney.ui.design.AppDialogActions
 import io.github.mymoney.ui.design.CategoryBadge
 import io.github.mymoney.ui.design.CategoryIcons
 import io.github.mymoney.ui.design.CategoryPreset
 import io.github.mymoney.ui.design.CategoryPresets
-import io.github.mymoney.ui.design.rememberAbHaptic
+import io.github.mymoney.ui.design.DragReorderColumn
 import io.github.mymoney.ui.design.EmptyState
 import io.github.mymoney.ui.design.GroupFooter
 import io.github.mymoney.ui.design.GroupHeader
-import io.github.mymoney.ui.design.InsetDivider
 import io.github.mymoney.ui.design.InlineMessage
-import io.github.mymoney.ui.design.InsetGroup
 import io.github.mymoney.ui.design.InputRow
+import io.github.mymoney.ui.design.InsetDivider
+import io.github.mymoney.ui.design.InsetGroup
 import io.github.mymoney.ui.design.ListRow
 import io.github.mymoney.ui.design.LocalAbPalette
 import io.github.mymoney.ui.design.SubPageScaffold
+import io.github.mymoney.ui.design.rememberAbHaptic
 import io.github.mymoney.ui.design.swatchFor
-import com.example.billkit.BillType
 
 /**
  * 分类管理。账户候选清单由资产页单独管理。
@@ -80,7 +77,6 @@ fun LedgerConfigPage(
     var newGroup by rememberSaveable { mutableStateOf("") }
     var resetConfirm by rememberSaveable { mutableStateOf(false) }
     var resetError by remember { mutableStateOf<String?>(null) }
-    var sorting by rememberSaveable { mutableStateOf(false) }   // 排序模式：行尾出现上移/下移
     var showPresets by rememberSaveable { mutableStateOf(false) } // 非空 = 在「常用预设」二级页
 
     val groups = remember(version, tab) {
@@ -149,7 +145,15 @@ fun LedgerConfigPage(
 
             if (!presetsOnly) {
                 item(key = "hdr") {
-                    SortableHeader(if (tab == 0) "支出分类" else "收入分类", sorting) { sorting = !sorting }
+                    GroupHeader(if (tab == 0) "支出分类" else "收入分类")
+                    if (groups.size > 1) {
+                        Text(
+                            "长按拖动排序",
+                            style = AbType.caption1,
+                            color = p.secondaryLabel,
+                            modifier = Modifier.padding(start = AbSpacing.page, bottom = AbSpacing.xs),
+                        )
+                    }
                 }
 
                 item(key = "groups") {
@@ -161,21 +165,26 @@ fun LedgerConfigPage(
                                 message = "在下面添加分类名称，用于本地账单归类与统计。",
                             )
                         } else {
-                            groups.forEachIndexed { index, group ->
+                DragReorderColumn(
+                    items = groups,
+                    keyOf = { it.name },
+                    onReorder = { next ->
+                        runCatching {
+                            LedgerConfig.reorderGroups(type, next.map { it.name })
+                        }.onSuccess { version++ }
+                    },
+                ) { group, index, _ ->
                                 GroupRow(
                                     group = group,
                                     dividerAbove = index > 0,
-                                    onClick = { if (!sorting) openGroup = group.name },
-                                    trailing = if (sorting) {
-                                        { MoveButtons(group.name, index, groups.size) { from, to -> LedgerConfig.moveGroup(type, from, to); version++ } }
-                                    } else null,
+                                    onClick = { openGroup = group.name },
                                 )
                             }
                         }
                     }
                 }
 
-                if (!sorting) item(key = "add") {
+                item(key = "add") {
                     InsetGroup {
                         InputRow(
                             label = "添加",
@@ -193,7 +202,7 @@ fun LedgerConfigPage(
 
             }
 
-            if (!sorting && (presetsOnly || fixedTab == null)) {
+            if (presetsOnly || fixedTab == null) {
                 // 预设：市面上大多数记账 App 都有的那一批名字。只补「当前还没有的」，
                 // 点一下就连同二级分类一起建好；之后和手工添加的分类没有任何区别。
                 val presets = CategoryPresets.forType(tab == 1)
@@ -231,7 +240,7 @@ fun LedgerConfigPage(
                 if (resetError != null && !resetConfirm) InlineMessage(resetError.orEmpty(), isError = true, announce = true)
             }
 
-            if (!sorting && (presetsOnly || fixedTab == null)) item(key = "reset") {
+            if (presetsOnly || fixedTab == null) item(key = "reset") {
                 InsetGroup {
                     ListRow(
                         title = "恢复默认分类",
@@ -379,7 +388,6 @@ private fun SubCategoryPage(
 ) {
     val p = LocalAbPalette.current
     var draft by rememberSaveable { mutableStateOf("") }
-    var sorting by rememberSaveable { mutableStateOf(false) }
 
     // 父级可能已被删掉，重新读一次保证 subs 是最新的
     val fresh = remember(group.name, version) {
@@ -399,8 +407,15 @@ private fun SubCategoryPage(
             verticalArrangement = Arrangement.spacedBy(AbSpacing.xs),
         ) {
             item(key = "hdr") {
-                if (fresh.subs.size > 1) SortableHeader("二级分类", sorting) { sorting = !sorting }
-                else GroupHeader("二级分类")
+                GroupHeader("二级分类")
+                if (fresh.subs.size > 1) {
+                    Text(
+                        "长按拖动排序",
+                        style = AbType.caption1,
+                        color = p.secondaryLabel,
+                        modifier = Modifier.padding(start = AbSpacing.page, bottom = AbSpacing.xs),
+                    )
+                }
             }
 
             item(key = "subs") {
@@ -412,32 +427,33 @@ private fun SubCategoryPage(
                             message = "可选。留空也可以正常记账和导出。",
                         )
                     } else {
-                        fresh.subs.forEachIndexed { index, sub ->
-                            if (sorting && fresh.subs.size > 1) {
-                                ListRow(
-                                    title = sub,
-                                    dividerAbove = index > 0,
-                                    trailing = {
-                                        MoveButtons(sub, index, fresh.subs.size) { from, to ->
-                                            LedgerConfig.moveSub(type, fresh.name, from, to); onChanged()
-                                        }
-                                    },
-                                )
-                            } else ListRow(
+                        DragReorderColumn(
+                            items = fresh.subs,
+                            keyOf = { it },
+                            onReorder = { next ->
+                                runCatching {
+                                    LedgerConfig.reorderSubs(type, fresh.name, next)
+                                }.onSuccess { onChanged() }
+                            },
+                        ) { sub, index, _ ->
+                            ListRow(
                                 title = sub,
                                 dividerAbove = index > 0,
                                 trailing = {
                                     Box(
                                         Modifier
                                             .clip(RoundedCornerShape(100.dp))
+                                            .clickable(
+                                                interactionSource = remember { MutableInteractionSource() },
+                                                indication = null,
+                                            ) {
+                                                LedgerConfig.removeSubCategory(type, fresh.name, sub)
+                                                onChanged()
+                                            }
                                             .padding(horizontal = 8.dp, vertical = 4.dp),
                                     ) {
                                         Text("删除", style = AbType.footnote, color = p.red)
                                     }
-                                },
-                                onClick = {
-                                    LedgerConfig.removeSubCategory(type, fresh.name, sub)
-                                    onChanged()
                                 },
                             )
                         }
@@ -479,33 +495,57 @@ private fun SubCategoryPage(
     }
 }
 
-/** 账户清单：CapsuleChip 网格 + 行内输入。 */
+/** 账户清单：点选进入详情；长按拖动调整确认卡顺序。 */
 @Composable
-private fun AccountsSection(version: Int, onChanged: () -> Unit) {
+private fun AccountsSection(
+    version: Int,
+    assetAccounts: List<io.github.mymoney.data.AssetAccount>,
+    onChanged: () -> Unit,
+    onAdd: () -> Unit,
+    onOpenAccount: (String) -> Unit,
+) {
     val p = LocalAbPalette.current
-    var draft by rememberSaveable { mutableStateOf("") }
     var accountError by remember { mutableStateOf<String?>(null) }
-    val accounts = remember(version) { LedgerConfig.accounts }
+    val ordered = remember(version, assetAccounts) { assetAccounts.filter { !it.archived } }
 
     Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
         InsetGroup {
-            if (accounts.isEmpty()) {
-                ListRow(title = "还没有账户", subtitle = "在下方输入框添加第一个账户")
+            ListRow(
+                title = "添加账户",
+                subtitle = "按类型从预设开通，保存即已设置",
+                chevron = true,
+                onClick = onAdd,
+            )
+        }
+        InsetGroup {
+            if (ordered.isEmpty()) {
+                ListRow(title = "还没有账户", subtitle = "点上方添加账户")
             } else {
-                accounts.forEachIndexed { index, name ->
+                DragReorderColumn(
+                    items = ordered,
+                    keyOf = { it.id },
+                    onReorder = { next ->
+                        accountError = null
+                        runCatching {
+                            AssetStore.reorderActive(next.map { it.id })
+                        }.onSuccess { onChanged() }
+                            .onFailure { accountError = it.message ?: "账户排序失败，请重试" }
+                    },
+                ) { row, index, _ ->
                     ListRow(
-                        title = name,
+                        title = row.name,
+                        subtitle = if (!row.initialized) "待设置余额" else null,
                         dividerAbove = index > 0,
                         leading = {
                             io.github.mymoney.ui.design.AccountAvatar(
-                                name = name,
+                                name = row.name,
                                 size = AbCardDensity.settingsIcon,
                             )
                         },
                         trailing = {
                             androidx.compose.material3.Icon(
                                 imageVector = AbIcons.Close,
-                                contentDescription = "删除",
+                                contentDescription = "从清单移除",
                                 modifier = Modifier
                                     .size(20.dp)
                                     .clickable(
@@ -513,103 +553,16 @@ private fun AccountsSection(version: Int, onChanged: () -> Unit) {
                                         indication = null,
                                     ) {
                                         accountError = null
-                                        runCatching { LedgerConfig.removeAccount(name) }
+                                        runCatching { LedgerConfig.removeAccount(row.name) }
                                             .onSuccess { onChanged() }
                                             .onFailure { accountError = it.message ?: "移除账户失败，请重试" }
                                     },
                                 tint = p.secondaryLabel,
                             )
                         },
+                        onClick = { onOpenAccount(row.id) },
                     )
                 }
-            }
-            InsetDivider()
-            InputRow(
-                label = "添加",
-                value = draft,
-                onValueChange = { draft = it; accountError = null },
-                placeholder = "账户名（如 微信零钱）",
-                onDone = {
-                    accountError = null
-                    runCatching {
-                        require(draft.isNotBlank()) { "请输入账户名称" }
-                        LedgerConfig.addAccount(draft)
-                    }.onSuccess { draft = ""; onChanged() }
-                        .onFailure { accountError = it.message ?: "添加账户失败，请重试" }
-                },
-            )
-        }
-        if (accountError != null) InlineMessage(accountError.orEmpty(), isError = true, announce = true)
-    }
-}
-
-/** 分组标题 + 右侧「排序 / 完成」切换。 */
-@Composable
-private fun SortableHeader(title: String, sorting: Boolean, onToggle: () -> Unit) {
-    val p = LocalAbPalette.current
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        GroupHeader(title, Modifier.weight(1f))
-        Text(
-            if (sorting) "完成" else "排序",
-            style = AbType.footnote.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
-            color = p.accent,
-            modifier = Modifier
-                .heightIn(min = 48.dp)
-                .clip(RoundedCornerShape(100.dp))
-                .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onToggle)
-                .padding(horizontal = AbSpacing.m, vertical = 14.dp)
-                .semantics { role = Role.Button; contentDescription = if (sorting) "完成排序" else "调整${title}顺序" },
-        )
-    }
-}
-
-/**
- * 上移 / 下移按钮（48dp）。用按钮而不是拖拽：TalkBack、单手、发抖的手都能精确操作，
- * 首项不能上移、末项不能下移。
- */
-@Composable
-private fun MoveButtons(name: String, index: Int, size: Int, onMove: (Int, Int) -> Unit) {
-    val haptic = io.github.mymoney.ui.design.rememberAbHaptic()
-    Row(horizontalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
-        MoveButton("上移", "把$name 上移", AbIcons.ChevronUp, enabled = index > 0) { haptic.tick(); onMove(index, index - 1) }
-        MoveButton("下移", "把$name 下移", AbIcons.ChevronDown, enabled = index < size - 1) { haptic.tick(); onMove(index, index + 1) }
-    }
-}
-
-@Composable
-private fun MoveButton(label: String, description: String, icon: androidx.compose.ui.graphics.vector.ImageVector,
-    enabled: Boolean, onClick: () -> Unit) {
-    val p = LocalAbPalette.current
-    Box(
-        Modifier.size(48.dp).clip(RoundedCornerShape(12.dp))
-            .clickable(remember { MutableInteractionSource() }, indication = null, enabled = enabled, onClick = onClick)
-            .semantics { role = Role.Button; contentDescription = description },
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(Modifier.size(32.dp).clip(RoundedCornerShape(10.dp)).background(if (enabled) p.fill else androidx.compose.ui.graphics.Color.Transparent),
-            contentAlignment = Alignment.Center) {
-            androidx.compose.material3.Icon(icon, contentDescription = null, Modifier.size(18.dp),
-                tint = if (enabled) p.label else p.tertiaryLabel.copy(alpha = 0.4f))
-        }
-    }
-}
-
-/** 排序模式下的账户：改成一列可移动的行，网格里没法表达先后。 */
-@Composable
-private fun SortableAccounts(version: Int, onChanged: () -> Unit) {
-    val accounts = remember(version) { LedgerConfig.accounts }
-    var accountError by remember { mutableStateOf<String?>(null) }
-    Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-        InsetGroup {
-            accounts.forEachIndexed { index, name ->
-                ListRow(title = name, dividerAbove = index > 0,
-                    trailing = { MoveButtons(name, index, accounts.size) { from, to ->
-                        accountError = null
-                        runCatching { LedgerConfig.moveAccount(from, to) }
-                            .onSuccess { onChanged() }
-                            .onFailure { accountError = it.message ?: "账户排序失败，请重试" }
-                    } },
-                )
             }
         }
         if (accountError != null) InlineMessage(accountError.orEmpty(), isError = true, announce = true)
@@ -629,11 +582,14 @@ internal fun RestoreLedgerDefaultsDialog(onDismiss: () -> Unit, onConfirm: () ->
 
 /** 资产 → 账户管理：与确认卡共用同一份账户候选清单。 */
 @Composable
-internal fun AccountCandidatesPage(onBack: () -> Unit) {
+internal fun AccountCandidatesPage(
+    onBack: () -> Unit,
+    onAdd: () -> Unit,
+    onOpenAccount: (String) -> Unit,
+) {
     val accounts by io.github.mymoney.data.AssetStore.accounts.collectAsStateWithLifecycle()
     val ready by io.github.mymoney.data.AssetStore.ready.collectAsStateWithLifecycle()
     val storeError by io.github.mymoney.data.AssetStore.error.collectAsStateWithLifecycle()
-    var sorting by rememberSaveable { mutableStateOf(false) }
     var version by remember { mutableStateOf(0) }
     var resetConfirm by rememberSaveable { mutableStateOf(false) }
     var resetError by remember { mutableStateOf<String?>(null) }
@@ -648,15 +604,27 @@ internal fun AccountCandidatesPage(onBack: () -> Unit) {
         ) {
             if (storeError != null) item { InlineMessage(storeError.orEmpty(), isError = true, announce = true) }
             if (ready) {
-                item { SortableHeader("确认卡账户清单", sorting) { sorting = !sorting } }
                 item {
-                    if (sorting) SortableAccounts(version = listVersion, onChanged = { version++ })
-                    else AccountsSection(version = listVersion, onChanged = { version++ })
+                    Text(
+                        "添加请用预设向导；清单内长按拖动排序",
+                        style = AbType.footnote,
+                        color = LocalAbPalette.current.secondaryLabel,
+                    )
                 }
-                if (!sorting) item {
+                item { GroupHeader("确认卡账户清单") }
+                item {
+                    AccountsSection(
+                        version = listVersion,
+                        assetAccounts = accounts,
+                        onChanged = { version++ },
+                        onAdd = onAdd,
+                        onOpenAccount = onOpenAccount,
+                    )
+                }
+                item {
                     InsetGroup {
                         ListRow(title = "恢复默认账户清单", destructive = true,
-                            subtitle = "恢复默认候选，保留账户余额与流水",
+                            subtitle = "恢复为仅「钱包」，保留账户余额与流水",
                             onClick = { resetError = null; resetConfirm = true })
                     }
                 }
@@ -664,7 +632,7 @@ internal fun AccountCandidatesPage(onBack: () -> Unit) {
         }
     }
     if (resetConfirm) AppDialog(title = "恢复默认账户清单？", onDismiss = { resetConfirm = false }) {
-        Text("将恢复默认账户候选和顺序；其他账户归档，同名已归档默认账户会恢复。全部账户余额、流水、账单和分类保留。")
+        Text("将恢复默认账户候选为仅「钱包」；其他账户归档，同名已归档默认账户会恢复。全部账户余额、流水、账单和分类保留。")
         if (resetError != null) InlineMessage(resetError.orEmpty(), isError = true, announce = true)
         AppDialogActions(
             confirmLabel = "恢复默认账户",

@@ -49,6 +49,12 @@ data class BillDraft(
     /** Editor-only optimistic version; never persisted or part of transaction identity. */
     val captureVersion: String? = null,
     val captureTouchedFields: Long = 0L,
+    /** 确认卡和编辑器上的「可报销」。默认关；已报销的旧账在编辑时保持打开。 */
+    val reimbursable: Boolean = false,
+    /** NONE / PENDING / REIMBURSED。导出和编辑回看用；新卡片保持 NONE。 */
+    val reimburseStatus: String = "NONE",
+    /** 报销退回账户的名字，只给导出用。 */
+    val reimburseAccount: String? = null,
 ) {
     /** 去重指纹：包名 + 金额 + 分钟 + 单号尾号（容忍几秒内的重复回调） */
     val fingerprint: String

@@ -5,7 +5,7 @@ import java.util.UUID
 /** Strict portable asset ledger codec. A malformed snapshot must never be partially restored. */
 object AssetBackupCodec {
     private val kinds = setOf("CASH", "PAYMENT", "SAVINGS", "CREDIT", "OTHER_ASSET", "OTHER_DEBT")
-    private val entryKinds = setOf("OPENING", "ADJUSTMENT", "BILL", "TRANSFER", "REVERSAL")
+    private val entryKinds = setOf("OPENING", "ADJUSTMENT", "BILL", "TRANSFER", "REVERSAL", "REIMBURSE")
 
     fun encode(snapshot: AssetSnapshot): Map<String, Any?> {
         validate(snapshot)
@@ -67,7 +67,7 @@ object AssetBackupCodec {
             require(account.initialized) { "未设置余额的账户含资产流水" }
             require(e.deltaCents != Long.MIN_VALUE) { "资产流水金额超出范围" }
             e.billKey?.let { require(it.isNotBlank()) { "资产流水账单身份无效" } }
-            if (e.kind in setOf("BILL", "TRANSFER")) require(!e.billKey.isNullOrBlank()) { "账单流水缺少稳定身份" }
+            if (e.kind in setOf("BILL", "TRANSFER", "REIMBURSE")) require(!e.billKey.isNullOrBlank()) { "账单流水缺少稳定身份" }
             e.reversalOf?.let { key ->
                 require(e.kind == "REVERSAL" && key != e.id && reversals.add(key)) { "资产冲销身份无效或重复" }
                 val original = entries[key] ?: errorInvalid("资产冲销引用不存在的流水")

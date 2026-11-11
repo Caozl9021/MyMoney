@@ -28,6 +28,8 @@ object AssetStore {
         scope.launch {
             try {
                 migrateAccounts(db, legacy)
+                ensureCatchAllWallet(db)
+                openUnsetPlaceholdersAsZero(db)
                 refresh()
                 _ready.value = true
                 launch { db.assets().observeAccounts().collect { _accounts.value = it } }
@@ -45,6 +47,46 @@ object AssetStore {
         _accounts.value = snapshot.accounts; _entries.value = snapshot.entries
     }
     fun candidateNames(): List<String>? = if (ready.value) _accounts.value.filterNot { it.archived }.map { it.name } else null
+
+    /**
+     * 按展示列表的新顺序重写未归档账户的 [AssetAccount.sortOrder]。
+     * [orderedDisplayedIds] 可以是全量未归档，也可以是资产页「已设置」子集；
+     * 未出现在该列表中的未归档账户保持相对槽位，资产页与账户管理 / 确认卡共用。
+     */
+    fun reorderActive(orderedDisplayedIds: List<String>) = runBlocking(Dispatchers.IO) {
+        awaitReady()
+        if (orderedDisplayedIds.size <= 1) return@runBlocking
+        require(orderedDisplayedIds.distinct().size == orderedDisplayedIds.size) { "排序账户重复" }
+        db.withTransaction {
+            val all = db.assets().accounts()
+            val byId = all.associateBy { it.id }
+            orderedDisplayedIds.forEach { id ->
+                val row = byId[id] ?: error("账户不存在")
+                require(!row.archived) { "账户已归档" }
+            }
+            val active = all.filter { !it.archived }
+            val displayedSet = orderedDisplayedIds.toSet()
+            val slots = active.mapIndexedNotNull { index, account ->
+                if (account.id in displayedSet) index else null
+            }
+            require(slots.size == orderedDisplayedIds.size) { "排序账户不一致" }
+            val merged = active.toMutableList()
+            slots.forEachIndexed { i, slot -> merged[slot] = byId.getValue(orderedDisplayedIds[i]) }
+            val now = System.currentTimeMillis()
+            merged.forEachIndexed { index, account ->
+                if (account.sortOrder != index) {
+                    db.assets().upsertAccount(account.copy(sortOrder = index, updatedAt = now))
+                }
+            }
+        }
+        refresh()
+    }
+
+    fun moveAmongActive(displayedIds: List<String>, from: Int, to: Int) {
+        if (from !in displayedIds.indices || to !in displayedIds.indices || from == to) return
+        reorderActive(Reorder.move(displayedIds, from, to))
+    }
+
     fun changeCandidates(names: List<String>, restoreArchived: Boolean = false) = runBlocking(Dispatchers.IO) {
         awaitReady()
         db.withTransaction {
@@ -76,6 +118,72 @@ object AssetStore {
             AssetMath.validate(AssetSnapshot(db.assets().accounts().map { if (it.id == id) updated else it }, db.assets().entries()))
             db.assets().upsertAccount(updated)
             id
+        }
+        refresh(); id
+    }
+
+    /**
+     * 向导开通账户：写入即已设置。空余额视为头寸 0，登记 OPENING。
+     * [positionCents] 为净资产口径（信用欠款为负）。
+     */
+    suspend fun openAccount(
+        name: String,
+        kind: String,
+        aliases: String = "[]",
+        included: Boolean = true,
+        positionCents: Long = 0L,
+        reason: String = "开通账户",
+    ): String = withContext(Dispatchers.IO) {
+        awaitReady()
+        val trimmed = name.trim()
+        require(trimmed.isNotEmpty()) { "请输入账户名称" }
+        require(reason.isNotBlank()) { "请填写开通原因" }
+        require(positionCents != Long.MIN_VALUE) { "金额超出范围" }
+        val id = db.withTransaction {
+            val existing = db.assets().accounts().firstOrNull { it.name == trimmed }
+            require(existing == null || existing.archived) { "已有同名账户「$trimmed」" }
+            val now = System.currentTimeMillis()
+            val accountId = if (existing != null) {
+                val restored = existing.copy(
+                    kind = kind,
+                    aliases = aliases,
+                    included = included,
+                    archived = false,
+                    updatedAt = now,
+                )
+                db.assets().upsertAccount(restored)
+                if (!existing.initialized) {
+                    db.assets().upsertAccount(restored.copy(initialized = true, updatedAt = now))
+                    db.assets().insertEntry(
+                        AssetEntry(
+                            UUID.randomUUID().toString(), UUID.randomUUID().toString(),
+                            existing.id, positionCents, "OPENING", reason.trim(), nextEntryTime(db),
+                        ),
+                    )
+                }
+                // 已开通的归档账户：仅恢复，不在此改余额（避免静默冲账）。
+                existing.id
+            } else {
+                val createdId = createInTransaction(db, trimmed, kind, db.assets().accounts().size)
+                val created = db.assets().account(createdId)!!
+                db.assets().upsertAccount(
+                    created.copy(
+                        aliases = aliases,
+                        included = included,
+                        initialized = true,
+                        updatedAt = now,
+                    ),
+                )
+                db.assets().insertEntry(
+                    AssetEntry(
+                        UUID.randomUUID().toString(), UUID.randomUUID().toString(),
+                        createdId, positionCents, "OPENING", reason.trim(), nextEntryTime(db),
+                    ),
+                )
+                createdId
+            }
+            AssetMath.validate(AssetSnapshot(db.assets().accounts(), db.assets().entries()))
+            accountId
         }
         refresh(); id
     }
@@ -154,6 +262,7 @@ object AssetStore {
             AssetMath.validate(AssetSnapshot(db.assets().accounts(), db.assets().entries()))
             return null
         }
+        val payment = active.filter { it.kind != "REIMBURSE" }
         val account = if (before != null && before.account == after.account && after.accountId != null)
             db.assets().account(after.accountId) else after.accountId?.let { id -> db.assets().account(id) }
                 ?.takeIf { it.name == after.account || before == null } ?: resolveAccount(db, after.account)
@@ -166,9 +275,9 @@ object AssetStore {
         val row = after.copy(accountId = account?.id, assetKey = key, assetLinked = linked)
         val desired = if (!linked) emptyList() else if (after.type == "TRANSFER") listOf(account!!.id to -after.priceCents, destination!!.id to after.priceCents)
             else listOf(account!!.id to AssetMath.delta(after.type, after.priceCents))
-        val actual = active.map { it.accountId to it.deltaCents }.sortedBy { it.first }
+        val actual = payment.map { it.accountId to it.deltaCents }.sortedBy { it.first }
         if (actual == desired.sortedBy { it.first }) return row
-        reverse(db, active, "修改账单")
+        reverse(db, payment, "修改账单")
         val operation = UUID.randomUUID().toString(); val now = System.currentTimeMillis()
         desired.forEach { (id, delta) ->
             db.assets().insertEntry(AssetEntry(UUID.randomUUID().toString(), operation, id, delta,
@@ -177,6 +286,43 @@ object AssetStore {
         AssetMath.validate(AssetSnapshot(db.assets().accounts(), db.assets().entries()))
         return row
     }
+
+    /**
+     * 报销退回单独维护，不进入 [syncBill] 的扣款对比。
+     * 改备注或改金额时原支出扣款保持不动；金额变化只改这一条，换账户才冲销后重写。
+     */
+    suspend fun syncReimbursement(db: AppDb, bill: BillEntity): BillEntity {
+        val key = bill.assetKey.takeIf { it.isNotBlank() } ?: return bill
+        val existing = db.assets().entriesForBill(key)
+        val reversed = existing.mapNotNull { it.reversalOf }.toSet()
+        val active = existing.filter { it.kind == "REIMBURSE" && it.reversalOf == null && it.id !in reversed }
+        val payment = bill.accountId?.let { db.assets().account(it) }
+        val target = bill.reimburseAccountId?.let { db.assets().account(it) }
+        val want = bill.reimburseStatus == Reimburse.REIMBURSED && bill.type == "EXPENSE" && bill.feeParentKey == null &&
+            bill.assetLinked && payment?.initialized == true && target?.initialized == true && target.archived == false
+        if (!want) {
+            if (active.isNotEmpty()) {
+                reverse(db, active, "撤销报销")
+                AssetMath.validate(AssetSnapshot(db.assets().accounts(), db.assets().entries()))
+            }
+            return bill
+        }
+        val delta = bill.priceCents
+        val only = active.singleOrNull()
+        if (only != null && only.accountId == target!!.id && only.deltaCents == delta) return bill
+        if (only != null && only.accountId == target.id) {
+            db.assets().updateEntry(only.copy(deltaCents = delta, note = "报销退回", updatedAt = System.currentTimeMillis()))
+        } else {
+            if (active.isNotEmpty()) reverse(db, active, "调整报销退回")
+            db.assets().insertEntry(AssetEntry(
+                UUID.randomUUID().toString(), UUID.randomUUID().toString(), target.id, delta,
+                "REIMBURSE", "报销退回", bill.reimbursedAt ?: System.currentTimeMillis(), key,
+            ))
+        }
+        AssetMath.validate(AssetSnapshot(db.assets().accounts(), db.assets().entries()))
+        return bill
+    }
+
     private suspend fun nextEntryTime(db: AppDb): Long = maxOf(System.currentTimeMillis(),
         Math.addExact(db.assets().latestEntryTime() ?: 0L, 1L))
     private suspend fun reverse(db: AppDb, entries: List<AssetEntry>, note: String) {
@@ -200,5 +346,45 @@ object AssetStore {
         }
         allBills.filter { it.assetKey.isBlank() && it.account.isNullOrBlank() }.forEach { db.bills().update(it.copy(assetKey = "legacy-${it.id}")) }
         db.assets().putMeta(AssetMeta("legacy-accounts-v1", "complete"))
+    }
+
+    /** 保证兜底账户「钱包」存在；已有同名则只恢复归档。 */
+    private suspend fun ensureCatchAllWallet(db: AppDb) = db.withTransaction {
+        val existing = db.assets().accounts().firstOrNull { it.name == "钱包" }
+        if (existing != null) {
+            if (existing.archived) {
+                db.assets().upsertAccount(existing.copy(archived = false, updatedAt = System.currentTimeMillis()))
+            }
+            return@withTransaction
+        }
+        createInTransaction(db, "钱包", "PAYMENT", 0)
+    }
+
+    /**
+     * 旧「未设置」占位：无流水、无账单/识别关联则直接开通为 0。
+     * 有关联但仍未设置的留给账户管理/详情补余额，不做归档替代。
+     */
+    private suspend fun openUnsetPlaceholdersAsZero(db: AppDb) = db.withTransaction {
+        if (db.assets().meta("open-unset-v1") != null) return@withTransaction
+        val entryIds = db.assets().entries().map { it.accountId }.toSet()
+        val bills = db.bills().allOnce()
+        val billAccountIds = bills.flatMap { listOfNotNull(it.accountId, it.transferAccountId) }.toSet()
+        val billNames = bills.mapNotNull { it.account?.trim()?.takeIf(String::isNotEmpty) }.toSet()
+        val recogNames = db.recognitions().allOnce()
+            .mapNotNull { it.account?.trim()?.takeIf(String::isNotEmpty) }.toSet()
+        db.assets().accounts().filter { !it.initialized && !it.archived }.forEach { acc ->
+            val linked = acc.id in entryIds || acc.id in billAccountIds ||
+                acc.name in billNames || acc.name in recogNames
+            if (!linked) {
+                db.assets().upsertAccount(acc.copy(initialized = true, updatedAt = System.currentTimeMillis()))
+                db.assets().insertEntry(
+                    AssetEntry(
+                        UUID.randomUUID().toString(), UUID.randomUUID().toString(),
+                        acc.id, 0L, "OPENING", "开通账户", nextEntryTime(db),
+                    ),
+                )
+            }
+        }
+        db.assets().putMeta(AssetMeta("open-unset-v1", "complete"))
     }
 }

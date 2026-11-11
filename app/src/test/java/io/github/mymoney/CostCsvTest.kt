@@ -58,7 +58,7 @@ class CostCsvTest {
     @Test
     fun `表头与模板完全一致`() {
         assertEquals(
-            "日期,类型,金额,一级分类,二级分类,账户1,账户2,备注,货币,标签",
+            "日期,类型,金额,一级分类,二级分类,账户1,账户2,备注,货币,标签,报销状态,退回账户",
             rows(CostCsv.build(listOf(bill())))[0],
         )
     }
@@ -69,7 +69,7 @@ class CostCsvTest {
             listOf(bill(), bill(type = BillType.INCOME))
         )
         rows(csv).drop(1).forEach { line ->
-            assertEquals("列数不对: $line", 10, line.split(",").size)
+            assertEquals("列数不对: $line", 12, line.split(",").size)
         }
     }
 

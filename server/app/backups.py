@@ -121,7 +121,7 @@ def validate_snapshot(path: Path) -> tuple[int, datetime, int]:
     try:
         with path.open("r", encoding="utf-8") as stream:
             data = json.load(stream, parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
-        if not isinstance(data, dict) or data.get("kind") != "MyMoneyBackup" or type(data.get("format")) is not int or data["format"] not in (8, 9, 10):
+        if not isinstance(data, dict) or data.get("kind") != "MyMoneyBackup" or type(data.get("format")) is not int or data["format"] not in (8, 9, 10, 11, 12):
             raise ValueError()
         timestamp = data.get("exportedAt")
         if type(timestamp) is not int or timestamp <= 0:

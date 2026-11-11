@@ -12,6 +12,7 @@ data class LedgerQuery(
     val type: String? = null,
     val statisticsCategory: String? = null,
     val statisticsAccount: String? = null,
+    val reimburse: String? = null,
 ) {
     val likePattern: String
         get() = buildString {
@@ -28,6 +29,9 @@ data class LedgerQuery(
 data class BillQuerySummary(val count: Int, val expense: Long, val income: Long, val refund: Long) {
     val balance: Long get() = income - expense + refund
 }
+
+/** Open reimbursements across the whole ledger, independent of the visible month. */
+data class PendingReimbursement(val count: Int, val cents: Long)
 
 data class LedgerDateWindow(val fromMillis: Long, val toMillis: Long)
 

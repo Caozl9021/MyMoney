@@ -129,8 +129,9 @@ object BillWriter {
                 fingerprint = draft.fingerprint, createdAt = System.currentTimeMillis(),
                 category = draft.category, subCategory = draft.subCategory,
                 account = draft.account, note = draft.note, productName = draft.productName, productSource = draft.productSource,
-    noteOrigin = draft.noteOrigin, noteTemplateSnapshot = draft.noteTemplateSnapshot, recognitionId = history?.id).let {
-                    val linked = AssetStore.syncBill(db, null, it)!!.withSyncIdentity(System.currentTimeMillis())
+    noteOrigin = draft.noteOrigin, noteTemplateSnapshot = draft.noteTemplateSnapshot, recognitionId = history?.id,
+                reimburseStatus = if (draft.reimbursable && draft.type == BillType.EXPENSE) Reimburse.PENDING else Reimburse.NONE).let {
+                    val linked = linkedBill(db, null, it).withSyncIdentity(System.currentTimeMillis())
                     val row = linked.copy(id = dao.insert(linked))
                     touch(row)
                     row
@@ -237,7 +238,7 @@ object BillWriter {
                         require(row.feeParentKey == null) { "手续费请从原转账操作" }
                         require(row.type != "TRANSFER") { "请先补全转出和转入账户" }
                         if (!row.assetLinked) {
-                            val linked = AssetStore.syncBill(db, row, row, forceLink = true)!!.withSyncIdentity(System.currentTimeMillis())
+                            val linked = linkedBill(db, row, row, forceLink = true).withSyncIdentity(System.currentTimeMillis())
                             check(linked.assetLinked) { "请先设置该账户的当前余额" }
                             check(db.bills().update(linked) == 1) { "账单已不存在" }
                             touch(linked)
@@ -281,7 +282,7 @@ object BillWriter {
         if (draft.type == BillType.TRANSFER) return saveTransferDraftInTransaction(db, draft, original,
             original?.assetKey?.takeIf { it.isNotBlank() } ?: draft.sourcePkg)
         if (original == null) {
-            val fresh = newManualEntity(draft, System.currentTimeMillis())
+            val fresh = applyReimburseChoice(newManualEntity(draft, System.currentTimeMillis()), draft.reimbursable)
             // One editor source UUID is one save, even after a retry or process recreation.
             dao.allOnce().firstOrNull { it.sourcePkg == fresh.sourcePkg }?.let { saved ->
                 require(saved.priceCents == fresh.priceCents && saved.type == fresh.type &&
@@ -292,7 +293,7 @@ object BillWriter {
                 }
                 return saved
             }
-            val linked = AssetStore.syncBill(db, null, fresh)!!.withSyncIdentity(System.currentTimeMillis())
+            val linked = linkedBill(db, null, fresh).withSyncIdentity(System.currentTimeMillis())
             val row = linked.copy(id = dao.insert(linked))
             touch(row)
             return row
@@ -301,11 +302,11 @@ object BillWriter {
         require(current.feeParentKey == null) { "手续费请从原转账一同修改" }
         require(current.type != "TRANSFER" || current.transferAccountId == null) { "请使用转账表单修改转出和转入账户" }
         // Existing one-sided transfers remain unlinked until deliberately completed.
-        val edited = applyBillEdit(current, draft).copy(
+        val edited = applyReimburseChoice(applyBillEdit(current, draft).copy(
             syncId = current.syncId.takeIf { it.isNotBlank() } ?: UUID.randomUUID().toString(),
             updatedAt = System.currentTimeMillis(),
-        )
-        val linked = AssetStore.syncBill(db, current, edited)!!
+        ), draft.reimbursable)
+        val linked = linkedBill(db, current, edited)
         check(dao.update(linked) == 1) { "这笔账单已被删除，请重新打开明细" }
         touch(linked)
         return linked
@@ -360,6 +361,7 @@ object BillWriter {
             timeMillis = timeMillis, account = from.name, accountId = fromId, transferAccountId = toId, transferAccount = to.name,
             merchant = if (current.sourcePkg.startsWith("io.github.mymoney.manual.transfer.")) "${from.name} → ${to.name}" else current.merchant,
             note = note.takeIf(String::isNotBlank), transferFeeCents = feeCents, assetKey = key, assetLinked = true,
+            reimburseStatus = Reimburse.NONE, reimbursedAt = null, reimburseAccountId = null,
         ) ?: BillEntity(
             priceCents = cents, type = "TRANSFER", timeMillis = timeMillis, merchant = "${from.name} → ${to.name}",
             method = null, orderTail = null, sourcePkg = "io.github.mymoney.manual.transfer.$key",
@@ -369,7 +371,7 @@ object BillWriter {
         )
         val finalRow = if (current != null && current.sourcePkg.startsWith("io.github.mymoney.manual.") && current.recognitionId == null && !current.fingerprint.startsWith("asset-transfer-") && !current.fingerprint.startsWith("qianji:"))
             row.copy(fingerprint = toDraft(row).fingerprint) else row
-        val linked = AssetStore.syncBill(db, current, finalRow, forceLink = true)!!.withSyncIdentity(now)
+        val linked = linkedBill(db, current, finalRow, forceLink = true).withSyncIdentity(now)
         val principal = if (current == null) linked.copy(id = dao.insert(linked)) else {
             check(dao.update(linked) == 1) { "原转账已被删除" }; linked
         }
@@ -414,9 +416,50 @@ object BillWriter {
         // Check all slots before generating postings, then rely on the outer transaction for races.
         rows.forEach { check(dao.byId(it.id) == null) { "记录编号已占用，未覆盖现有账单" } }
         rows.forEach { row ->
-            val linked = AssetStore.syncBill(db, null, row)!!.withSyncIdentity(System.currentTimeMillis())
+            val linked = linkedBill(db, null, row).withSyncIdentity(System.currentTimeMillis())
             check(dao.restoreDeleted(linked) != -1L) { "记录编号已占用，未覆盖现有账单" }
             touch(linked)
+        }
+    }
+
+    fun updateReimbursement(context: Context, id: Long, status: String, reimburseAccountId: String? = null, onDone: (Result<String>) -> Unit) {
+        val app = context.applicationContext
+        scope.launch {
+            val result = runCatching {
+                require(status in Reimburse.statuses) { "报销状态无效" }
+                AssetStore.init(app)
+                AssetStore.awaitReady()
+                val message = writeLock.withLock {
+                    val db = AppDb.get(app)
+                    db.withTransaction {
+                        val row = db.bills().byId(id) ?: error("这笔账单已不存在")
+                        require(Reimburse.eligible(row)) { "只有支出可以报销" }
+                        val now = System.currentTimeMillis()
+                        val chosen = reimburseAccountId ?: row.reimburseAccountId
+                        val next = when (status) {
+                            Reimburse.REIMBURSED -> row.copy(reimburseStatus = status, reimbursedAt = row.reimbursedAt ?: now, reimburseAccountId = chosen, updatedAt = now)
+                            Reimburse.PENDING -> row.copy(reimburseStatus = status, reimbursedAt = null, updatedAt = now)
+                            else -> row.copy(reimburseStatus = Reimburse.NONE, reimbursedAt = null, reimburseAccountId = null, updatedAt = now)
+                        }
+                        val linked = AssetStore.syncReimbursement(db, next)
+                        check(db.bills().update(linked) == 1) { "这笔账单已不存在" }
+                        touch(linked)
+                        val account = db.assets().account(linked.reimburseAccountId ?: "")?.name ?: linked.account ?: "原账户"
+                        val amount = String.format(java.util.Locale.US, "%.2f", linked.priceCents / 100.0)
+                        when {
+                            linked.reimburseStatus == Reimburse.REIMBURSED && linked.assetLinked && linked.reimburseAccountId != null -> "已报销，¥$amount 已退回 $account"
+                            linked.reimburseStatus == Reimburse.REIMBURSED -> "已标为已报销。该账户未设余额，没有产生退回流水"
+                            row.reimburseStatus == Reimburse.REIMBURSED -> "已撤销报销"
+                            status == Reimburse.PENDING -> "已标为可报销"
+                            else -> "已取消可报销"
+                        }
+                    }
+                }
+                enqueueTouched(app)
+                if (message.startsWith("已报销")) io.github.mymoney.systems.SystemIntegration.refresh(app)
+                message
+            }
+            withContext(Dispatchers.Main) { onDone(result) }
         }
     }
 
@@ -434,7 +477,20 @@ object BillWriter {
         account = entity.account,
         note = entity.note, productName = entity.productName, productSource = entity.productSource,
         noteOrigin = entity.noteOrigin, noteTemplateSnapshot = entity.noteTemplateSnapshot, transferAccountId = entity.transferAccountId,
+        reimbursable = entity.reimburseStatus != Reimburse.NONE && Reimburse.eligible(entity),
+        reimburseStatus = entity.reimburseStatus,
     )
+}
+
+/** 支出才能标可报销。改成其他类型或关掉开关时清掉状态；已报销保持核销时间。 */
+internal fun applyReimburseChoice(bill: BillEntity, reimbursable: Boolean): BillEntity {
+    if (!reimbursable || !Reimburse.eligible(bill)) return bill.copy(reimburseStatus = Reimburse.NONE, reimbursedAt = null, reimburseAccountId = null)
+    return if (bill.reimburseStatus == Reimburse.REIMBURSED) bill else bill.copy(reimburseStatus = Reimburse.PENDING, reimbursedAt = null)
+}
+
+private suspend fun linkedBill(db: AppDb, before: BillEntity?, after: BillEntity, forceLink: Boolean = false): BillEntity {
+    val linked = AssetStore.syncBill(db, before, after, forceLink)!!
+    return AssetStore.syncReimbursement(db, linked)
 }
 
 /** Ledger time is editable; capture/import identity and actual creation time remain intact. */

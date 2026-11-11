@@ -104,7 +104,10 @@ object CostShare {
             AppDb.get(context).bills().range(span.from, span.to)
         }
         if (entities.isEmpty()) return 0
-        val drafts = entities.map { BillWriter.toDraft(it) }
+        val accounts = withContext(Dispatchers.IO) { AppDb.get(context).assets().accounts().associateBy { it.id } }
+        val drafts = entities.map { bill ->
+            BillWriter.toDraft(bill).copy(reimburseAccount = accounts[bill.reimburseAccountId]?.name)
+        }
         return if (shareBills(context, drafts, onlyTarget) != null) drafts.size else 0
     }
 
@@ -115,7 +118,10 @@ object CostShare {
         }
         if (entities.isEmpty()) return 0
 
-        val drafts = entities.map { BillWriter.toDraft(it) }
+        val accounts = withContext(Dispatchers.IO) { AppDb.get(context).assets().accounts().associateBy { it.id } }
+        val drafts = entities.map { bill ->
+            BillWriter.toDraft(bill).copy(reimburseAccount = accounts[bill.reimburseAccountId]?.name)
+        }
 
         return if (shareBills(context, drafts, onlyTarget) != null) drafts.size else 0
     }

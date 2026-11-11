@@ -1,6 +1,7 @@
 package io.github.mymoney.systems
 
 import io.github.mymoney.data.BillEntity
+import io.github.mymoney.data.Reimburse
 import io.github.mymoney.data.CaptureModeState
 import java.time.Instant
 import java.time.ZoneId
@@ -18,7 +19,7 @@ object SystemEntryPolicy {
 
     /** Original expense only: refunds remain separate ledger transactions. */
     fun expenseCents(bills: List<BillEntity>, month: MonthWindow): Long = bills
-        .filter { it.type == "EXPENSE" && it.timeMillis >= month.from && it.timeMillis < month.to }
+        .filter { Reimburse.countsInExpense(it) && it.timeMillis >= month.from && it.timeMillis < month.to }
         .sumOf { it.priceCents }
 
     /**

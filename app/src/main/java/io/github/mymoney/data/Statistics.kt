@@ -111,7 +111,7 @@ fun statistics(bills: List<BillEntity>, range: StatisticsRange): StatisticsSumma
                 incomeCents = totals.income,
                 refundCents = totals.refund,
                 transferCents = entries.filter { it.type == "TRANSFER" }.sumOf { it.priceCents },
-                expenseCount = entries.count { it.type == "EXPENSE" },
+                expenseCount = entries.count { Reimburse.countsInExpense(it) },
                 incomeCount = entries.count { it.type == "INCOME" },
                 refundCount = entries.count { it.type == "REFUND" },
                 transferCount = entries.count { it.type == "TRANSFER" },
@@ -119,7 +119,7 @@ fun statistics(bills: List<BillEntity>, range: StatisticsRange): StatisticsSumma
         }.toList()
     val chartTypes = listOf("EXPENSE", "INCOME", "REFUND")
     fun groups(type: String, label: (BillEntity) -> String): List<StatisticsGroup> {
-        val entries = included.filter { it.type == type }
+        val entries = included.filter { if (type == "EXPENSE") Reimburse.countsInExpense(it) else it.type == type }
         val total = entries.sumOf { it.priceCents }
         return entries.groupBy(label).map { (name, group) ->
             val cents = group.sumOf { it.priceCents }

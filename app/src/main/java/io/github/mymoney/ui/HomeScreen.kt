@@ -66,6 +66,7 @@ fun HomeScreen(
     onOpenAssets: () -> Unit = {},
     onOpenSettings: (CaptureSettingsDestination) -> Unit,
     onEditorVisibilityChanged: (Boolean) -> Unit = {},
+    onOpenPending: () -> Unit = {},
 ) {
     val p = LocalAbPalette.current
     val context = LocalContext.current
@@ -73,6 +74,10 @@ fun HomeScreen(
     val clock = rememberLedgerClock()
     val monthStartDay = rememberMonthStartDay()
     var periodBack by androidx.compose.runtime.saveable.rememberSaveable(monthStartDay) { mutableIntStateOf(0) }
+    var reimburseBill by remember { mutableStateOf<BillEntity?>(null) }
+    val pendingReimburse by remember(context) {
+        io.github.mymoney.data.AppDb.get(context.applicationContext).bills().observePendingReimbursement()
+    }.collectAsStateWithLifecycle(io.github.mymoney.data.PendingReimbursement(0, 0))
     val homePeriod = remember(clock, monthStartDay, periodBack) {
         io.github.mymoney.data.LedgerMonthPeriod.containing(clock.date, monthStartDay, clock.zone)
             .shift(-periodBack.toLong())
@@ -170,6 +175,15 @@ fun HomeScreen(
             homeCardItem(key = "summary") {
                 MonthlySummaryCard(clock, homePeriod, periodBack) { periodBack = it.coerceAtLeast(0) }
             }
+            if (pendingReimburse.count > 0) item(key = "pending-reimburse") {
+                Text(
+                    "待报销 ${formatAmount(pendingReimburse.cents)} · ${pendingReimburse.count} 笔",
+                    style = AbType.footnote, color = p.secondaryLabel,
+                    modifier = Modifier.fillMaxWidth()
+                        .clickable(onClick = onOpenPending)
+                        .padding(horizontal = AbSpacing.m, vertical = 4.dp),
+                )
+            }
             if (health.attention) homeCardItem(key = "runtime-attention") {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
@@ -221,7 +235,7 @@ fun HomeScreen(
                     }
                 }
             } else if (dailySnapshot != null) {
-                homeDailyCards(dailySnapshot, clock) { openBill(it) }
+                homeDailyCards(dailySnapshot, clock, onBillClick = { openBill(it) }, onBillLongPress = { reimburseBill = it })
             }
             if (dailySnapshot != null && (dailyState.failed || dailyState.loading || dailySnapshot.hasMore)) {
                 homeCardItem(key = "daily-more") {
@@ -271,6 +285,7 @@ fun HomeScreen(
         }
         SecondaryButton("关闭", onClick = { healthDetails = false }, modifier = Modifier.fillMaxWidth())
     }
+    reimburseBill?.let { bill -> ReimburseChoiceDialog(bill) { reimburseBill = null } }
     selectedId?.let { id ->
         Box(Modifier.fillMaxSize().zIndex(10f)) {
             BillActionsHost(billId = id, onClose = { selectedId = null; sourcePreview = null }, sourcePreview = sourcePreview)

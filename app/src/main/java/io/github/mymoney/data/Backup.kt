@@ -15,7 +15,7 @@ package io.github.mymoney.data
  */
 object Backup {
 
-    const val FORMAT = 10
+    const val FORMAT = 12
     const val KIND = "MyMoneyBackup"
 
     data class Bill(
@@ -48,6 +48,9 @@ object Backup {
         val noteTemplateSnapshot: String? = null,
         /** 设备级稳定同步身份（W2 起）；旧格式/旧备份无此字段，恢复时按需生成。 */
         val syncId: String = "",
+        val reimburseStatus: String = Reimburse.NONE,
+        val reimbursedAt: Long? = null,
+        val reimburseAccountId: String? = null,
     )
 
     data class Ledger(
@@ -135,6 +138,9 @@ object Backup {
                 "al" to b.assetLinked, "ak" to b.assetKey,
                 "tf" to b.transferFeeCents, "fpk" to b.feeParentKey, "tac" to b.transferAccount,
                 "sid" to b.syncId.takeIf { it.isNotBlank() },
+                "rs" to b.reimburseStatus,
+                "rat" to b.reimbursedAt,
+                "raid" to b.reimburseAccountId,
             )
         }
         snapshot.assets?.let { root["assets"] = AssetBackupCodec.encode(it) }
@@ -222,6 +228,16 @@ object Backup {
                 feeParentKey = if (format >= 3) m.optionalAssetText("fpk") else null,
                 transferAccount = if (format >= 5) m.optionalAssetText("tac") else null,
                 syncId = if (format >= 10) m.optionalAssetText("sid").orEmpty() else "",
+                reimburseStatus = if (format >= 11) Reimburse.normalize(m.str("rs")).also {
+                    require(m["rs"] == null || m["rs"] is String) { "报销状态无效" }
+                    require(it == (m.str("rs") ?: Reimburse.NONE)) { "报销状态无效" }
+                } else Reimburse.NONE,
+                reimbursedAt = if (format >= 11 && m["rat"] != null) m.num("rat").takeIf { it > 0 } else null,
+                reimburseAccountId = when {
+                    format >= 12 -> m.str("raid")?.takeIf { it.isNotBlank() }
+                    format >= 11 && Reimburse.normalize(m.str("rs")) == Reimburse.REIMBURSED -> m.str("aid")
+                    else -> null
+                },
             )
         }
         val ledger = (root["ledger"] as? Map<*, *>)?.let { l ->
@@ -337,17 +353,28 @@ object Backup {
             b.feeParentKey?.let { key ->
                 require(b.type == "EXPENSE" && byKey[key]?.type == "TRANSFER") { "手续费引用不存在的转账" }
             }
+            val byEntry = assets.entries.associateBy { it.id }
+            fun reimburseFamily(entry: AssetEntry) = entry.kind == "REIMBURSE" ||
+                (entry.kind == "REVERSAL" && byEntry[entry.reversalOf]?.kind == "REIMBURSE")
             val entries = assets.entries.filter { it.billKey == b.assetKey }
-            val totals = entries.groupBy { it.accountId }.mapValues { (_, list) ->
-                list.fold(0L) { n, e -> try { Math.addExact(n, e.deltaCents) } catch (_: ArithmeticException) { throw IllegalArgumentException("账单流水金额超出范围") } }
+            fun net(list: List<AssetEntry>) = list.groupBy { it.accountId }.mapValues { (_, rows) ->
+                rows.fold(0L) { n, e -> try { Math.addExact(n, e.deltaCents) } catch (_: ArithmeticException) { throw IllegalArgumentException("账单流水金额超出范围") } }
             }.filterValues { it != 0L }
+            val payment = net(entries.filter { !reimburseFamily(it) })
+            val returned = net(entries.filter { reimburseFamily(it) })
             if (b.assetLinked) {
                 require(b.assetKey.isNotBlank() && b.accountId != null && accounts[b.accountId]?.initialized == true) { "已联动账单缺少有效账户或身份" }
                 if (b.type == "TRANSFER") require(b.transferAccountId != null && accounts[b.transferAccountId]?.initialized == true) { "已联动转账缺少转入账户" }
                 val expected = if (b.type == "TRANSFER") mapOf(b.accountId!! to -b.priceCents, b.transferAccountId!! to b.priceCents)
                     else mapOf(b.accountId!! to when (b.type) { "EXPENSE" -> -b.priceCents; "INCOME", "REFUND" -> b.priceCents; else -> 0L })
-                require(totals == expected.filterValues { it != 0L }) { "账单与资产流水金额不一致" }
-            } else require(totals.isEmpty()) { "未联动账单仍含有效资产分录，未恢复" }
+                require(payment == expected.filterValues { it != 0L }) { "账单与资产流水金额不一致" }
+                val expectReturn = b.reimburseStatus == Reimburse.REIMBURSED && b.type == "EXPENSE" && b.feeParentKey == null
+                val returnAccount = b.reimburseAccountId ?: b.accountId
+                require(returned == if (expectReturn) mapOf(returnAccount!! to b.priceCents) else emptyMap<String, Long>()) { "报销退回与账单状态不一致" }
+            } else {
+                require(payment.isEmpty()) { "未联动账单仍含有效资产分录，未恢复" }
+                require(returned.isEmpty()) { "未联动账单仍含报销退回，未恢复" }
+            }
         }
     }
 

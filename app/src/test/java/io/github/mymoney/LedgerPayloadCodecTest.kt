@@ -63,6 +63,8 @@ class LedgerPayloadCodecTest {
         assertEquals(original.noteOrigin, decoded.noteOrigin)
         assertEquals(original.recognitionId, decoded.recognitionId)
         assertEquals(original.updatedAt, decoded.updatedAt)
+        assertEquals("NONE", decoded.reimburseStatus)
+        assertNull(decoded.reimbursedAt)
         assertNull(decoded.deletedAt)
     }
 

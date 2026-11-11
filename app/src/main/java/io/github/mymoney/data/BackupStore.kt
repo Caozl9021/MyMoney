@@ -109,6 +109,9 @@ object BackupStore {
                     assetLinked = r.assetLinked, assetKey = r.assetKey,
                     transferFeeCents = r.transferFeeCents, feeParentKey = r.feeParentKey, transferAccount = r.transferAccount,
                     syncId = r.syncId,
+                    reimburseStatus = r.reimburseStatus,
+                    reimbursedAt = r.reimbursedAt,
+                    reimburseAccountId = r.reimburseAccountId,
                 )
             },
             history = historyRows,
@@ -336,6 +339,9 @@ object BackupStore {
                             transferFeeCents = if (snapshot.assets != null) b.transferFeeCents else 0,
                             feeParentKey = if (snapshot.assets != null) b.feeParentKey else null,
                             transferAccount = b.transferAccount,
+                            reimburseStatus = b.reimburseStatus,
+                            reimbursedAt = b.reimbursedAt,
+                            reimburseAccountId = b.reimburseAccountId,
                             // 有稳定身份沿用（恢复/跨机迁移不新增重复记录），否则生成新身份。
                             syncId = b.syncId.takeIf { it.isNotBlank() } ?: java.util.UUID.randomUUID().toString(),
                             updatedAt = System.currentTimeMillis()))
@@ -424,7 +430,8 @@ object BackupStore {
     private fun assetBillModel(b: BillEntity) = Backup.Bill(
         b.priceCents, b.type, b.timeMillis, b.merchant, b.method, b.orderTail, b.sourcePkg, b.strategy,
         b.fingerprint, b.createdAt, b.category, b.subCategory, b.account, b.note, b.recognitionId, b.id,
-        b.accountId, b.transferAccountId, b.assetLinked, b.assetKey, b.transferFeeCents, b.feeParentKey, b.transferAccount, b.productName, b.productSource, b.noteOrigin, b.noteTemplateSnapshot)
+        b.accountId, b.transferAccountId, b.assetLinked, b.assetKey, b.transferFeeCents, b.feeParentKey, b.transferAccount, b.productName, b.productSource, b.noteOrigin, b.noteTemplateSnapshot,
+        reimburseStatus = b.reimburseStatus, reimbursedAt = b.reimbursedAt, reimburseAccountId = b.reimburseAccountId)
 
     private fun sameAssetBill(local: BillEntity, incoming: Backup.Bill): Boolean =
         local.priceCents == incoming.priceCents && local.type == incoming.type && local.timeMillis == incoming.timeMillis &&
@@ -433,7 +440,9 @@ object BackupStore {
             local.createdAt == incoming.createdAt && local.category == incoming.category && local.subCategory == incoming.subCategory &&
             local.account == incoming.account && local.note == incoming.note && local.accountId == incoming.accountId &&
             local.transferAccount == incoming.transferAccount && local.transferAccountId == incoming.transferAccountId && local.assetLinked == incoming.assetLinked &&
-            local.assetKey == incoming.assetKey && local.transferFeeCents == incoming.transferFeeCents && local.feeParentKey == incoming.feeParentKey
+            local.assetKey == incoming.assetKey && local.transferFeeCents == incoming.transferFeeCents && local.feeParentKey == incoming.feeParentKey &&
+            local.reimburseStatus == incoming.reimburseStatus && local.reimbursedAt == incoming.reimbursedAt &&
+            local.reimburseAccountId == incoming.reimburseAccountId
 
     /** 备份默认文件名：`麦米-备份-20261021-2015.json` */
     fun fileName(atMillis: Long = System.currentTimeMillis()): String {

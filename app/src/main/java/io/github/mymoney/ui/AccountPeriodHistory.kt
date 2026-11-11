@@ -21,12 +21,16 @@ internal fun accountPeriodHistory(account: AssetAccount, bills: List<BillEntity>
     postings.forEach { balance = Math.addExact(balance, it.deltaCents); running[it.id] = balance }
     val byId = postings.associateBy { it.id }
     val reversed = postings.mapNotNull { it.reversalOf }.toSet()
-    val activeBills = postings.filter { it.billKey != null && it.id !in reversed && it.reversalOf == null }.associateBy { it.billKey }
+    val activePostings = postings.filter { it.billKey != null && it.id !in reversed && it.reversalOf == null }
+    val activeBills = activePostings.filter { it.kind != "REIMBURSE" }.associateBy { it.billKey }
+    val reimbursements = activePostings.filter { it.kind == "REIMBURSE" }
     val names = setOf(account.name) + AssetMath.aliases(account)
     val rows = bills.filter { it.type != "TRANSFER" &&
         (it.accountId == account.id || it.accountId == null && it.account in names) }.map {
         AccountHistoryRow("bill-${it.id}", it.timeMillis, bill = it,
             balanceAfter = activeBills[it.assetKey]?.let { posting -> running[posting.id] })
+    } + reimbursements.map { entry ->
+        AccountHistoryRow("reimburse-${entry.id}", entry.createdAt, entry = entry, balanceAfter = running[entry.id])
     } + postings.filter { it.kind in setOf("OPENING", "ADJUSTMENT") ||
         it.kind == "REVERSAL" && byId[it.reversalOf]?.kind in setOf("OPENING", "ADJUSTMENT") }.map {
         AccountHistoryRow("entry-${it.id}", it.createdAt, entry = it, balanceAfter = running[it.id])
@@ -36,7 +40,9 @@ internal fun accountPeriodHistory(account: AssetAccount, bills: List<BillEntity>
         val periodRows = grouped[month].orEmpty().sortedWith(compareByDescending<AccountHistoryRow> { it.at }.thenByDescending { it.key })
         val visibleBills = periodRows.mapNotNull { it.bill }
         val out = visibleBills.filter { it.type == "EXPENSE" }.fold(0L) { total, bill -> Math.addExact(total, bill.priceCents) }
-        val incoming = visibleBills.filter { it.type == "INCOME" || it.type == "REFUND" }.fold(0L) { total, bill -> Math.addExact(total, bill.priceCents) }
+        val returned = periodRows.mapNotNull { it.entry?.takeIf { entry -> entry.kind == "REIMBURSE" } }
+            .fold(0L) { total, entry -> Math.addExact(total, entry.deltaCents) }
+        val incoming = Math.addExact(visibleBills.filter { it.type == "INCOME" || it.type == "REFUND" }.fold(0L) { total, bill -> Math.addExact(total, bill.priceCents) }, returned)
         AccountHistoryPeriod(LedgerMonthPeriod(month, startDay, zone), periodRows, out, incoming)
     }
 }

@@ -94,6 +94,7 @@ object BillDeletionCodec {
         "feeParentKey" to b.feeParentKey, "transferAccount" to b.transferAccount,
         "productName" to b.productName, "productSource" to b.productSource,
         "noteOrigin" to b.noteOrigin, "noteTemplateSnapshot" to b.noteTemplateSnapshot,
+        "rs" to b.reimburseStatus, "rat" to b.reimbursedAt, "raid" to b.reimburseAccountId,
     )
 
     private fun bill(m: Map<*, *>): BillEntity = BillEntity(
@@ -109,6 +110,9 @@ object BillDeletionCodec {
         feeParentKey = m.optionalText("feeParentKey"), transferAccount = m.optionalText("transferAccount", true),
         productName = m.optionalText("productName", true), productSource = m.optionalText("productSource", true),
         noteOrigin = m.optionalText("noteOrigin", true), noteTemplateSnapshot = m.optionalText("noteTemplateSnapshot", true),
+        reimburseStatus = Reimburse.normalize(m.optionalText("rs")),
+        reimbursedAt = (m["rat"] as? Number)?.toLong(),
+        reimburseAccountId = m.optionalText("raid"),
     )
 
     private fun Map<*, *>.text(key: String, allowEmpty: Boolean = false): String =

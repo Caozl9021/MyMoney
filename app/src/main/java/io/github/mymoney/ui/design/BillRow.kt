@@ -32,6 +32,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.mymoney.data.BillEntity
+import io.github.mymoney.data.Reimburse
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -151,11 +152,21 @@ fun BillListRow(
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
+            val reimbursed = bill.reimburseStatus == Reimburse.REIMBURSED
+            val pending = bill.reimburseStatus == Reimburse.PENDING
             AmountText(
                 formatAmount(bill.priceCents, signed = true, type = bill.type),
                 AbType.amountRow.copy(textAlign = TextAlign.End),
-                if (hideAmount) Color.Transparent else amountTint(p, bill.type),
+                if (hideAmount) Color.Transparent else if (reimbursed) p.secondaryLabel else amountTint(p, bill.type),
                 minFontSize = 14f,
+            )
+            if (pending || reimbursed) Text(
+                text = if (pending) "待报销" else "已报销",
+                style = AbType.caption2,
+                color = if (pending) {
+                    if (p.cardBg.luminance() > 0.5f) Color(0xFF9A5B00) else Color(0xFFFFB340)
+                } else p.secondaryLabel,
+                maxLines = 1,
             )
             if (account != null) Text(
                 text = account,

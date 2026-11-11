@@ -7,10 +7,12 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -23,6 +25,8 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.mymoney.data.*
 import io.github.mymoney.ui.design.*
@@ -64,6 +68,7 @@ fun AssetsScreen(onBack: () -> Unit, isTab: Boolean = false, onSubpageVisibility
     var hidden by remember { mutableStateOf(prefs.getBoolean("hide_amount", false)) }
     var showArchived by remember { mutableStateOf(prefs.getBoolean("show_archived", false)) }
     var moreOpen by remember { mutableStateOf(false) }
+    var balanceOpen by rememberSaveable { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var actionBusy by remember { mutableStateOf(false) }
     var confirmArchive by remember { mutableStateOf(false) }
@@ -86,12 +91,20 @@ fun AssetsScreen(onBack: () -> Unit, isTab: Boolean = false, onSubpageVisibility
     }
 
     fun closePage() {
-        when { billId != null -> billId = null; form != null -> form = null; selected != null -> selected = null; else -> onBack() }
+        when {
+            balanceOpen -> balanceOpen = false
+            billId != null -> billId = null
+            form != null -> form = null
+            selected != null -> selected = null
+            else -> onBack()
+        }
     }
     val currentVisibility by rememberUpdatedState(onSubpageVisibilityChanged)
-    LaunchedEffect(form, selected, billId) { currentVisibility(form != null || selected != null || billId != null) }
+    LaunchedEffect(form, selected, billId, balanceOpen) {
+        currentVisibility(form != null || selected != null || billId != null || balanceOpen)
+    }
     DisposableEffect(Unit) { onDispose { currentVisibility(false) } }
-    ActiveBackHandler(enabled = !isTab || form != null || selected != null || billId != null) { closePage() }
+    ActiveBackHandler(enabled = !isTab || form != null || selected != null || billId != null || balanceOpen) { closePage() }
     fun mutate(onSuccess: () -> Unit = {}, block: suspend () -> Unit) {
         if (!actionBusy) { actionBusy = true; error = null
             scope.launch { runCatching { withContext(Dispatchers.IO) { block() } }.onSuccess { onSuccess() }
@@ -99,10 +112,24 @@ fun AssetsScreen(onBack: () -> Unit, isTab: Boolean = false, onSubpageVisibility
         }
     }
     when (form) {
-        "candidates" -> AccountCandidatesPage(onBack = { form = null })
-        "new", "edit" -> AssetAccountForm(if (form == "edit") account else null,
-            onBack = { form = null }, onSaved = { selected = it; form = null })
-        "balance" -> account?.let { AssetBalanceForm(it, AssetMath.balance(it.id, entries), onBack = { form = null }) }
+        "candidates" -> AccountCandidatesPage(
+            onBack = { form = null },
+            onAdd = { form = "new" },
+            onOpenAccount = { id -> selected = id; form = null },
+        )
+        "new" -> AssetAccountWizard(
+            onBack = { form = null },
+            onSaved = { selected = it; form = null },
+        )
+        "edit" -> account?.let {
+            AssetAccountForm(
+                original = it,
+                balance = AssetMath.balance(it.id, entries),
+                onBack = { form = null },
+                onSaved = { selected = it; form = null },
+                onEditBalance = { balanceOpen = true },
+            )
+        }
         "transfer" -> AssetTransferScreen(initialFromId = account?.id, onBack = { form = null })
         else -> AssetScaffold(title = if (account != null) "账户详情" else "资产", isRoot = isTab && account == null,
             onBack = { closePage() }, onAdd = if (account == null) ({ form = "new" }) else null) { padding ->
@@ -112,13 +139,14 @@ fun AssetsScreen(onBack: () -> Unit, isTab: Boolean = false, onSubpageVisibility
                     InlineMessage(error ?: storeError.orEmpty(), isError = true, announce = true)
                 }
                 if (account == null) {
-                    val visible = accounts.filter { showArchived || !it.archived }
+                    // 资产总览只列已设余额的账户；未设置的不占位，走空态。
+                    val visible = accounts.filter { (showArchived || !it.archived) && it.initialized }
                     val anyValue = accounts.any { it.included && it.initialized }
                     if (!isTab) item { InsetGroup {
                         ListRow(title = "转账 / 还款", subtitle = "两端资金划转，本金不计收支", chevron = true,
                             dividerAbove = false,
                             onClick = if (accounts.count { !it.archived && it.initialized } >= 2) { { form = "transfer" } } else null)
-                        ListRow(title = "账户管理", subtitle = "确认卡账户清单、排序与默认账户", chevron = true,
+                        ListRow(title = "账户管理", subtitle = "确认卡清单、长按排序与默认账户", chevron = true,
                             dividerAbove = true, onClick = { form = "candidates" })
                         ListRow(title = "显示归档账户", subtitle = "归档保留余额，默认继续纳入总览", dividerAbove = true,
                             trailing = { AbSwitch(showArchived) { showArchived = it; prefs.edit().putBoolean("show_archived", it).apply() } },
@@ -135,15 +163,48 @@ fun AssetsScreen(onBack: () -> Unit, isTab: Boolean = false, onSubpageVisibility
                             AssetMetricTile("总负债", summary.debts, up = false, hidden = hidden, hasValue = anyValue, modifier = Modifier.weight(1f))
                         }
                     }
-                    item { AssetGroupTitle("资金账户（${visible.size}）",
-                        if (!anyValue || hidden) null else "余额 ${assetMoney(summary.net)}") }
+                    item {
+                        Column {
+                            AssetGroupTitle(
+                                "资金账户（${visible.size}）",
+                                if (!anyValue || hidden) null else "余额 ${assetMoney(summary.net)}",
+                            )
+                            if (visible.size > 1) {
+                                Text(
+                                    "长按拖动排序",
+                                    style = AbType.caption1,
+                                    color = LocalAbPalette.current.secondaryLabel,
+                                    modifier = Modifier.padding(start = AbSpacing.xs, top = AbSpacing.xs),
+                                )
+                            }
+                        }
+                    }
                     item {
                         InsetGroup {
                             if (visible.isEmpty()) {
-                                ListRow(title = "还没有账户", subtitle = "添加账户后即可设置当前余额", onClick = { form = "new" })
-                            } else visible.forEachIndexed { index, row ->
-                                AssetAccountRow(account = row, balance = AssetMath.balance(row.id, entries), hidden = hidden,
-                                    dividerAbove = index > 0, onClick = { selected = row.id })
+                                ListRow(
+                                    title = "还没有账户",
+                                    subtitle = "点这里添加，保存后即可记账",
+                                    onClick = { form = "new" },
+                                )
+                            } else {
+                                DragReorderColumn(
+                                    items = visible,
+                                    keyOf = { it.id },
+                                    onReorder = { next ->
+                                        runCatching {
+                                            AssetStore.reorderActive(next.map { it.id })
+                                        }.onFailure { error = it.message ?: "排序失败，请重试" }
+                                    },
+                                ) { row, index, _ ->
+                                    AssetAccountRow(
+                                        account = row,
+                                        balance = AssetMath.balance(row.id, entries),
+                                        hidden = hidden,
+                                        dividerAbove = index > 0,
+                                        onClick = { selected = row.id },
+                                    )
+                                }
                             }
                         }
                     }
@@ -151,7 +212,7 @@ fun AssetsScreen(onBack: () -> Unit, isTab: Boolean = false, onSubpageVisibility
                 } else {
                     item {
                         AccountBalanceCard(account, AssetMath.balance(account.id, entries), hidden,
-                            onMore = { moreOpen = true }, onEditBalance = { form = "balance" })
+                            onMore = { moreOpen = true }, onEditBalance = { balanceOpen = true })
                     }
                     if (periods == null) item { InlineMessage("正在读取账单…") }
                     else accountPeriodCards(periods.orEmpty(), expandedPeriods, hidden, clock.zone, currentPeriod.month,
@@ -162,12 +223,17 @@ fun AssetsScreen(onBack: () -> Unit, isTab: Boolean = false, onSubpageVisibility
             }
         }
     }
+    if (balanceOpen && account != null) {
+        AssetBalanceSheet(
+            account = account,
+            current = AssetMath.balance(account.id, entries),
+            onDismiss = { balanceOpen = false },
+        )
+    }
     if (moreOpen && account != null) AppDialog("账户操作", onDismiss = { moreOpen = false }) {
         ListRow(title = "纳入资产总览", trailing = { AbSwitch(account.included, onCheckedChange = { checked ->
             if (!actionBusy) mutate { AssetStore.updateAccount(account.copy(included = checked)) }
         }) })
-        ListRow(title = if (account.initialized) "调整余额" else "设置当前余额", chevron = true,
-            onClick = if (actionBusy) null else ({ moreOpen = false; form = "balance" }))
         ListRow(title = "账户设置", chevron = true, onClick = { moreOpen = false; form = "edit" })
         ListRow(title = if (account.archived) "恢复账户" else "归档账户",
             onClick = if (actionBusy) null else ({ moreOpen = false; confirmArchive = true }))
@@ -238,14 +304,6 @@ private fun AssetNetWorthCard(
             color = p.label,
             modifier = Modifier.padding(top = AbSpacing.xs),
         )
-        if (summary.unknown > 0) {
-            Text(
-                text = "${summary.unknown} 个账户未设置余额，合计尚不完整",
-                style = AbType.footnote,
-                color = p.secondaryLabel,
-                modifier = Modifier.padding(top = AbSpacing.s),
-            )
-        }
     }
 }
 
@@ -377,82 +435,73 @@ private fun AssetConfirmation(title: String, message: String, onDismiss: () -> U
 }
 
 @Composable
-private fun AssetFormField(label: String, value: String, placeholder: String = "", onValue: (String) -> Unit) {
+internal fun AssetFormField(label: String, value: String, placeholder: String = "", onValue: (String) -> Unit) {
     InsetGroup { Column(Modifier.fillMaxWidth().padding(AbCardDensity.content), verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
         Text(label, style = AbType.footnote, color = LocalAbPalette.current.secondaryLabel)
         AbTextField(value, onValue, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), placeholder = placeholder)
     } }
 }
 
+/** 编辑已有账户设置；新增统一走 [AssetAccountWizard]。 */
 @Composable
-private fun AssetAccountForm(original: AssetAccount?, onBack: () -> Unit, onSaved: (String) -> Unit) {
-    val context = LocalContext.current
-    var name by rememberSaveable(original?.id) { mutableStateOf(original?.name.orEmpty()) }
-    var kind by rememberSaveable(original?.id) { mutableStateOf(original?.kind ?: "PAYMENT") }
-    var aliases by rememberSaveable(original?.id) { mutableStateOf(original?.aliases?.let {
-        runCatching { (MiniJson.decode(it) as? List<*>)?.filterIsInstance<String>()?.joinToString("，") }.getOrNull()
-    }.orEmpty()) }
-    var order by rememberSaveable(original?.id) { mutableStateOf((original?.sortOrder ?: 0).toString()) }
-    var included by rememberSaveable(original?.id) { mutableStateOf(original?.included ?: true) }
+private fun AssetAccountForm(
+    original: AssetAccount,
+    balance: Long,
+    onBack: () -> Unit,
+    onSaved: (String) -> Unit,
+    onEditBalance: () -> Unit,
+) {
+    var name by rememberSaveable(original.id) { mutableStateOf(original.name) }
+    var kind by rememberSaveable(original.id) { mutableStateOf(original.kind) }
+    var aliases by rememberSaveable(original.id) { mutableStateOf(
+        runCatching { (MiniJson.decode(original.aliases) as? List<*>)?.filterIsInstance<String>()?.joinToString("，") }.getOrNull().orEmpty()
+    ) }
+    var included by rememberSaveable(original.id) { mutableStateOf(original.included) }
+    var kindPickerOpen by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    // 已有账户名：预设里已经存在的就不再重复列出来。
-    val existingNames = remember { AssetStore.accounts.value.map { it.name }.toSet() }
+    val editableKinds = remember(original.kind) {
+        if (original.kind in assetKinds) assetKinds else assetKinds + (original.kind to original.kind)
+    }
+    val kindLabel = editableKinds[kind] ?: kind
     ActiveBackHandler { if (!busy) onBack() }
-    SubPageScaffold(if (original == null) "添加账户" else "账户设置", onBack = { if (!busy) onBack() }, reserveDock = false) { padding ->
-        io.github.mymoney.ui.design.SectionLazyColumn(Modifier.fillMaxSize().imePadding(), contentPadding = PaddingValues(start = AbSpacing.page, end = AbSpacing.page,
+    SubPageScaffold("账户设置", onBack = { if (!busy) onBack() }, reserveDock = false) { padding ->
+        SectionLazyColumn(Modifier.fillMaxSize().imePadding(), contentPadding = PaddingValues(start = AbSpacing.page, end = AbSpacing.page,
             top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding()), verticalArrangement = Arrangement.spacedBy(AbCardDensity.gap)) {
             item { AssetFormField("账户名称", name, "例如：招商储蓄卡") { name = it } }
-            if (original == null) {
-                // 预设账户：名字 + 类型一次填好，logo 由名字自动匹配（见 AccountLogos）。
-                // 只列当前还没有的，避免重复建同名账户。
-                val missing = AccountPresets.all.filterNot { it.name in existingNames }
-                if (missing.isNotEmpty()) {
-                    item(contentType = io.github.mymoney.ui.design.SectionRole.HEADER) { GroupHeader("常用账户") }
-                    itemsIndexed(missing) { index, preset ->
-                        InsetGroup {
-                            ListRow(
-                                title = preset.name,
-                                dividerAbove = index > 0,
-                                leading = {
-                                    io.github.mymoney.ui.design.AccountAvatar(
-                                        name = preset.name,
-                                        size = io.github.mymoney.ui.design.AbCardDensity.settingsIcon,
-                                    )
-                                },
-                                trailing = { if (name == preset.name) Text("✓", color = LocalAbPalette.current.accent) },
-                                onClick = {
-                                    name = preset.name
-                                    kind = preset.kind
-                                    if (aliases.isBlank()) aliases = preset.aliases
-                                },
-                            )
-                        }
-                    }
+            item {
+                InsetGroup {
+                    ListRow(
+                        title = "账户类型",
+                        subtitle = kindLabel,
+                        chevron = true,
+                        onClick = { kindPickerOpen = true },
+                    )
                 }
             }
-            item(contentType = io.github.mymoney.ui.design.SectionRole.HEADER) { GroupHeader("账户类型") }
-            items(assetKinds.toList()) { (value, label) -> InsetGroup {
-                ListRow(title = label, trailing = { Text(if (kind == value) "✓" else "", color = LocalAbPalette.current.accent) }, onClick = { kind = value })
-            } }
             item { AssetFormField("别名（逗号分隔）", aliases, "仅明确填写的别名参与精确匹配") { aliases = it } }
-            item { AssetFormField("排序序号", order) { order = it } }
-            item { InsetGroup { ListRow(title = "纳入资产总览", trailing = { AbSwitch(included) { included = it } }) } }
+            item {
+                InsetGroup {
+                    ListRow(title = "纳入资产总览", trailing = { AbSwitch(included) { included = it } })
+                    ListRow(
+                        title = if (original.initialized) "调整余额" else "设置当前余额",
+                        subtitle = positionLabel(original, balance),
+                        chevron = true,
+                        dividerAbove = true,
+                        onClick = onEditBalance,
+                    )
+                }
+            }
             if (error != null) item { InlineMessage(error.orEmpty(), isError = true, announce = true) }
-            item(contentType = io.github.mymoney.ui.design.SectionRole.ACTION) { PrimaryButton("保存账户", modifier = Modifier.fillMaxWidth(), busy = busy, onClick = {
+            item(contentType = SectionRole.ACTION) { PrimaryButton("保存账户", modifier = Modifier.fillMaxWidth(), busy = busy, onClick = {
                 if (!busy) { busy = true; error = null
                     scope.launch {
                         runCatching { withContext(Dispatchers.IO) {
                             val trimmed = name.trim(); require(trimmed.isNotEmpty()) { "请输入账户名称" }
                             val aliasList = aliases.split(',', '，').map(String::trim).filter(String::isNotEmpty).distinct()
-                            val sort = order.toIntOrNull() ?: throw IllegalArgumentException("排序序号须为整数")
-                            require(sort >= 0) { "排序序号不能为负" }
-                            if (original == null) AssetStore.createAccountWithDetails(trimmed, kind, MiniJson.encode(aliasList), included, sortOrder = sort)
-                            else {
-                                AssetStore.updateAccount(original.copy(name = trimmed, kind = kind, aliases = MiniJson.encode(aliasList), included = included, sortOrder = sort))
-                                original.id
-                            }
+                            AssetStore.updateAccount(original.copy(name = trimmed, kind = kind, aliases = MiniJson.encode(aliasList), included = included))
+                            original.id
                         } }.onSuccess(onSaved).onFailure { error = it.message ?: "保存失败" }
                         busy = false
                     }
@@ -460,10 +509,20 @@ private fun AssetAccountForm(original: AssetAccount?, onBack: () -> Unit, onSave
             }) }
         }
     }
+    if (kindPickerOpen) {
+        AppChoiceDialog(
+            title = "选择账户类型",
+            options = editableKinds.map { (value, label) -> AppDialogChoice(value, label) },
+            selectedKey = kind,
+            onChoose = { kind = it; kindPickerOpen = false },
+            onDismiss = { kindPickerOpen = false },
+        )
+    }
 }
 
+/** 底部弹层调整余额；详情点余额 / 账户设置入口共用。 */
 @Composable
-private fun AssetBalanceForm(account: AssetAccount, current: Long, onBack: () -> Unit) {
+private fun AssetBalanceSheet(account: AssetAccount, current: Long, onDismiss: () -> Unit) {
     val debt = AssetMath.isDebt(account.kind)
     var amount by rememberSaveable(account.id) { mutableStateOf(if (account.initialized) assetNumber(if (debt) -current else current) else "") }
     var reason by rememberSaveable(account.id) { mutableStateOf(if (account.initialized) "" else "设置当前余额") }
@@ -472,33 +531,92 @@ private fun AssetBalanceForm(account: AssetAccount, current: Long, onBack: () ->
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    ActiveBackHandler { if (!busy) onBack() }
-    SubPageScaffold(if (account.initialized) "调整余额" else "设置当前余额", onBack = { if (!busy) onBack() }, reserveDock = false) { padding ->
-        io.github.mymoney.ui.design.SectionLazyColumn(Modifier.fillMaxSize().imePadding(), contentPadding = PaddingValues(start = AbSpacing.page, end = AbSpacing.page,
-            top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding()), verticalArrangement = Arrangement.spacedBy(AbCardDensity.gap)) {
-            item { InsetGroup { ListRow(title = account.name, subtitle = positionLabel(account, current)) } }
-            item { AssetFormField(if (debt) "当前欠款（元）" else "当前余额（元）", amount, if (debt) "欠款填正数，溢缴填负数" else "例如 1000.00，透支填负数") { amount = it } }
-            item { AssetFormField("原因", reason, "请填写这次调整的原因") { reason = it } }
-            if (error != null) item { InlineMessage(error.orEmpty(), isError = true, announce = true) }
-            item(contentType = io.github.mymoney.ui.design.SectionRole.ACTION) { PrimaryButton("预览并确认", modifier = Modifier.fillMaxWidth(), busy = busy, onClick = {
-                runCatching {
-                    require(reason.isNotBlank()) { "请填写原因" }
-                    val cents = AssetMath.parseCents(amount)
-                    val target = if (debt) Math.negateExact(cents) else cents
-                    require(target != Long.MIN_VALUE) { "金额超出范围" }
-                    Math.subtractExact(target, current)
-                    target
-                }.onSuccess { previewCurrent = current; preview = it }.onFailure { error = it.message ?: "金额格式无效" }
-            }) }
+    val title = if (account.initialized) "调整余额" else "设置当前余额"
+    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomPad = maxOf(
+        if (navBottom > 0.dp) navBottom + AbSpacing.xxl else 0.dp,
+        AbSpacing.xxxl * 2 + AbSpacing.s,
+    )
+    ActiveBackHandler { if (!busy) onDismiss() }
+    Dialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Box(
+            Modifier.fillMaxSize()
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = { if (!busy) onDismiss() },
+                )
+                .imePadding()
+                .padding(start = AbSpacing.l, top = AbSpacing.l, end = AbSpacing.l),
+            contentAlignment = Alignment.BottomCenter,
+        ) {
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth().widthIn(max = 480.dp)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = {},
+                        ),
+                    shape = RoundedCornerShape(AbRadius.sheet),
+                    color = LocalAbPalette.current.cardBg,
+                ) {
+                    Column(
+                        Modifier.fillMaxWidth()
+                            .heightIn(max = 560.dp)
+                            .verticalScroll(rememberScrollState())
+                            .padding(AbSpacing.m),
+                        verticalArrangement = Arrangement.spacedBy(AbCardDensity.gap),
+                    ) {
+                        Text(title, style = AbType.navTitle, color = LocalAbPalette.current.label,
+                            modifier = Modifier.padding(horizontal = AbSpacing.m, vertical = AbSpacing.xs))
+                        InsetGroup {
+                            ListRow(title = account.name, subtitle = positionLabel(account, current))
+                        }
+                        AssetFormField(
+                            if (debt) "当前欠款（元）" else "当前余额（元）",
+                            amount,
+                            if (debt) "欠款填正数，溢缴填负数" else "例如 1000.00，透支填负数",
+                        ) { amount = it; error = null }
+                        AssetFormField("原因", reason, "请填写这次调整的原因") { reason = it; error = null }
+                        if (error != null) InlineMessage(error.orEmpty(), isError = true, announce = true)
+                        PrimaryButton("预览并确认", modifier = Modifier.fillMaxWidth(), busy = busy, onClick = {
+                            runCatching {
+                                require(reason.isNotBlank()) { "请填写原因" }
+                                val cents = AssetMath.parseCents(amount)
+                                val target = if (debt) Math.negateExact(cents) else cents
+                                require(target != Long.MIN_VALUE) { "金额超出范围" }
+                                Math.subtractExact(target, current)
+                                target
+                            }.onSuccess { previewCurrent = current; preview = it; error = null }
+                                .onFailure { error = it.message ?: "金额格式无效" }
+                        })
+                        SecondaryButton("取消", onClick = { if (!busy) onDismiss() }, modifier = Modifier.fillMaxWidth())
+                    }
+                }
+                Spacer(Modifier.height(bottomPad))
+            }
         }
     }
-    preview?.let { target -> AssetConfirmation(if (account.initialized) "确认余额调整" else "确认余额起点",
+    preview?.let { target -> AssetConfirmation(
+        if (account.initialized) "确认余额调整" else "确认余额起点",
         "${positionLabel(account.copy(initialized = true), target)}\n登记差额 ${assetMoney(Math.subtractExact(target, previewCurrent))}\n不会计入收入或支出。",
-        onDismiss = { preview = null }, onConfirm = {
+        onDismiss = { preview = null },
+        onConfirm = {
             preview = null; busy = true
-            scope.launch { runCatching { withContext(Dispatchers.IO) { AssetStore.setBalance(account.id, target, reason.trim(), expectedPosition = previewCurrent) } }
-                .onSuccess { onBack() }.onFailure { error = it.message ?: "设置失败" }; busy = false }
-        }) }
+            scope.launch {
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        AssetStore.setBalance(account.id, target, reason.trim(), expectedPosition = previewCurrent)
+                    }
+                }.onSuccess { onDismiss() }.onFailure { error = it.message ?: "设置失败" }
+                busy = false
+            }
+        },
+    ) }
 }
 
 /** Shared transfer editor: one operation with two accounts and an optional expense fee. */

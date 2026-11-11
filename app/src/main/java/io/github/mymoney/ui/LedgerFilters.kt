@@ -69,6 +69,7 @@ internal fun LedgerFilters(
     onDate: (String, String, String) -> Unit,
     category: String?, categories: List<String>, onCategory: (String?) -> Unit,
     type: String?, onType: (String?) -> Unit,
+    reimburse: String?, onReimburse: (String?) -> Unit,
     active: Boolean, onClear: () -> Unit, summaryLabel: String = "", monthStartDay: Int = 1,
 ) {
     val periodWindow = if (dateMode == "MONTH" || dateMode == "LAST_MONTH")
@@ -92,6 +93,8 @@ internal fun LedgerFilters(
                 { picker = "CATEGORY" }, Modifier.heightIn(min = 48.dp))
             CapsuleChip(ledgerTypeLabel(type), type != null,
                 { picker = "TYPE" }, Modifier.heightIn(min = 48.dp))
+            CapsuleChip(when (reimburse) { "PENDING" -> "待报销"; "REIMBURSED" -> "已报销"; else -> "报销" }, reimburse != null,
+                { picker = "REIMBURSE" }, Modifier.heightIn(min = 48.dp))
         }
         Spacer(Modifier.height(AbSpacing.s))
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically,
@@ -113,6 +116,13 @@ internal fun LedgerFilters(
                 TextButton(onClick = { onCategory(value); picker = null }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                     val label = value?.ifEmpty { "未分类" } ?: "全部分类"
                     Text(if (category == value) "✓ $label" else label)
+                }
+            }
+        }
+        "REIMBURSE" -> LedgerChoiceDialog("报销", onDismiss = { picker = null }) {
+            listOf(null to "全部", "PENDING" to "待报销", "REIMBURSED" to "已报销").forEach { (value, label) ->
+                TextButton(onClick = { onReimburse(value); picker = null }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                    Text(if (reimburse == value) "✓ $label" else label)
                 }
             }
         }

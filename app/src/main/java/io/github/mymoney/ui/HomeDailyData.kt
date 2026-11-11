@@ -1,6 +1,7 @@
 package io.github.mymoney.ui
 
 import io.github.mymoney.data.BillEntity
+import io.github.mymoney.data.Reimburse
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -45,7 +46,7 @@ internal fun homeDailyGroups(rows: List<BillEntity>, zone: ZoneId): List<HomeDai
     rows.sortedWith(compareByDescending<BillEntity> { it.timeMillis }.thenByDescending { it.id })
         .groupBy { Instant.ofEpochMilli(it.timeMillis).atZone(zone).toLocalDate() }
         .map { (date, bills) ->
-            HomeDailyDay(date, bills, bills.filter { it.type == "EXPENSE" }.sumOf { it.priceCents })
+            HomeDailyDay(date, bills, bills.filter { Reimburse.countsInExpense(it) }.sumOf { it.priceCents })
         }.sortedByDescending { it.date }
 
 /** Complete-day expansion may have loaded thousands of rows beyond the original anchor limit. */
