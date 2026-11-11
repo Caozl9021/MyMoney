@@ -1,11 +1,11 @@
 # 资产账户、账期详情与设置入口
 
 <!-- acceptance-asset-onboarding-20261111 -->
-> **资产账户添加向导及相关交互用户验收通过（2026-11-11）**。用户确认通过；源码现为1.10.2/161（含报销等同批改动）。验收详见[ACCEPTANCE](ACCEPTANCE.md)。以下为现行资产说明。
+> **资产账户添加向导及相关交互用户验收通过（2026-11-11）**。用户确认通过。随 **1.10.2/161** 已发 GitHub Release（latest pending_acceptance；整版含报销待确认）。验收详见[ACCEPTANCE](ACCEPTANCE.md)。以下为现行资产说明。
 <!-- /acceptance-asset-onboarding-20261111 -->
 
 <!-- acceptance-158-20261107 -->
-> **正式候选1.10.0/158，用户验收通过（2026-11-07）**。管理台、扫码连接、备份删除及历史恢复改进已纳入该版本验收。淘宝被动抓取结论见[实时验证交接](SHANGOU_LIVE_VALIDATION_HANDOFF.md)。
+> **前一整版1.10.0/158，用户验收通过（2026-11-07）**。管理台、扫码连接、备份删除及历史恢复改进。淘宝被动抓取结论见[实时验证交接](SHANGOU_LIVE_VALIDATION_HANDOFF.md)。
 <!-- /acceptance-158-20261107 -->
 
 

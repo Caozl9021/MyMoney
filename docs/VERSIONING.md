@@ -1,11 +1,12 @@
 # 版本号与交付节奏规则
 
+<!-- release-161-20261111 -->
+> **当前发布线1.10.2/161**（2026-11-11 已发 GitHub Release `v1.10.2`；`dist/latest-app.json` pending_acceptance）。资产向导功能验收通过；整版含报销待用户确认。家庭服务 `cloud-backup-161`。前一整版验收为1.10.0/158。详见[ACCEPTANCE](ACCEPTANCE.md)。
+<!-- /release-161-20261111 -->
+
 <!-- acceptance-158-20261107 -->
-> **当前版本1.10.0/158，用户验收通过（2026-11-07）**。用户确认现有交付通过，淘宝闪购订单抓取／实时验证继续作为后续工作。管理台、扫码连接、备份删除及历史恢复改进已纳入本次版本验收。工程覆盖按已有证据登记。验收详见[ACCEPTANCE](ACCEPTANCE.md)，淘宝后续见[实时验证交接](SHANGOU_LIVE_VALIDATION_HANDOFF.md)。以下历轮版本、待验收和测试描述按原日期理解。
+> **历史整版1.10.0/158，用户验收通过（2026-11-07）**。管理台、扫码、备份删除与恢复改进。淘宝后续见[实时验证交接](SHANGOU_LIVE_VALIDATION_HANDOFF.md)。
 <!-- /acceptance-158-20261107 -->
-
-
-> 最新（2026-11-07）：当前源码 versionCode=157/versionName=1.9.0，用户验收通过（AA历史备份与恢复改进），`dist/latest-app.json` status=accepted。沿既有节奏只递增 versionCode（156→157，versionName 不变）。**未提交/推送/发布**。下方 155 段为历史快照。
 
 ## 历史155进度复核（2026-11-06，仅文档）
 

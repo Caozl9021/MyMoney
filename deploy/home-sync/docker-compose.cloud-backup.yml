@@ -1,6 +1,6 @@
 services:
   home-sync:
-    image: mymoney-home-sync:cloud-backup-155
+    image: mymoney-home-sync:cloud-backup-161
     build:
       context: ../..
       dockerfile: deploy/home-sync/Dockerfile.upgrade

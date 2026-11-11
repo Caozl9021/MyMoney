@@ -1,7 +1,7 @@
 # 增量升级镜像：基于运行中的老镜像，只替换 app 源码与 schema，不重跑 pip install
 # （老镜像依赖环境完好；全量 build 因 pydantic 约束与上游冲突失败，改增量）
 # 基线固定为当前线上镜像，避免回退到更早的依赖层
-FROM mymoney-home-sync:cloud-backup-153
+FROM mymoney-home-sync:cloud-backup-156
 
 WORKDIR /app
 COPY server/app ./app

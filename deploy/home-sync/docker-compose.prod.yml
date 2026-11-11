@@ -3,7 +3,7 @@
 # home-sync 通过 MYMONEY_PORT 监听 18081，nginx 监听 18080。
 services:
   home-sync:
-    image: mymoney-home-sync:cloud-backup-156
+    image: mymoney-home-sync:cloud-backup-161
     network_mode: host
     restart: unless-stopped
     environment:

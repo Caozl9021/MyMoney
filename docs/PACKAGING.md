@@ -1,11 +1,12 @@
 # 打包文件存放规则
 
+<!-- release-161-20261111 -->
+> **当前发布线1.10.2/161**（2026-11-11）。候选 `dist/app/1.10.2-161/20261111-160823-jjsjbc9_/`，release SHA-256 `dfadae27…d7320d`，签名 `05212beb…66c0`；GitHub Release `v1.10.2`；`dist/latest-app.json` → 161，`pending_acceptance`；上传快照 `dist/releases/v1.10.2/upload/`。验收详见[ACCEPTANCE](ACCEPTANCE.md)。
+<!-- /release-161-20261111 -->
+
 <!-- acceptance-158-20261107 -->
-> **当前版本1.10.0/158，用户验收通过（2026-11-07）**。用户确认现有交付通过，淘宝闪购订单抓取／实时验证继续作为后续工作。管理台、扫码连接、备份删除及历史恢复改进已纳入本次版本验收。工程覆盖按已有证据登记。验收详见[ACCEPTANCE](ACCEPTANCE.md)，淘宝后续见[实时验证交接](SHANGOU_LIVE_VALIDATION_HANDOFF.md)。以下历轮版本、待验收和测试描述按原日期理解。
+> **历史整版1.10.0/158，用户验收通过（2026-11-07）**。产物曾指向 `dist/app/1.10.0-158/…`。淘宝后续见[实时验证交接](SHANGOU_LIVE_VALIDATION_HANDOFF.md)。
 <!-- /acceptance-158-20261107 -->
-
-
-> 历史（2026-11-07）：1.9.0/157 AA历史备份与恢复改进**用户验收通过**（用户“改过代码了，验收通过”，自测小米14两千多笔通过）。产物 `dist/app/1.9.0-157/20261107-203850-5p0bvjyn/`，release sha256 `0526a1ca2aba58dcb41b0d6417b0c40b52236cb47b85486ee41af105c6319a88`，versionCode 157/1.9.0，签名 `05212beb…66c0` 连续，`dist/latest-app.json` status=accepted。**未提交/推送/发布**。下方 155 段为历史快照。
 
 ## 历史155进度复核（2026-11-06，仅文档）
 
