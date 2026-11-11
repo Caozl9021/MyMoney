@@ -1,5 +1,10 @@
 package io.github.mymoney.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -76,21 +81,38 @@ fun AssetAccountWizard(onBack: () -> Unit, onSaved: (String) -> Unit) {
     }
 
     ActiveBackHandler { goBack() }
-    val title = when (step) {
-        "kind" -> "选择账户类型"
-        "specific" -> AccountPresets.kinds.firstOrNull { it.kind == kind }?.label ?: "选择账户"
-        else -> "账户设置"
+    val reduceMotion = io.github.mymoney.ui.design.LocalReduceMotion.current
+    fun stepDepth(s: String): Int = when (s) {
+        "kind" -> 0
+        "specific" -> 1
+        else -> 2
     }
-    SubPageScaffold(title, onBack = { goBack() }, reserveDock = false) { padding ->
-        SectionLazyColumn(
-            Modifier.fillMaxSize().imePadding(),
-            contentPadding = PaddingValues(
-                start = AbSpacing.page, end = AbSpacing.page,
-                top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding(),
-            ),
-            verticalArrangement = Arrangement.spacedBy(AbCardDensity.gap),
-        ) {
-            when (step) {
+    AnimatedContent(
+        targetState = step,
+        modifier = Modifier.fillMaxSize(),
+        transitionSpec = {
+            val duration = if (reduceMotion) 0 else io.github.mymoney.ui.design.AbMotion.normal
+            val goingBack = stepDepth(targetState) < stepDepth(initialState)
+            slideInHorizontally(tween(duration)) { if (goingBack) -it else it } togetherWith
+                slideOutHorizontally(tween(duration)) { if (goingBack) it else -it }
+        },
+        label = "wizardStepTransition",
+    ) { shownStep ->
+        val title = when (shownStep) {
+            "kind" -> "选择账户类型"
+            "specific" -> AccountPresets.kinds.firstOrNull { it.kind == kind }?.label ?: "选择账户"
+            else -> "账户设置"
+        }
+        SubPageScaffold(title, onBack = { goBack() }, reserveDock = false) { padding ->
+            SectionLazyColumn(
+                Modifier.fillMaxSize().imePadding(),
+                contentPadding = PaddingValues(
+                    start = AbSpacing.page, end = AbSpacing.page,
+                    top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding(),
+                ),
+                verticalArrangement = Arrangement.spacedBy(AbCardDensity.gap),
+            ) {
+                when (shownStep) {
                 "kind" -> {
                     item(contentType = SectionRole.HEADER) { GroupHeader("账户类型") }
                     item {
@@ -187,6 +209,7 @@ fun AssetAccountWizard(onBack: () -> Unit, onSaved: (String) -> Unit) {
                             }
                         })
                     }
+                }
                 }
             }
         }

@@ -213,12 +213,15 @@ fun InsetGroup(
     )
 }
 
-/** 组内分隔线，带左缩进。 */
+/** 组内分隔线，左右留出缩进（左侧对齐文字，右侧不顶到卡片边缘）。 */
 @Composable
-fun InsetDivider(inset: Dp = AbSize.separatorInset) {
+fun InsetDivider(
+    inset: Dp = AbSize.separatorInset,
+    endInset: Dp = inset.coerceAtMost(AbSize.separatorInset),
+) {
     val p = LocalAbPalette.current
     HorizontalDivider(
-        modifier = Modifier.padding(start = inset),
+        modifier = Modifier.padding(start = inset, end = endInset),
         thickness = 0.5.dp,
         color = p.separator,
     )
@@ -328,7 +331,13 @@ private fun SwitchCanvas(checked: Boolean, compact: Boolean, onCheckedChange: (B
     val knob = if (compact) 8.dp else 12.dp
     Canvas(
         Modifier.size(width = width, height = height)
-            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
+            .toggleable(
+                value = checked,
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.Switch,
+                onValueChange = onCheckedChange,
+            )
             .semantics { contentDescription = if (checked) "可报销，已打开" else "可报销，已关闭" },
     ) {
         val trackHeight = track.toPx()
@@ -366,6 +375,7 @@ fun Segmented(
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    compact: Boolean = false,
 ) {
     val p = LocalAbPalette.current
     val reduceMotion = LocalReduceMotion.current
@@ -381,6 +391,7 @@ fun Segmented(
     )
     val gap = 2.dp
     val shape = RoundedCornerShape(AbRadius.capsule)
+    val minHeight = if (compact) 32.dp else 48.dp
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
@@ -396,7 +407,7 @@ fun Segmented(
                     .offset(x = (cellWidth + gap) * position)
                     .width(cellWidth)
                     .fillMaxHeight()
-                    .then(if (reduceMotion) Modifier else Modifier.shadow(2.dp, shape))
+                    .then(if (reduceMotion || compact) Modifier else Modifier.shadow(2.dp, shape))
                     .clip(shape)
                     .background(p.cardBg),
             )
@@ -411,7 +422,7 @@ fun Segmented(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .heightIn(min = 48.dp)
+                        .heightIn(min = minHeight)
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,

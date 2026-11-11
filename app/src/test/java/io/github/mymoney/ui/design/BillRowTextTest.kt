@@ -19,17 +19,38 @@ class BillRowTextTest {
         assertEquals("未分类", billRowTitle("   ", " \n "))
     }
 
-    @Test fun subtitlePrefersNoteAndParentWithoutRepeatingTitle() {
-        assertEquals("餐饮 · 辣 · 12:22", billRowSubtitle("餐饮", "午餐", "老王面馆", "辣", "12:22", false))
-        assertEquals("辣 · 12:22", billRowSubtitle("餐饮", null, "老王面馆", "辣", "12:22", false))
+    @Test fun subtitleUsesTimeThenNoteWithoutParentCategory() {
+        assertEquals("12:22 · 辣", billRowSubtitle("餐饮", "午餐", "老王面馆", "辣", "12:22", false))
+        assertEquals("12:22 · 辣", billRowSubtitle("餐饮", null, "老王面馆", "辣", "12:22", false))
         assertEquals("12:22", billRowSubtitle(null, "午餐", null, null, "12:22", false))
         assertEquals("", billRowSubtitle(null, null, "  ", "  ", null, false))
     }
 
-    @Test fun subtitleFallsBackToNoteAndMarksRefund() {
-        assertEquals("退款 · 餐饮 · 备注 · 12:22", billRowSubtitle("餐饮", "午餐", "", "备注", "12:22", true))
+    @Test fun subtitleFallsBackToNoteOrMerchantAndMarksRefund() {
+        assertEquals("退款 · 12:22 · 备注", billRowSubtitle("餐饮", "午餐", "", "备注", "12:22", true))
         assertEquals("备注", billRowSubtitle(null, null, null, "备注", null, false))
         assertEquals("同名商户", billRowSubtitle("餐饮", "餐饮", "同名商户", null, null, false))
+    }
+
+    @Test fun categoryDisplayJoinsParentAndSubCategoryForDetail() {
+        assertEquals("餐饮 · 午餐", billCategoryDisplay("餐饮", "午餐"))
+        assertEquals("餐饮", billCategoryDisplay("餐饮", null))
+        assertEquals("餐饮", billCategoryDisplay("餐饮", "餐饮"))
+        assertEquals("午餐", billCategoryDisplay(null, "午餐"))
+        assertEquals("转账", billCategoryDisplay("餐饮", "午餐", "TRANSFER"))
+        assertEquals(null, billCategoryDisplay("  ", null))
+    }
+
+    @Test fun reimburseStatusMapsToGrayOrYouthfulYellowAmountColor() {
+        val light = LightPalette
+        assertEquals(light.expense, billRowAmountColor(light, "EXPENSE", "NONE"))
+        assertEquals(light.secondaryLabel, billRowAmountColor(light, "EXPENSE", "REIMBURSED"))
+        assertEquals(androidx.compose.ui.graphics.Color(0xFFF5A623), billRowAmountColor(light, "EXPENSE", "PENDING"))
+
+        val dark = DarkPalette
+        assertEquals(dark.expense, billRowAmountColor(dark, "EXPENSE", "NONE"))
+        assertEquals(dark.secondaryLabel, billRowAmountColor(dark, "EXPENSE", "REIMBURSED"))
+        assertEquals(androidx.compose.ui.graphics.Color(0xFFFFD60A), billRowAmountColor(dark, "EXPENSE", "PENDING"))
     }
 
     @Test fun amountTintKeepsExpenseDistinctFromDangerRed() {

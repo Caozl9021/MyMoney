@@ -1,6 +1,11 @@
 package io.github.mymoney.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -111,7 +116,26 @@ fun AssetsScreen(onBack: () -> Unit, isTab: Boolean = false, onSubpageVisibility
                 .onFailure { error = it.message ?: "操作失败，请重试" }; actionBusy = false }
         }
     }
-    when (form) {
+    val reduceMotion = LocalReduceMotion.current
+    fun routeDepth(sel: String?, frm: String?): Int = when {
+        frm == null && sel == null -> 0
+        frm == null && sel != null -> 1
+        frm == "candidates" && sel == null -> 1
+        else -> 2
+    }
+    AnimatedContent(
+        targetState = Pair(selected, form),
+        modifier = Modifier.fillMaxSize(),
+        transitionSpec = {
+            val duration = if (reduceMotion) 0 else AbMotion.normal
+            val goingBack = routeDepth(targetState.first, targetState.second) < routeDepth(initialState.first, initialState.second)
+            slideInHorizontally(tween(duration)) { if (goingBack) -it else it } togetherWith
+                slideOutHorizontally(tween(duration)) { if (goingBack) it else -it }
+        },
+        label = "assetPageTransition",
+    ) { (shownSelected, shownForm) ->
+    val shownAccount = accounts.firstOrNull { it.id == shownSelected }
+    when (shownForm) {
         "candidates" -> AccountCandidatesPage(
             onBack = { form = null },
             onAdd = { form = "new" },
@@ -121,7 +145,7 @@ fun AssetsScreen(onBack: () -> Unit, isTab: Boolean = false, onSubpageVisibility
             onBack = { form = null },
             onSaved = { selected = it; form = null },
         )
-        "edit" -> account?.let {
+        "edit" -> shownAccount?.let {
             AssetAccountForm(
                 original = it,
                 balance = AssetMath.balance(it.id, entries),
@@ -130,15 +154,15 @@ fun AssetsScreen(onBack: () -> Unit, isTab: Boolean = false, onSubpageVisibility
                 onEditBalance = { balanceOpen = true },
             )
         }
-        "transfer" -> AssetTransferScreen(initialFromId = account?.id, onBack = { form = null })
-        else -> AssetScaffold(title = if (account != null) "账户详情" else "资产", isRoot = isTab && account == null,
-            onBack = { closePage() }, onAdd = if (account == null) ({ form = "new" }) else null) { padding ->
-            AssetPageColumn(detail = account != null, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(start = AbSpacing.page, end = AbSpacing.page,
+        "transfer" -> AssetTransferScreen(initialFromId = shownAccount?.id, onBack = { form = null })
+        else -> AssetScaffold(title = if (shownAccount != null) "账户详情" else "资产", isRoot = isTab && shownAccount == null,
+            onBack = { closePage() }, onAdd = if (shownAccount == null) ({ form = "new" }) else null) { padding ->
+            AssetPageColumn(detail = shownAccount != null, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(start = AbSpacing.page, end = AbSpacing.page,
                 top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding()), verticalArrangement = Arrangement.spacedBy(AbCardDensity.gap)) {
                 if (storeError != null || error != null) item {
                     InlineMessage(error ?: storeError.orEmpty(), isError = true, announce = true)
                 }
-                if (account == null) {
+                if (shownAccount == null) {
                     // 资产总览只列已设余额的账户；未设置的不占位，走空态。
                     val visible = accounts.filter { (showArchived || !it.archived) && it.initialized }
                     val anyValue = accounts.any { it.included && it.initialized }
@@ -196,12 +220,12 @@ fun AssetsScreen(onBack: () -> Unit, isTab: Boolean = false, onSubpageVisibility
                                             AssetStore.reorderActive(next.map { it.id })
                                         }.onFailure { error = it.message ?: "排序失败，请重试" }
                                     },
-                                ) { row, index, _ ->
+                                ) { row, index, dragging ->
                                     AssetAccountRow(
                                         account = row,
                                         balance = AssetMath.balance(row.id, entries),
                                         hidden = hidden,
-                                        dividerAbove = index > 0,
+                                        dividerAbove = index > 0 && !dragging,
                                         onClick = { selected = row.id },
                                     )
                                 }
@@ -211,7 +235,7 @@ fun AssetsScreen(onBack: () -> Unit, isTab: Boolean = false, onSubpageVisibility
 
                 } else {
                     item {
-                        AccountBalanceCard(account, AssetMath.balance(account.id, entries), hidden,
+                        AccountBalanceCard(shownAccount, AssetMath.balance(shownAccount.id, entries), hidden,
                             onMore = { moreOpen = true }, onEditBalance = { balanceOpen = true })
                     }
                     if (periods == null) item { InlineMessage("正在读取账单…") }
@@ -222,6 +246,7 @@ fun AssetsScreen(onBack: () -> Unit, isTab: Boolean = false, onSubpageVisibility
                 }
             }
         }
+    }
     }
     if (balanceOpen && account != null) {
         AssetBalanceSheet(
@@ -254,7 +279,9 @@ fun AssetsScreen(onBack: () -> Unit, isTab: Boolean = false, onSubpageVisibility
         })
     pendingReverse?.let { entry -> AssetConfirmation("撤销余额调整？", "将产生一条反向流水，原调整仍可追溯。",
         onDismiss = { pendingReverse = null }, onConfirm = { pendingReverse = null; mutate { AssetStore.reverseAdjustment(entry.id) } }) }
-    billId?.let { id -> BillActionsHost(id, onClose = { billId = null }) }
+    SlideSubPageValue(value = billId, modifier = Modifier.fillMaxSize()) { id ->
+        BillActionsHost(id, onClose = { billId = null })
+    }
 }
 
 /**

@@ -1,7 +1,7 @@
 # 文档索引
 
 <!-- release-161-20261111 -->
-> **当前发布线1.10.2/161**（2026-11-11 已发 GitHub Release `v1.10.2`；`latest-app.json` pending_acceptance）。资产添加向导功能验收通过；整版含报销待用户确认。家庭服务 `cloud-backup-161`（format 8–12）。前一整版验收为1.10.0/158。淘宝被动抓取已判定不可行。详见[ACCEPTANCE](ACCEPTANCE.md)、[PROGRESS](PROGRESS.md)、[实时验证交接](SHANGOU_LIVE_VALIDATION_HANDOFF.md)。
+> **当前发布线1.10.2/161**（2026-11-11 已发 GitHub Release `v1.10.2`；`latest-app.json` pending_acceptance）。**资产添加向导及相关交互**、**首页/账单详情（方案 A）/拖拽样式/统计与明细页全局样式统一（`refine-home-and-bill-row-density`）**均于 2026-11-11 获用户验收通过；整版含报销待用户确认。家庭服务 `cloud-backup-161`（format 8–12）。前一整版验收为1.10.0/158。淘宝被动抓取已判定不可行。详见[ACCEPTANCE](ACCEPTANCE.md)、[PROGRESS](PROGRESS.md)、[实时验证交接](SHANGOU_LIVE_VALIDATION_HANDOFF.md)。
 <!-- /release-161-20261111 -->
 
 

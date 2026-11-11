@@ -34,13 +34,31 @@ internal fun DeleteBillDialog(billId: Long, origin: String, onDismiss: () -> Uni
         val bill = group?.firstOrNull()
         when {
             bill != null -> {
-                Text("${bill.note?.takeIf(String::isNotBlank) ?: bill.merchant ?: bill.category ?: "账单"}\n${formatAmount(bill.priceCents)} · ${when (bill.type) { "INCOME" -> "收入"; "REFUND" -> "退款"; "TRANSFER" -> "转账"; else -> "支出" }}", style = AbType.headline, color = LocalAbPalette.current.label)
-                Text(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").format(Instant.ofEpochMilli(bill.timeMillis).atZone(ZoneId.systemDefault())), style = AbType.subhead, color = LocalAbPalette.current.secondaryLabel)
-                Text(if (bill.type == "TRANSFER") "将删除转账本金${if (group.size > 1) "及关联手续费" else ""}，并回滚已联动的账户余额。" else if (bill.assetLinked) "将删除账单，并回滚“${bill.account ?: "关联账户"}”的余额变动。" else "将从账本删除这笔账单，当前账户余额不会改变。", style = AbType.body, color = LocalAbPalette.current.secondaryLabel)
-                group.filter { it.reimburseStatus == io.github.mymoney.data.Reimburse.REIMBURSED }.takeIf { it.isNotEmpty() }?.let { returned ->
-                    Text("将同时冲回报销退回 ${returned.joinToString("、") { formatAmount(it.priceCents) }}。", style = AbType.body, color = LocalAbPalette.current.secondaryLabel)
+                val label = billCategoryDisplay(bill.category, bill.subCategory, bill.type)
+                    ?: bill.note?.takeIf(String::isNotBlank)
+                    ?: bill.merchant
+                    ?: "账单"
+                Text(
+                    "$label · ${formatAmount(bill.priceCents, signed = true, type = bill.type)}",
+                    style = AbType.body,
+                    color = LocalAbPalette.current.label,
+                )
+                val reimbursed = group.any { it.reimburseStatus == io.github.mymoney.data.Reimburse.REIMBURSED }
+                val accountName = bill.account ?: "关联账户"
+                val balanceHint = when {
+                    bill.type == "TRANSFER" && bill.assetLinked ->
+                        "删除后金额将返回原转出账户${if (group.size > 1) "（含手续费）" else ""}"
+                    reimbursed && bill.assetLinked ->
+                        "删除后金额将返回「$accountName」（含报销退回部分）"
+                    bill.type == "INCOME" && bill.assetLinked ->
+                        "删除后「$accountName」余额将返回记账前状态"
+                    bill.assetLinked ->
+                        "删除后金额将返回「$accountName」"
+                    else -> null
                 }
-                Text("删除记录会保留在“记录历史”，仅供查看，不能恢复账单。", style = AbType.footnote, color = LocalAbPalette.current.secondaryLabel)
+                if (balanceHint != null) {
+                    Text(balanceHint, style = AbType.footnote, color = LocalAbPalette.current.secondaryLabel)
+                }
             }
             group != null -> Text("这笔账单已不存在，请返回列表。", color = LocalAbPalette.current.secondaryLabel)
             error == null -> Text("正在核对账单…", color = LocalAbPalette.current.secondaryLabel)

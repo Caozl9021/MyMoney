@@ -139,89 +139,186 @@ fun BillsScreen(requestAdd: Int = 0, applyPendingFilter: Boolean = false, onPend
     // 明细是压在 Tab 之上的整页，不是 Tab 之一：必须自己铺不透明底，
     // 否则下面的统计/首页会从行缝里透出来（曾经的「串页」）。
     val pagePixels = RememberBackPixels()
+    val predictiveBack = LocalPredictiveBackEnabled.current
     val navigationScope = androidx.compose.runtime.rememberCoroutineScope()
     var sourcePreview by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     var openingBill by remember { mutableStateOf(false) }
     fun openBill(id: Long) {
         if (openingBill || selectedId != null) return
+        if (!predictiveBack) {
+            selectedId = id
+            return
+        }
         openingBill = true
         navigationScope.launch {
             try { sourcePreview = pagePixels.snapshot(); selectedId = id } finally { openingBill = false }
         }
     }
+    val p = LocalAbPalette.current
     BackSurface(enabled = false, onBack = {}, pixels = pagePixels) {
-    Box(Modifier.fillMaxSize().background(LocalAbPalette.current.pageBg)) {
-        PageScaffold(title = statisticsScope?.let { "${it.groupName}账单" } ?: "明细", listState = listState, onBack = onBack,
+    Box(Modifier.fillMaxSize().background(p.pageBg)) {
+        PageScaffold(
+            title = statisticsScope?.groupName ?: "明细",
+            listState = listState,
+            onBack = onBack,
             actions = {
-                IconButton(onClick = { historyOpen = true }, modifier = Modifier.size(48.dp)) {
-                    Icon(AbIcons.Clock, contentDescription = "记录历史", tint = LocalAbPalette.current.label)
+                if (statisticsScope == null) {
+                    IconButton(onClick = { historyOpen = true }, modifier = Modifier.size(38.dp)) {
+                        Icon(AbIcons.Clock, contentDescription = "记录历史", tint = p.label, modifier = Modifier.size(20.dp))
+                    }
+                    IconButton(onClick = { addBill() }, modifier = Modifier.size(38.dp)) {
+                        Icon(AbIcons.Plus, contentDescription = "记一笔", tint = p.label, modifier = Modifier.size(20.dp))
+                    }
                 }
-                TextButton(onClick = { addBill() }, modifier = Modifier.heightIn(min = 48.dp)) { Text("记一笔") }
             },
         ) { padding ->
             Column(Modifier.fillMaxSize().imePadding()) {
                 if (statisticsScope != null) {
-                    Box(Modifier.fillMaxWidth().padding(horizontal = AbSpacing.page, vertical = AbSpacing.xs)) {
-                        GroupFooter("${statisticsScope.periodLabel} · ${when (statisticsScope.type) { "INCOME" -> "收入"; "REFUND" -> "退款"; else -> "支出" }} · ${statisticsScope.groupName}")
+                    val scopeTypeLabel = when (statisticsScope.type) { "INCOME" -> "收入"; "REFUND" -> "退款"; else -> "支出" }
+                    val totalCents = window.summary?.let {
+                        when (statisticsScope.type) {
+                            "INCOME" -> it.income
+                            "REFUND" -> it.refund
+                            else -> it.expense
+                        }
+                    } ?: bills.sumOf { it.priceCents }
+                    val count = window.summary?.count ?: bills.size
+                    Box(Modifier.fillMaxWidth().padding(horizontal = AbSpacing.page).padding(bottom = AbSpacing.s)) {
+                        InsetGroup {
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = AbCardDensity.content, vertical = AbCardDensity.rowVertical),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(
+                                        "${statisticsScope.periodLabel} · $scopeTypeLabel",
+                                        style = AbType.subhead.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium),
+                                        color = p.label,
+                                    )
+                                    Text(
+                                        "共 $count 笔",
+                                        style = AbType.caption1,
+                                        color = p.secondaryLabel,
+                                    )
+                                }
+                                AmountText(
+                                    formatAmount(totalCents),
+                                    style = AbType.title2,
+                                    color = amountTint(p, statisticsScope.type),
+                                )
+                            }
+                        }
                     }
-                } else LedgerFilters(keyword, { keyword = it; changed() }, dateMode, start, end, clock.date,
-                    { mode, from, to -> dateMode = mode; start = from; end = to; changed() },
-                    category, categoryOptions, { category = it; changed() }, type, { type = it; changed() },
-                    reimburse, { reimburse = it; changed() }, active, { clear() },
-                    monthStartDay = monthStartDay, summaryLabel = window.summary?.let { "${if (active) "匹配" else "共"} ${it.count} 笔" }
-                        ?: if (window.error != null) "读取失败" else "正在读取账单…")
+                } else {
+                    LedgerFilters(
+                        keyword, { keyword = it; changed() },
+                        dateMode, start, end, clock.date,
+                        { mode, from, to -> dateMode = mode; start = from; end = to; changed() },
+                        category, categoryOptions, { category = it; changed() },
+                        type, { type = it; changed() },
+                        reimburse, { reimburse = it; changed() },
+                        active, { clear() },
+                        monthStartDay = monthStartDay,
+                        summaryLabel = window.summary?.let { ledgerSummaryLabel(it, active) }
+                            ?: if (window.error != null) "读取失败" else "",
+                    )
+                }
                 Box(Modifier.weight(1f).fillMaxWidth()) {
-                    // Keep a restored deep position untouched until its saved window is available.
-                    if (window.summary == null) {
+                    if (window.summary == null && window.error != null) {
                         Column(Modifier.fillMaxWidth().padding(horizontal = AbSpacing.page)) {
-                            InsetGroup { ListRow(title = if (window.error == null) "正在读取账单…" else "读取失败，点此重试",
-                                subtitle = window.error, onClick = { if (window.error != null) retry++ }) }
-                        }
-                    } else LazyColumn(state = listState,
-                        modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth().align(Alignment.TopCenter),
-                        contentPadding = PaddingValues(start = AbSpacing.page, end = AbSpacing.page,
-                            top = AbSpacing.xs, bottom = padding.calculateBottomPadding()),
-                    ) {
-                        item(key = "summary") { GroupFooter(ledgerSummaryLabel(window.summary!!, active)) }
-                        if (!window.loading && window.error == null && bills.isEmpty()) item(key = "empty") {
                             InsetGroup {
-                                val emptyLedger = window.totalCount == 0
-                                EmptyState(icon = AbIcons.Note, title = if (emptyLedger) "还没有账单" else "没有匹配的账单",
-                                    message = if (emptyLedger) "点右上角「记一笔」，或开启识别后确认保存。" else "该筛选范围内没有账单。")
-                                if (active && statisticsScope == null) TextButton(onClick = { clear() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("清除筛选") }
+                                ListRow(
+                                    title = "读取失败，点此重试",
+                                    subtitle = window.error,
+                                    onClick = { retry++ },
+                                )
                             }
                         }
-                        days.forEach { (day, dayBills) ->
-                            item(key = "h-$day", contentType = "date") {
-                                LedgerDayHeader(day, clock, query, active, retry)
-                            }
-                            dayBills.forEachIndexed { index, bill ->
-                                item(key = bill.id, contentType = "bill") {
-                                    val shape = RoundedCornerShape(
-                                        topStart = if (index == 0) AbRadius.group else 0.dp,
-                                        topEnd = if (index == 0) AbRadius.group else 0.dp,
-                                        bottomStart = if (index == dayBills.lastIndex) AbRadius.group else 0.dp,
-                                        bottomEnd = if (index == dayBills.lastIndex) AbRadius.group else 0.dp)
-                                    Column((if (reduceMotion) Modifier else Modifier.animateItem(
-                                        fadeInSpec = tween(AbMotion.fast), placementSpec = tween(AbMotion.fast), fadeOutSpec = tween(AbMotion.fast)))
-                                        .fillMaxWidth().clip(shape).background(LocalAbPalette.current.cardBg)) {
-                                        if (index > 0) InsetDivider()
-                                        SwipeableBillRow(bill, onAmountBounds = {}, hideAmount = false,
-                                            onEdit = { openBill(bill.id); newSource = null },
-                                            onDelete = { deleteId = bill.id },
-                                            onLongPress = { if (Reimburse.eligible(bill)) reimburseBill = bill })
+                    } else {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth().align(Alignment.TopCenter),
+                            contentPadding = PaddingValues(
+                                start = AbSpacing.page,
+                                end = AbSpacing.page,
+                                top = AbSpacing.xs,
+                                bottom = padding.calculateBottomPadding(),
+                            ),
+                        ) {
+                            if (!window.loading && window.error == null && window.summary != null && bills.isEmpty()) {
+                                item(key = "empty") {
+                                    InsetGroup {
+                                        val emptyLedger = window.totalCount == 0
+                                        EmptyState(
+                                            icon = AbIcons.Note,
+                                            title = if (emptyLedger) "还没有账单" else "没有匹配的账单",
+                                            message = if (emptyLedger) "点右上角「+」记一笔，或开启识别后确认保存。" else "该筛选范围内没有账单。",
+                                        )
+                                        if (active && statisticsScope == null) {
+                                            TextButton(
+                                                onClick = { clear() },
+                                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                                            ) { Text("清除筛选") }
+                                        }
                                     }
                                 }
                             }
-                        }
-                        if (window.loading) item(key = "loading") { GroupFooter("正在加载更多…") }
-                        if (window.error != null) item(key = "error") { InsetGroup { ListRow(title = "读取失败，点此重试", subtitle = window.error, onClick = { retry++ }) } }
-                        item(key = "history") {
-                            Spacer(Modifier.height(AbSpacing.l))
-                            InsetGroup { ListRow(title = "记录历史", subtitle = "查看识别记录及已删除账单", chevron = true, onClick = { historyOpen = true }) }
-                        }
-                        item(key = "footer") {
-                            GroupFooter(if (reduceMotion) "点账单查看操作 · 删除前需要确认" else "点账单查看操作 · 左滑删除前需要确认")
+                            days.forEach { (day, dayBills) ->
+                                item(key = "h-$day", contentType = "date") {
+                                    Column(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(topStart = AbRadius.group, topEnd = AbRadius.group))
+                                            .background(p.cardBg),
+                                    ) {
+                                        LedgerCardDayHeader(day, dayBills, clock)
+                                        InsetDivider(inset = AbCardDensity.content)
+                                    }
+                                }
+                                dayBills.forEachIndexed { index, bill ->
+                                    item(key = bill.id, contentType = "bill") {
+                                        val last = index == dayBills.lastIndex
+                                        val shape = RoundedCornerShape(
+                                            bottomStart = if (last) AbRadius.group else 0.dp,
+                                            bottomEnd = if (last) AbRadius.group else 0.dp,
+                                        )
+                                        Column(
+                                            (if (reduceMotion) Modifier else Modifier.animateItem(
+                                                fadeInSpec = tween(AbMotion.fast),
+                                                placementSpec = tween(AbMotion.fast),
+                                                fadeOutSpec = tween(AbMotion.fast),
+                                            ))
+                                                .fillMaxWidth()
+                                                .padding(bottom = if (last) AbCardDensity.gap else 0.dp)
+                                                .clip(shape)
+                                                .background(p.cardBg),
+                                        ) {
+                                            SwipeableBillRow(
+                                                bill,
+                                                onAmountBounds = {},
+                                                hideAmount = false,
+                                                onEdit = { openBill(bill.id); newSource = null },
+                                                onDelete = { deleteId = bill.id },
+                                                onLongPress = { if (Reimburse.eligible(bill)) reimburseBill = bill },
+                                            )
+                                            if (!last) InsetDivider(inset = AbSpacing.l + AbCardDensity.icon + AbSpacing.m)
+                                        }
+                                    }
+                                }
+                            }
+                            if (window.loading && bills.isNotEmpty()) {
+                                item(key = "loading") { GroupFooter("正在加载更多…") }
+                            }
+                            if (window.error != null) {
+                                item(key = "error") {
+                                    InsetGroup {
+                                        ListRow(title = "读取失败，点此重试", subtitle = window.error, onClick = { retry++ })
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -229,11 +326,11 @@ fun BillsScreen(requestAdd: Int = 0, applyPendingFilter: Boolean = false, onPend
         }
         deleteId?.let { id -> DeleteBillDialog(id, origin = "ledger", onDismiss = { deleteId = null }, onDeleted = { deleteId = null }) }
         reimburseBill?.let { bill -> ReimburseChoiceDialog(bill) { reimburseBill = null } }
-        if (historyOpen) Box(Modifier.fillMaxSize().zIndex(9f)) {
+        SlideSubPage(visible = historyOpen, modifier = Modifier.fillMaxSize().zIndex(9f)) {
             RecognitionHistoryScreen(onBack = { historyOpen = false }, reserveDock = false)
         }
-        selectedId?.let { id ->
-            Box(Modifier.fillMaxSize().zIndex(10f)) { BillActionsHost(billId = id, onClose = { selectedId = null; sourcePreview = null }, sourcePreview = sourcePreview) }
+        SlideSubPageValue(value = selectedId, modifier = Modifier.fillMaxSize().zIndex(10f)) { id ->
+            BillActionsHost(billId = id, onClose = { selectedId = null; sourcePreview = null }, sourcePreview = sourcePreview)
         }
         if (newSource != null) key(newSource) {
             Box(Modifier.fillMaxSize().zIndex(10f)) { BillEditorDialog(null, newSource.orEmpty(), newTime, onClose = { newSource = null }) }
@@ -243,81 +340,38 @@ fun BillsScreen(requestAdd: Int = 0, applyPendingFilter: Boolean = false, onPend
 }
 
 private fun ledgerSummaryLabel(summary: BillQuerySummary, filtered: Boolean): String = buildList {
-    add("${if (filtered) "匹配" else "共"}${summary.count}笔")
-    add("支出${formatAmount(summary.expense)}")
-    if (summary.income != 0L) add("收入${formatAmount(summary.income)}")
-    if (summary.refund != 0L) add("退款${formatAmount(summary.refund)}")
+    add("${if (filtered) "匹配 " else "共 "}${summary.count} 笔")
+    if (summary.expense != 0L || (summary.income == 0L && summary.refund == 0L)) {
+        add("支出 ${formatAmount(summary.expense)}")
+    }
+    if (summary.income != 0L) add("收入 ${formatAmount(summary.income)}")
+    if (summary.refund != 0L) add("退款 ${formatAmount(summary.refund)}")
 }.joinToString(" · ")
 
-/**
- * 日期组头：左边日期/星期，右边该日支出。
- *
- * 右列是**支出**，不是净额。收入/退款/转账非零时在下面单独补一行，
- * 让「支出 28.37 + 收入 5.00」不会被读成「今天只花了 23.37」。
- * 金额不加 `maxLines`/省略号：宽度不够时让左列日期换行，不截断关键数字。
- */
 @Composable
-private fun LedgerDayHeader(day: LocalDate, clock: LedgerClock, query: LedgerQuery, filtered: Boolean, retry: Int) {
-    val app = LocalContext.current.applicationContext
-    val dao = remember(app) { AppDb.get(app).bills() }
-    val lifecycle = LocalLifecycleOwner.current.lifecycle
-    val dayWindow = remember(day, clock.zone) { ledgerDateWindow(day, day, clock.zone) }
-    val dailyQuery = remember(query, dayWindow) { query.copy(fromMillis = maxOf(query.fromMillis, dayWindow.fromMillis), toMillis = minOf(query.toMillis, dayWindow.toMillis)) }
-    var localRetry by remember { mutableStateOf(0) }
-    val state by key(dailyQuery) { produceState<Pair<BillQuerySummary?, Boolean>>(null to false, dao, lifecycle, dailyQuery, retry, localRetry) {
-        value = null to false
-        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            dao.observeFilteredSummary(dailyQuery.likePattern, dailyQuery.fromMillis, dailyQuery.toMillis, dailyQuery.category, dailyQuery.type, dailyQuery.statisticsCategory, dailyQuery.statisticsAccount)
-                .catch { value = null to true }.collect { value = it to false }
-        }
-    } }
+private fun LedgerCardDayHeader(day: LocalDate, dayBills: List<BillEntity>, clock: LedgerClock) {
     val p = LocalAbPalette.current
-    Column(Modifier.fillMaxWidth().padding(start = AbSpacing.m, end = AbSpacing.m, top = AbSpacing.m, bottom = AbSpacing.xs),
-        verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        val pattern = if (day.year == clock.date.year) "M月d日 EEEE" else "yyyy年M月d日 EEEE"
-        val daySummary = state.first
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-            Row(Modifier.weight(1f), verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
-                Text(
-                    DateTimeFormatter.ofPattern(pattern, Locale.CHINA).format(day),
-                    style = AbType.sectionHeader,
-                    color = p.secondaryLabel,
-                )
-                // 笔数跟在日期后面而不是独占一行：无收入/退款时整组只占一行，
-                // 日期组头省下的一行高度直接还给账单行。
-                if (daySummary != null) Text(
-                    "${if (filtered) "匹配" else "共"} ${daySummary.count} 笔",
-                    style = AbType.caption2, color = p.tertiaryLabel,
-                    modifier = Modifier.padding(bottom = 1.dp),
-                )
-            }
-            if (daySummary != null) Row(
-                verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.spacedBy(AbSpacing.xs),
-            ) {
-                Text("支出", style = AbType.caption1, color = p.tertiaryLabel,
-                    modifier = Modifier.padding(bottom = 2.dp))
-                Text(
-                    formatAmount(daySummary.expense),
-                    style = AbType.subhead.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
-                    color = if (daySummary.expense == 0L) p.secondaryLabel else p.expense,
-                )
-            }
-        }
-        when {
-            daySummary != null -> {
-                val extras = buildList {
-                    if (daySummary.income != 0L) add("收入 ${formatAmount(daySummary.income)}")
-                    if (daySummary.refund != 0L) add("退款 ${formatAmount(daySummary.refund)}")
-                }
-                if (extras.isNotEmpty()) Text(extras.joinToString(" · "), style = AbType.caption1,
-                    color = p.secondaryLabel, modifier = Modifier.fillMaxWidth())
-            }
-            state.second -> TextButton(onClick = { localRetry++ }, modifier = Modifier.heightIn(min = 48.dp)) { Text("日汇总读取失败，重试") }
-            else -> Text("正在读取日汇总…", style = AbType.caption1, color = p.secondaryLabel)
-        }
+    val date = day.format(DateTimeFormatter.ofPattern("MM/dd")) +
+        if (day.year != clock.date.year) " · ${day.year}" else ""
+    val expense = dayBills.filter { it.type == "EXPENSE" }.sumOf { it.priceCents }
+    val income = dayBills.filter { it.type == "INCOME" }.sumOf { it.priceCents }
+    val refund = dayBills.filter { it.type == "REFUND" }.sumOf { it.priceCents }
+    val (amountText, amountColor) = when {
+        expense > 0L -> "支出 ${formatAmount(expense)}" to p.expense
+        income > 0L -> "收入 ${formatAmount(income)}" to p.income
+        refund > 0L -> "退款 ${formatAmount(refund)}" to p.refund
+        else -> "支出 ${formatAmount(0L)}" to p.secondaryLabel
+    }
+    val style = AbType.subhead.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = AbCardDensity.content, vertical = AbCardDensity.headerVertical),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(date, style = style, color = p.label)
+        Text(amountText, style = style, color = amountColor)
     }
 }
 

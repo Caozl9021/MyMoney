@@ -338,11 +338,18 @@ private fun AppContent(tabState: MutableIntState, requestAdd: Int, settingsRootR
         }
     }
     val backPixels = RememberBackPixels()
+    val predictiveBack = io.github.mymoney.ui.design.LocalPredictiveBackEnabled.current
     var detailPreview by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     val navigationScope = androidx.compose.runtime.rememberCoroutineScope()
     var openingDetails by remember { mutableStateOf(false) }
     fun openDetails(scope: io.github.mymoney.data.StatisticsDrilldown? = null) {
         if (openingDetails || detailsOpen) return
+        if (!predictiveBack) {
+            detailScope = scope
+            detailAddRequest = 0
+            detailsOpen = true
+            return
+        }
         openingDetails = true
         navigationScope.launch {
             try { detailPreview = backPixels.snapshot(); detailScope = scope; detailAddRequest = 0; detailsOpen = true }
@@ -407,7 +414,7 @@ private fun AppContent(tabState: MutableIntState, requestAdd: Int, settingsRootR
             }
         }
         }
-        if (detailsOpen) {
+        io.github.mymoney.ui.design.SlideSubPage(visible = detailsOpen, modifier = Modifier.fillMaxSize()) {
             BillsScreen(requestAdd = detailAddRequest, applyPendingFilter = pendingFilter,
                 onPendingFilterApplied = { pendingFilter = false }, onBack = { detailsOpen = false },
                 onEditorVisibilityChanged = { editorChanged(4, it) }, statisticsScope = detailScope)

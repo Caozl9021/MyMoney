@@ -55,7 +55,7 @@ internal fun StatisticsDailyChart(
     val max = days.maxOfOrNull { it.amount(type) }?.coerceAtLeast(1L) ?: 1L
     // 语义色：支出珊瑚、收入压暗绿、退款青蓝；不再借用错误红/动态 accent。
     val tint = amountTint(p, type)
-    // 「最高 …」由调用方放在标题同一行，这里不再重复一行文字。
+    val hasSelection = selectedDate != null
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val gap = AbSpacing.xs
         val cell = (maxWidth - gap * (days.size - 1).coerceAtLeast(0)) / days.size.coerceAtLeast(1)
@@ -64,32 +64,32 @@ internal fun StatisticsDailyChart(
             days.forEach { day ->
                 val chosen = day.date == selectedDate
                 val amount = day.amount(type)
+                val barColor = if (!hasSelection || chosen) tint else tint.copy(alpha = 0.32f)
                 Column(
                     Modifier.width(cell)
-                        .background(if (chosen) p.fill else Color.Transparent, RoundedCornerShape(AbRadius.chip))
+                        .clip(RoundedCornerShape(AbRadius.chip))
                         .clickable { onSelect(day.date) }
                         .semantics(mergeDescendants = true) {
                             selected = chosen
                             contentDescription = "${day.date.monthValue}月${day.date.dayOfMonth}日，${statisticsShortTypeLabel(type)} ${formatAmount(amount)}，${day.count(type)} 笔"
                         }
-                        .padding(vertical = AbSpacing.s),
+                        .padding(vertical = AbSpacing.xs),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(AbSpacing.s),
+                    verticalArrangement = Arrangement.spacedBy(AbSpacing.xs),
                 ) {
-                    Canvas(Modifier.width(barWidth).height(136.dp)) {
-                        // 基线比数据柱弱：细线 + 半透明分隔色，不与柱子争视觉。
+                    Canvas(Modifier.width(barWidth).height(124.dp)) {
                         drawLine(p.separator.copy(alpha = 0.55f), Offset(0f, size.height), Offset(size.width, size.height), 0.75.dp.toPx())
                         if (amount > 0L) {
                             val height = (size.height * (amount.toDouble() / max).toFloat() * progress).coerceAtLeast(0f)
-                            drawRoundRect(tint, topLeft = Offset(0f, size.height - height),
+                            drawRoundRect(barColor, topLeft = Offset(0f, size.height - height),
                                 size = Size(size.width, height), cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx()))
                         }
                     }
-                    Text("${day.date.monthValue}/${day.date.dayOfMonth}",
-                        style = AbType.caption1, color = if (chosen) p.label else p.secondaryLabel)
-                    // 选中标记占一行固定高度，切换日期时图表不会上下跳。
-                    Text(if (chosen) "已选" else " ", style = AbType.caption2,
-                        color = if (chosen) p.accent else Color.Transparent)
+                    Text(
+                        "${day.date.monthValue}/${day.date.dayOfMonth}",
+                        style = if (chosen) AbType.caption1.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold) else AbType.caption1,
+                        color = if (chosen) p.label else p.secondaryLabel,
+                    )
                 }
             }
         }
@@ -132,6 +132,7 @@ internal fun StatisticsMonthHeatmap(
                     textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
             }
         }
+        val hasSelection = selectedDate != null && days.any { it.date == selectedDate }
         slots.chunked(7).forEach { week ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
                 week.forEach { date ->
@@ -143,10 +144,21 @@ internal fun StatisticsMonthHeatmap(
                         val level = heatLevel(amount, peak)
                         val chosen = date == selectedDate
                         val shape = RoundedCornerShape(AbRadius.chip)
+                        val dimFactor = if (hasSelection && !chosen) 0.42f else 1f
+                        val cellBg = when {
+                            level == 0 && chosen -> tint.copy(alpha = 0.14f)
+                            level == 0 -> p.fill.copy(alpha = p.fill.alpha * dimFactor)
+                            else -> tint.copy(alpha = levelAlpha[level] * progress * dimFactor)
+                        }
+                        val borderColor = when {
+                            !chosen -> Color.Transparent
+                            level >= 3 -> tint
+                            else -> tint.copy(alpha = 0.55f)
+                        }
                         Box(
                             Modifier.weight(1f).aspectRatio(1f).clip(shape)
-                                .background(if (level == 0) p.fill else tint.copy(alpha = levelAlpha[level] * progress))
-                                .then(if (chosen) Modifier.border(2.dp, p.label, shape) else Modifier)
+                                .background(cellBg)
+                                .then(if (chosen) Modifier.border(1.dp, borderColor, shape) else Modifier)
                                 .clickable { onSelect(date) }
                                 .semantics(mergeDescendants = true) {
                                     selected = chosen
@@ -156,10 +168,12 @@ internal fun StatisticsMonthHeatmap(
                         ) {
                             Text(
                                 if (date.dayOfMonth == 1 && days.first().date.month != date.month) "${date.monthValue}/1" else "${date.dayOfMonth}",
-                                style = AbType.caption2,
+                                style = if (chosen) AbType.caption2.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold) else AbType.caption2,
                                 color = when {
-                                    level >= 4 -> onStrong
-                                    level == 3 -> onMedium
+                                    level >= 4 && (!hasSelection || chosen) -> onStrong
+                                    level == 3 && (!hasSelection || chosen) -> onMedium
+                                    chosen && level == 0 -> tint
+                                    hasSelection && !chosen -> p.secondaryLabel
                                     else -> p.label
                                 },
                             )
@@ -167,17 +181,6 @@ internal fun StatisticsMonthHeatmap(
                     }
                 }
             }
-        }
-        // 图例：浅→深，说明颜色只表示金额大小，具体数字在点选后的文字里。
-        Row(Modifier.fillMaxWidth().padding(top = AbSpacing.xs),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
-            Text("少", style = AbType.caption2, color = p.tertiaryLabel)
-            (0..4).forEach { level ->
-                Box(Modifier.size(10.dp).clip(RoundedCornerShape(3.dp))
-                    .background(if (level == 0) p.fill else tint.copy(alpha = levelAlpha[level])))
-            }
-            Text("多", style = AbType.caption2, color = p.tertiaryLabel)
         }
     }
 }
@@ -245,18 +248,37 @@ internal fun StatisticsRing(
                 start += sweep
             }
         }
-        // 中心给「当前类型 + 当前完整总额」，类别数量降为弱副信息；
-        // 108dp 宽度小于环内径，不会遮住可点击的环带。
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(108.dp),
+        // 中心默认显示当前总额与项数；点选某扇区时直接展示该项名称、金额与占比。
+        val selectedGroup = groups.firstOrNull { it.name == selectedName }
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(112.dp),
             verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Text(statisticsShortTypeLabel(type), style = AbType.caption1, color = p.secondaryLabel)
             Text(
-                if (total <= 0L) "—" else formatAmount(total),
+                text = selectedGroup?.name ?: statisticsShortTypeLabel(type),
+                style = AbType.caption1,
+                color = p.secondaryLabel,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+            Text(
+                text = when {
+                    selectedGroup != null -> formatAmount(selectedGroup.cents)
+                    total <= 0L -> "—"
+                    else -> formatAmount(total)
+                },
                 style = AbType.subhead.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
                 color = p.label,
                 maxLines = 1,
             )
-            Text(if (groups.isEmpty()) "暂无记录" else "${groups.size} 项", style = AbType.caption2, color = p.tertiaryLabel)
+            Text(
+                text = when {
+                    selectedGroup != null -> "${statisticsPercent(selectedGroup.ratio)} · ${selectedGroup.count} 笔"
+                    groups.isEmpty() -> "暂无记录"
+                    else -> "${groups.size} 项"
+                },
+                style = AbType.caption2,
+                color = p.tertiaryLabel,
+                maxLines = 1,
+            )
         }
     }
 }

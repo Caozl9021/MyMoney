@@ -123,7 +123,6 @@ internal fun MonthlySummaryCard(
                     if (back > 0) contentDescription = "${period.label()}，点击回到本期"
                 }, verticalArrangement = Arrangement.Center) {
                 Text("${monthName}支出", style = AbType.footnote.copy(fontWeight = FontWeight.Medium), color = if (back > 0) p.accent else p.label)
-                if (monthStartDay != 1) Text(period.label(), style = AbType.caption1, color = p.secondaryLabel)
             }
             MonthArrow(p.label, if (monthStartDay == 1) "上个月" else "上一期", previous = true) { onPeriodBackChange(back + 1) }
             MonthArrow(p.label, if (monthStartDay == 1) "下个月" else "下一期", previous = false, enabled = back > 0) { onPeriodBackChange(back - 1) }

@@ -24,7 +24,10 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -60,7 +63,6 @@ internal fun ledgerTypeLabel(type: String?): String = when (type) {
     else -> "全部类型"
 }
 
-/** Always visible controls; option lists can scroll independently at large font sizes. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun LedgerFilters(
@@ -72,70 +74,202 @@ internal fun LedgerFilters(
     reimburse: String?, onReimburse: (String?) -> Unit,
     active: Boolean, onClear: () -> Unit, summaryLabel: String = "", monthStartDay: Int = 1,
 ) {
-    val periodWindow = if (dateMode == "MONTH" || dateMode == "LAST_MONTH")
-        io.github.mymoney.data.LedgerMonthPeriod.containing(today, monthStartDay).let { if (dateMode == "LAST_MONTH") it.shift(-1) else it } else null
     var picker by rememberSaveable { mutableStateOf<String?>(null) }
     val palette = LocalAbPalette.current
     val keyboard = LocalSoftwareKeyboardController.current
     var focused by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth().padding(horizontal = AbSpacing.page)
-        .padding(top = AbSpacing.m, bottom = AbSpacing.m)) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = AbSpacing.page)
+            .padding(top = AbSpacing.xs, bottom = AbSpacing.xs),
+        verticalArrangement = Arrangement.spacedBy(AbSpacing.s),
+    ) {
         LedgerSearchField(keyword, onKeyword, focused, { focused = it },
             onSearch = { keyboard?.hide() })
-        if (monthStartDay != 1 && periodWindow != null) GroupFooter(periodWindow.label())
-        Spacer(Modifier.height(AbSpacing.m))
-        FlowRow(Modifier.fillMaxWidth(),
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
-            verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-            CapsuleChip(ledgerDateFilterLabel(dateMode, start, end, monthStartDay), dateMode != "ALL" && dateMode.isNotEmpty(),
-                { picker = "DATE" }, Modifier.heightIn(min = 48.dp))
-            CapsuleChip(category?.ifEmpty { "未分类" } ?: "全部分类", category != null,
-                { picker = "CATEGORY" }, Modifier.heightIn(min = 48.dp))
-            CapsuleChip(ledgerTypeLabel(type), type != null,
-                { picker = "TYPE" }, Modifier.heightIn(min = 48.dp))
-            CapsuleChip(when (reimburse) { "PENDING" -> "待报销"; "REIMBURSED" -> "已报销"; else -> "报销" }, reimburse != null,
-                { picker = "REIMBURSE" }, Modifier.heightIn(min = 48.dp))
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            LedgerFilterPill(
+                text = ledgerDateFilterLabel(dateMode, start, end, monthStartDay),
+                selected = dateMode != "ALL" && dateMode.isNotEmpty(),
+                onClick = { picker = "DATE" },
+            )
+            LedgerFilterPill(
+                text = category?.ifEmpty { "未分类" } ?: "全部分类",
+                selected = category != null,
+                onClick = { picker = "CATEGORY" },
+            )
+            LedgerFilterPill(
+                text = ledgerTypeLabel(type),
+                selected = type != null,
+                onClick = { picker = "TYPE" },
+            )
+            LedgerFilterPill(
+                text = when (reimburse) { "PENDING" -> "待报销"; "REIMBURSED" -> "已报销"; else -> "报销" },
+                selected = reimburse != null,
+                onClick = { picker = "REIMBURSE" },
+            )
         }
-        Spacer(Modifier.height(AbSpacing.s))
-        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-            Text(summaryLabel, style = AbType.caption1, color = palette.secondaryLabel,
-                modifier = Modifier.weight(1f).padding(start = AbSpacing.m))
-            if (active) TextButton(onClick = onClear, modifier = Modifier.heightIn(min = 48.dp)) { Text("清除筛选") }
+        if (summaryLabel.isNotEmpty() || active) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = AbSpacing.xs),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    summaryLabel,
+                    style = AbType.caption1,
+                    color = palette.secondaryLabel,
+                    modifier = Modifier.weight(1f),
+                )
+                if (active) {
+                    Text(
+                        "清除筛选",
+                        style = AbType.caption1.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium),
+                        color = palette.accent,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(AbRadius.capsule))
+                            .clickable(onClick = onClear)
+                            .padding(horizontal = AbSpacing.s, vertical = 2.dp),
+                    )
+                }
+            }
         }
     }
     when (picker) {
-        "DATE" -> LedgerChoiceDialog("日期范围", onDismiss = { picker = null }) {
-            listOf("ALL" to "全部日期", "TODAY" to "今天", "MONTH" to (if (monthStartDay == 1) "本月" else "本期"), "LAST_MONTH" to (if (monthStartDay == 1) "上月" else "上期")).forEach { (value, label) ->
-                TextButton(onClick = { onDate(value, start, end); picker = null }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(if (dateMode == value) "✓ $label" else label) }
-            }
-            TextButton(onClick = { picker = "CUSTOM" }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("自选起止日期") }
+        "DATE" -> {
+            val options = listOf(
+                AppDialogChoice("ALL", "全部日期"),
+                AppDialogChoice("TODAY", "今天"),
+                AppDialogChoice("MONTH", if (monthStartDay == 1) "本月" else "本期"),
+                AppDialogChoice("LAST_MONTH", if (monthStartDay == 1) "上月" else "上期"),
+                AppDialogChoice("CUSTOM", "自选起止日期", if (dateMode == "CUSTOM" && start.isNotEmpty() && end.isNotEmpty()) "$start 至 $end" else null),
+            )
+            AppChoiceDialog(
+                title = "日期范围",
+                options = options,
+                selectedKey = dateMode,
+                onChoose = { key ->
+                    if (key == "CUSTOM") {
+                        picker = "CUSTOM"
+                    } else {
+                        onDate(key, start, end)
+                        picker = null
+                    }
+                },
+                onDismiss = { picker = null },
+            )
         }
-        "CATEGORY" -> LedgerChoiceDialog("分类", onDismiss = { picker = null }) {
-            (listOf<String?>(null, "") + categories.filter { it.isNotBlank() }).distinct().forEach { value ->
-                TextButton(onClick = { onCategory(value); picker = null }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                    val label = value?.ifEmpty { "未分类" } ?: "全部分类"
-                    Text(if (category == value) "✓ $label" else label)
+        "CATEGORY" -> {
+            val rawCategories = (listOf<String?>(null, "") + categories.filter { it.isNotBlank() }).distinct()
+            val options = rawCategories.map { value ->
+                val key = when (value) {
+                    null -> "__ALL__"
+                    "" -> "__UNCATEGORIZED__"
+                    else -> value
                 }
+                val label = value?.ifEmpty { "未分类" } ?: "全部分类"
+                AppDialogChoice(key, label)
             }
+            val selectedKey = when (category) {
+                null -> "__ALL__"
+                "" -> "__UNCATEGORIZED__"
+                else -> category
+            }
+            AppChoiceDialog(
+                title = "分类",
+                options = options,
+                selectedKey = selectedKey,
+                onChoose = { key ->
+                    val chosen = when (key) {
+                        "__ALL__" -> null
+                        "__UNCATEGORIZED__" -> ""
+                        else -> key
+                    }
+                    onCategory(chosen)
+                    picker = null
+                },
+                onDismiss = { picker = null },
+            )
         }
-        "REIMBURSE" -> LedgerChoiceDialog("报销", onDismiss = { picker = null }) {
-            listOf(null to "全部", "PENDING" to "待报销", "REIMBURSED" to "已报销").forEach { (value, label) ->
-                TextButton(onClick = { onReimburse(value); picker = null }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                    Text(if (reimburse == value) "✓ $label" else label)
-                }
-            }
+        "REIMBURSE" -> {
+            val options = listOf(
+                AppDialogChoice("__ALL__", "全部"),
+                AppDialogChoice("PENDING", "待报销"),
+                AppDialogChoice("REIMBURSED", "已报销"),
+            )
+            AppChoiceDialog(
+                title = "报销状态",
+                options = options,
+                selectedKey = reimburse ?: "__ALL__",
+                onChoose = { key ->
+                    onReimburse(if (key == "__ALL__") null else key)
+                    picker = null
+                },
+                onDismiss = { picker = null },
+            )
         }
-        "TYPE" -> LedgerChoiceDialog("账单类型", onDismiss = { picker = null }) {
-            listOf(null, "EXPENSE", "INCOME", "REFUND", "TRANSFER").forEach { value ->
-                TextButton(onClick = { onType(value); picker = null }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                    Text((if (type == value) "✓ " else "") + ledgerTypeLabel(value))
-                }
+        "TYPE" -> {
+            val options = listOf(null, "EXPENSE", "INCOME", "REFUND", "TRANSFER").map { value ->
+                AppDialogChoice(value ?: "__ALL__", ledgerTypeLabel(value))
             }
+            AppChoiceDialog(
+                title = "账单类型",
+                options = options,
+                selectedKey = type ?: "__ALL__",
+                onChoose = { key ->
+                    onType(if (key == "__ALL__") null else key)
+                    picker = null
+                },
+                onDismiss = { picker = null },
+            )
         }
         "CUSTOM" -> LedgerRangePicker(start, end, today, onDismiss = { picker = null }) { from, to ->
             onDate("CUSTOM", from, to); picker = null
         }
+    }
+}
+
+@Composable
+private fun LedgerFilterPill(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val p = LocalAbPalette.current
+    val bg = if (selected) p.accent.copy(alpha = 0.14f) else p.fill
+    val fg = if (selected) p.accent else p.label
+    val shape = RoundedCornerShape(AbRadius.capsule)
+    Box(
+        modifier = Modifier
+            .height(32.dp)
+            .clip(shape)
+            .background(bg)
+            .then(
+                if (selected) Modifier.border(0.75.dp, p.accent.copy(alpha = 0.4f), shape)
+                else Modifier,
+            )
+            .clickable(onClick = onClick)
+            .semantics {
+                this.selected = selected
+                role = androidx.compose.ui.semantics.Role.Tab
+            }
+            .padding(horizontal = 12.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            style = AbType.footnote.copy(fontWeight = if (selected) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Medium),
+            color = fg,
+            maxLines = 1,
+        )
     }
 }
 
@@ -161,23 +295,25 @@ private fun LedgerSearchField(
     val focusRequester = remember { FocusRequester() }
     val shape = RoundedCornerShape(AbRadius.capsule)
     val bg = if (focused) p.cardBg else p.fill
-    val stroke = if (focused) p.accent.copy(alpha = 0.55f) else p.separator
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 48.dp)
+            .height(38.dp)
             .clip(shape)
             .background(bg)
-            .border(1.dp, stroke, shape)
+            .then(
+                if (focused) Modifier.border(0.75.dp, p.accent.copy(alpha = 0.55f), shape)
+                else Modifier,
+            )
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
             ) { focusRequester.requestFocus() }
-            .padding(start = 14.dp, end = 4.dp),
+            .padding(start = 12.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
     ) {
-        Icon(AbIcons.Search, contentDescription = null, Modifier.size(18.dp), tint = p.secondaryLabel)
+        Icon(AbIcons.Search, contentDescription = null, Modifier.size(16.dp), tint = p.secondaryLabel)
         BasicTextField(
             value = keyword,
             onValueChange = onKeyword,
@@ -187,17 +323,16 @@ private fun LedgerSearchField(
                 .onFocusChanged { onFocusChange(it.isFocused) }
                 .semantics { contentDescription = "搜索商户或备注" },
             singleLine = true,
-            textStyle = AbType.body.copy(color = p.label),
+            textStyle = AbType.subhead.copy(color = p.label),
             cursorBrush = SolidColor(p.accent),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = {
-                // 只收起键盘，不移动焦点：硬件 Enter 的 key-up 可能落到工具栏按钮上。
                 onSearch()
             }),
             decorationBox = { inner ->
                 Box(contentAlignment = Alignment.CenterStart) {
                     if (keyword.isEmpty()) {
-                        Text("搜索商户或备注", style = AbType.body, color = p.secondaryLabel, maxLines = 1)
+                        Text("搜索商户或备注", style = AbType.subhead, color = p.secondaryLabel, maxLines = 1)
                     }
                     inner()
                 }
@@ -205,21 +340,13 @@ private fun LedgerSearchField(
         )
         if (keyword.isNotEmpty()) {
             Box(
-                Modifier.size(40.dp).clip(CircleShape).clickable { onKeyword("") }
+                Modifier.size(32.dp).clip(CircleShape).clickable { onKeyword("") }
                     .semantics { contentDescription = "清除搜索" },
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(AbIcons.Close, contentDescription = null, Modifier.size(16.dp), tint = p.secondaryLabel)
+                Icon(AbIcons.Close, contentDescription = null, Modifier.size(15.dp), tint = p.secondaryLabel)
             }
         }
-    }
-}
-
-@Composable
-private fun LedgerChoiceDialog(title: String, onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
-    AppDialog(title = title, onDismiss = onDismiss) {
-        content()
-        SecondaryButton("关闭", onClick = onDismiss, modifier = Modifier.fillMaxWidth())
     }
 }
 

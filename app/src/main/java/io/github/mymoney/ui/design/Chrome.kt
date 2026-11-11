@@ -523,3 +523,35 @@ fun SubPageScaffold(
     }
     }
 }
+
+/** 统一子页推入/推出动画（与设置页一致：220ms 左右横滑）。 */
+@Composable
+fun SlideSubPage(
+    visible: Boolean,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val reduceMotion = LocalReduceMotion.current
+    val duration = if (reduceMotion) 0 else AbMotion.normal
+    androidx.compose.animation.AnimatedVisibility(
+        visible = visible,
+        modifier = modifier,
+        enter = androidx.compose.animation.slideInHorizontally(tween(duration)) { it },
+        exit = androidx.compose.animation.slideOutHorizontally(tween(duration)) { it },
+    ) {
+        content()
+    }
+}
+
+@Composable
+fun <T : Any> SlideSubPageValue(
+    value: T?,
+    modifier: Modifier = Modifier,
+    content: @Composable (T) -> Unit,
+) {
+    val remembered = remember { androidx.compose.runtime.mutableStateOf(value) }
+    if (value != null) remembered.value = value
+    SlideSubPage(visible = value != null, modifier = modifier) {
+        remembered.value?.let { content(it) }
+    }
+}

@@ -84,14 +84,26 @@ internal fun displayOrNull(value: String?): String? = value?.takeIf { it.isNotBl
 internal fun billRowTitle(category: String?, subCategory: String?, type: String? = null): String =
     if (type == "TRANSFER") "转账" else displayOrNull(subCategory) ?: displayOrNull(category) ?: "未分类"
 
-/** 保留商户（否则备注）与时间；二级标题的父分类作为次级上下文，不重复标题。 */
+/** 详情页分类全称：同时存在一二级分类且不同时展示「一级分类 · 二级分类」。 */
+internal fun billCategoryDisplay(category: String?, subCategory: String?, type: String? = null): String? {
+    if (type == "TRANSFER") return "转账"
+    val primary = displayOrNull(category)
+    val secondary = displayOrNull(subCategory)
+    return when {
+        primary != null && secondary != null && primary != secondary -> "$primary · $secondary"
+        primary != null -> primary
+        secondary != null -> secondary
+        else -> null
+    }
+}
+
+/** 账单行次级信息：不重复显示一级分类，按「时间 · 备注（无备注回退商户）」顺序展示。 */
 internal fun billRowSubtitle(
     category: String?, subCategory: String?, merchant: String?, note: String?, time: String?, refund: Boolean,
 ): String = listOfNotNull(
     if (refund) "退款" else null,
-    displayOrNull(category)?.takeIf { displayOrNull(subCategory) != null && it != subCategory },
-    displayOrNull(note) ?: displayOrNull(merchant),
     displayOrNull(time),
+    displayOrNull(note) ?: displayOrNull(merchant),
 ).joinToString(" · ")
 
 /**
@@ -152,21 +164,11 @@ fun BillListRow(
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            val reimbursed = bill.reimburseStatus == Reimburse.REIMBURSED
-            val pending = bill.reimburseStatus == Reimburse.PENDING
             AmountText(
                 formatAmount(bill.priceCents, signed = true, type = bill.type),
                 AbType.amountRow.copy(textAlign = TextAlign.End),
-                if (hideAmount) Color.Transparent else if (reimbursed) p.secondaryLabel else amountTint(p, bill.type),
-                minFontSize = 14f,
-            )
-            if (pending || reimbursed) Text(
-                text = if (pending) "待报销" else "已报销",
-                style = AbType.caption2,
-                color = if (pending) {
-                    if (p.cardBg.luminance() > 0.5f) Color(0xFF9A5B00) else Color(0xFFFFB340)
-                } else p.secondaryLabel,
-                maxLines = 1,
+                if (hideAmount) Color.Transparent else billRowAmountColor(p, bill.type, bill.reimburseStatus),
+                minFontSize = 13f,
             )
             if (account != null) Text(
                 text = account,
@@ -178,6 +180,13 @@ fun BillListRow(
             )
         }
     }
+}
+
+/** 账单行金额颜色：已报销为灰，待报销为年轻明黄，其余走收支语义色（支出为红）。 */
+internal fun billRowAmountColor(p: AbPalette, type: String, reimburseStatus: String = Reimburse.NONE): Color = when (reimburseStatus) {
+    Reimburse.REIMBURSED -> p.secondaryLabel
+    Reimburse.PENDING -> if (p.cardBg.luminance() > 0.5f) Color(0xFFF5A623) else Color(0xFFFFD60A)
+    else -> amountTint(p, type)
 }
 
 /** 金额语义色：支出暖红、收入绿、退款青、转账灰；不做「只有颜色」的类型提示。 */

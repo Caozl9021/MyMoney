@@ -102,8 +102,8 @@ object AbType {
     /** 统计卡里的中等金额 22 Bold */
     val amountTitle = title2.tabular()
 
-    /** 列表行金额 17 Semibold */
-    val amountRow = headline.tabular()
+    /** 列表行金额 15 Regular */
+    val amountRow = subhead.tabular()
 
     /** 确认页可编辑金额 44 Bold */
     val amountEntry = TextStyle(

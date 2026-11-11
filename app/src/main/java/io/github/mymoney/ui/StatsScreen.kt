@@ -153,7 +153,7 @@ fun StatsScreen(onOpenDetails: () -> Unit = {}, onOpenGroup: (StatisticsDrilldow
                 Column(Modifier.padding(bottom = AbSpacing.s),
                     verticalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
                     BoxWithConstraints(Modifier.fillMaxWidth()) {
-                        val stacked = maxWidth < 350.dp * LocalDensity.current.fontScale.coerceAtLeast(1f)
+                        val stacked = maxWidth < 260.dp * LocalDensity.current.fontScale.coerceAtLeast(1f)
                         val switch: @Composable () -> Unit = {
                             StatisticsPeriodSwitch(if (period == StatisticsPeriod.WEEK) 0 else 1) {
                                 periodName = if (it == 0) StatisticsPeriod.WEEK.name else StatisticsPeriod.MONTH.name
@@ -183,13 +183,9 @@ fun StatsScreen(onOpenDetails: () -> Unit = {}, onOpenGroup: (StatisticsDrilldow
                             navigation()
                         }
                     }
-                    if (period == StatisticsPeriod.MONTH && monthStartDay != 1) Text(
-                        "${range.startDate} – ${range.endExclusiveDate.minusDays(1)}", style = AbType.caption1, color = p.secondaryLabel,
-                        modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-
                     Segmented(listOf("支出", "收入", "退款"), listOf("EXPENSE", "INCOME", "REFUND").indexOf(type), {
                         type = listOf("EXPENSE", "INCOME", "REFUND")[it]
-                    })
+                    }, compact = true)
                 }
             }
             if (summary == null) {
@@ -204,7 +200,7 @@ fun StatsScreen(onOpenDetails: () -> Unit = {}, onOpenGroup: (StatisticsDrilldow
                     }
                 }
             } else {
-                // 摘要卡：主金额最大，其余口径两列并排，不再四行逐项纵排。
+                // 摘要卡：主金额最大，其余口径并排。
                 item("totals") {
                     InsetGroup(Modifier.padding(bottom = AbCardDensity.gap)) {
                         Column(Modifier.fillMaxWidth().padding(AbCardDensity.content),
@@ -214,11 +210,10 @@ fun StatsScreen(onOpenDetails: () -> Unit = {}, onOpenGroup: (StatisticsDrilldow
                                 "REFUND" -> summary.totals.refund
                                 else -> summary.totals.expense
                             }
-                            // 笔数/转账口径跟标题同一行，省一行高度给首屏的图表。
-                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                                 Text("${if (followsToday) "本期" else "该周期"}${statisticsTypeLabel(type)}",
                                     style = AbType.footnote, color = p.secondaryLabel, modifier = Modifier.weight(1f))
-                                Text("共 ${summary.count} 笔 · 转账 ${summary.transferCount} 笔不计收支",
+                                Text("共 ${summary.count} 笔",
                                     style = AbType.caption1, color = p.tertiaryLabel,
                                     textAlign = androidx.compose.ui.text.style.TextAlign.End)
                             }
@@ -236,61 +231,94 @@ fun StatsScreen(onOpenDetails: () -> Unit = {}, onOpenGroup: (StatisticsDrilldow
                     InsetGroup(Modifier.padding(bottom = AbCardDensity.gap)) {
                         Column(Modifier.padding(AbCardDensity.content),
                             verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
+                            val day = summary.days.firstOrNull { it.date == selectedDate }
+                            val peak = summary.days.maxOfOrNull { it.amount(type) } ?: 0L
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
                                 Text("每日${statisticsShortTypeLabel(type)}", style = AbType.headline, color = p.label,
                                     modifier = Modifier.weight(1f))
-                                val peak = summary.days.maxOfOrNull { it.amount(type) } ?: 0L
-                                Text("最高 ${formatAmount(peak)}", style = AbType.caption1, color = p.secondaryLabel)
+                                Text(
+                                    if (day == null) "最高 ${formatAmount(peak)}"
+                                    else "${statisticsDayLabel(day.date)} · ${formatAmount(day.amount(type))} · ${day.count(type)} 笔",
+                                    style = AbType.caption1,
+                                    color = if (day == null) p.secondaryLabel else p.label,
+                                )
                             }
-                            // 周看柱状（7 天一次排满），月看热力图（日历网格，
-                            // 31 根柱在 400dp 宽里每根只有 8dp，辨识度太低）。
                             if (period == StatisticsPeriod.MONTH) {
-                                StatisticsMonthHeatmap(summary.days, type, selectedDate, progress) { selectedDate = it }
+                                StatisticsMonthHeatmap(summary.days, type, selectedDate, progress) {
+                                    selectedDate = if (selectedDate == it) null else it
+                                }
                             } else {
-                                StatisticsDailyChart(summary.days, type, selectedDate, progress) { selectedDate = it }
-                            }
-                            val day = summary.days.firstOrNull { it.date == selectedDate }
-                            Text(if (day == null) "${summary.days.size} 天 · 合计 ${formatAmount(summary.days.sumOf { it.amount(type) })}"
-                                else "${statisticsDayLabel(day.date)} · ${formatAmount(day.amount(type))} · ${day.count(type)} 笔",
-                                style = AbType.footnote, color = p.label)
-                        }
-                    }
-                }
-                item("grouping") {
-                    Row(Modifier.fillMaxWidth().padding(bottom = AbCardDensity.gap),
-                        horizontalArrangement = Arrangement.spacedBy(AbSpacing.s), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.width(196.dp)) {
-                            Segmented(listOf("分类占比", "账户汇总"), grouping, { grouping = it })
-                        }
-                    }
-                }
-                val groups = if (grouping == 0) summary.categories(type) else summary.accounts(type)
-                item("ring") {
-                    InsetGroup(Modifier.padding(bottom = AbCardDensity.gap)) {
-                        Column(Modifier.fillMaxWidth().padding(AbCardDensity.content), verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-                            Text("${statisticsTypeLabel(type)} · ${if (grouping == 0) "分类" else "账户"}", style = AbType.headline, color = p.label)
-                            if (groups.isEmpty()) Text("本周期没有${statisticsTypeLabel(type)}记录。", color = p.secondaryLabel)
-                            else {
-                                StatisticsRing(groups, type, selectedGroup, progress) { selectedGroup = it }
-                                Text("合计 ${formatAmount(groups.sumOf { it.cents })} · ${groups.sumOf { it.count }} 笔",
-                                    style = AbType.footnote, color = p.label)
-                                groups.firstOrNull { it.name == selectedGroup }?.let {
-                                    Text("已选：${it.name} · ${formatAmount(it.cents)} · ${it.count} 笔 · ${statisticsPercent(it.ratio)}",
-                                        style = AbType.footnote, color = p.label)
+                                StatisticsDailyChart(summary.days, type, selectedDate, progress) {
+                                    selectedDate = if (selectedDate == it) null else it
                                 }
                             }
                         }
                     }
                 }
-                groups.forEachIndexed { index, group ->
-                    item("group-$grouping-${group.name}") {
-                        CompactStatisticsGroupRow(index + 1, group, selectedGroup == group.name, index == groups.lastIndex) {
-                            selectedGroup = group.name
-                            onOpenGroup(StatisticsDrilldown(range.fromMillis, range.toMillis, type, group.name, grouping == 1, label))
+                val groups = if (grouping == 0) summary.categories(type) else summary.accounts(type)
+                item("breakdown") {
+                    InsetGroup(Modifier.padding(bottom = AbCardDensity.gap)) {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    start = AbCardDensity.content,
+                                    end = AbCardDensity.content,
+                                    top = AbCardDensity.headerVertical,
+                                    bottom = AbSpacing.xs,
+                                ),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("构成占比", style = AbType.headline, color = p.label, modifier = Modifier.weight(1f))
+                            Box(Modifier.width(116.dp)) {
+                                Segmented(listOf("分类", "账户"), grouping, { grouping = it }, compact = true)
+                            }
+                        }
+                        if (groups.isEmpty()) {
+                            Text(
+                                "本周期没有${statisticsTypeLabel(type)}记录。",
+                                style = AbType.subhead,
+                                color = p.secondaryLabel,
+                                modifier = Modifier.padding(
+                                    start = AbCardDensity.content,
+                                    end = AbCardDensity.content,
+                                    bottom = AbCardDensity.content,
+                                ),
+                            )
+                        } else {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = AbCardDensity.content, vertical = AbSpacing.xs),
+                            ) {
+                                StatisticsRing(groups, type, selectedGroup, progress) {
+                                    selectedGroup = if (selectedGroup == it) null else it
+                                }
+                            }
+                            InsetDivider(inset = AbCardDensity.content)
+                            groups.forEachIndexed { index, group ->
+                                StatisticsBreakdownRow(
+                                    index = index,
+                                    group = group,
+                                    isAccount = grouping == 1,
+                                    isSelected = selectedGroup == group.name,
+                                    last = index == groups.lastIndex,
+                                ) {
+                                    onOpenGroup(
+                                        StatisticsDrilldown(
+                                            range.fromMillis,
+                                            range.toMillis,
+                                            type,
+                                            group.name,
+                                            grouping == 1,
+                                            label,
+                                        ),
+                                    )
+                                }
+                            }
                         }
                     }
                 }
-
             }
         }
     }
@@ -357,35 +385,94 @@ private fun signedStatisticsAmount(cents: Long) =
     (if (cents < 0) "−" else "") + formatAmount(if (cents < 0) -cents else cents)
 
 @Composable
-private fun CompactStatisticsGroupRow(
-    index: Int, group: StatisticsGroup, isSelected: Boolean, last: Boolean, onClick: () -> Unit,
+private fun StatisticsBreakdownRow(
+    index: Int,
+    group: StatisticsGroup,
+    isAccount: Boolean,
+    isSelected: Boolean,
+    last: Boolean,
+    onClick: () -> Unit,
 ) {
     val p = LocalAbPalette.current
-    val shape = RoundedCornerShape(topStart = if (index == 1) AbRadius.group else 0.dp,
-        topEnd = if (index == 1) AbRadius.group else 0.dp,
-        bottomStart = if (last) AbRadius.group else 0.dp,
-        bottomEnd = if (last) AbRadius.group else 0.dp)
-    Column(Modifier.fillMaxWidth().clip(shape).background(p.cardBg)) {
-        Column(Modifier.fillMaxWidth().heightIn(min = 48.dp)
-            .background(if (isSelected) p.fill else p.cardBg)
-            .clickable(onClick = onClick)
-            .semantics(mergeDescendants = true) { selected = isSelected }
-            .padding(horizontal = AbCardDensity.content, vertical = AbCardDensity.rowVertical),
-            verticalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(AbSpacing.s), verticalAlignment = Alignment.Top) {
-                Box(Modifier.padding(top = 5.dp).size(10.dp)
-                    .background(AbAccentSwatches[(index - 1) % AbAccentSwatches.size], RoundedCornerShape(3.dp)))
-                Text("$index. ${group.name}${if (isSelected) " · 已选" else ""}",
-                    style = AbType.subhead, color = p.label, modifier = Modifier.weight(1f))
+    val swatch = AbAccentSwatches[index % AbAccentSwatches.size]
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 52.dp)
+                .background(if (isSelected) p.fill.copy(alpha = 0.65f) else p.cardBg)
+                .clickable(onClick = onClick)
+                .semantics(mergeDescendants = true) { selected = isSelected }
+                .padding(horizontal = AbCardDensity.content, vertical = AbCardDensity.rowVertical),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(AbSpacing.m),
+        ) {
+            if (isAccount) {
+                AccountAvatar(name = group.name, size = AbCardDensity.icon)
+            } else {
+                CategoryBadge(category = group.name, tint = swatch, size = AbCardDensity.icon)
             }
-            Text("${formatAmount(group.cents)} · ${group.count} 笔 · ${statisticsPercent(group.ratio)}",
-                style = AbType.footnote, color = p.secondaryLabel)
-            Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(p.fill)) {
-                if (group.ratio > 0) Box(Modifier.fillMaxWidth(group.ratio.toFloat().coerceIn(0f, 1f))
-                    .fillMaxHeight().background(AbAccentSwatches[(index - 1) % AbAccentSwatches.size]))
+            Column(
+                Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(AbSpacing.xs),
+                ) {
+                    Text(
+                        group.name,
+                        style = AbType.subhead.copy(fontWeight = FontWeight.Medium),
+                        color = p.label,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    Text(
+                        statisticsPercent(group.ratio),
+                        style = AbType.caption1,
+                        color = p.secondaryLabel,
+                    )
+                }
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(p.fill),
+                ) {
+                    if (group.ratio > 0) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth(group.ratio.toFloat().coerceIn(0f, 1f))
+                                .fillMaxHeight()
+                                .background(swatch, RoundedCornerShape(2.dp)),
+                        )
+                    }
+                }
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(AbSpacing.xs),
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    AmountText(formatAmount(group.cents), style = AbType.amountRow, color = p.label)
+                    Text("${group.count} 笔", style = AbType.caption1, color = p.secondaryLabel)
+                }
+                Icon(
+                    AbIcons.ChevronRight,
+                    contentDescription = null,
+                    tint = p.tertiaryLabel,
+                    modifier = Modifier.size(16.dp),
+                )
             }
         }
-        if (!last) HorizontalDivider(Modifier.padding(horizontal = AbCardDensity.content), color = p.separator, thickness = 0.5.dp)
+        if (!last) {
+            InsetDivider(inset = AbSpacing.l + AbCardDensity.icon + AbSpacing.m)
+        }
     }
 }
 

@@ -149,7 +149,6 @@ fun HomeScreen(
             io.github.mymoney.ui.design.FloatingHeaderAction(AbIcons.Plus, "记一笔") { addBill() }
         },
         listState = listState,
-        subtitle = clock.date.format(java.time.format.DateTimeFormatter.ofPattern("M月d日 EEEE", java.util.Locale.CHINA)),
     ) { padding ->
         Box(Modifier.fillMaxSize()) {
         LazyColumn(
@@ -166,12 +165,6 @@ fun HomeScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
-            item(key = "today-date") {
-                Text(clock.date.format(java.time.format.DateTimeFormatter.ofPattern("M月d日 · EEEE", java.util.Locale.CHINA)),
-                    style = AbType.caption1, color = p.secondaryLabel,
-                    modifier = Modifier.padding(start = AbSpacing.m, end = AbSpacing.m, bottom = AbSpacing.xs))
-            }
-            // 本期支出保持主视觉，日期移到正文，不撑高四页统一顶栏。
             homeCardItem(key = "summary") {
                 MonthlySummaryCard(clock, homePeriod, periodBack) { periodBack = it.coerceAtLeast(0) }
             }
@@ -286,12 +279,10 @@ fun HomeScreen(
         SecondaryButton("关闭", onClick = { healthDetails = false }, modifier = Modifier.fillMaxWidth())
     }
     reimburseBill?.let { bill -> ReimburseChoiceDialog(bill) { reimburseBill = null } }
-    selectedId?.let { id ->
-        Box(Modifier.fillMaxSize().zIndex(10f)) {
-            BillActionsHost(billId = id, onClose = { selectedId = null; sourcePreview = null }, sourcePreview = sourcePreview)
-        }
+    io.github.mymoney.ui.design.SlideSubPageValue(value = selectedId, modifier = Modifier.fillMaxSize().zIndex(10f)) { id ->
+        BillActionsHost(billId = id, onClose = { selectedId = null; sourcePreview = null }, sourcePreview = sourcePreview)
     }
-    if (historyOpen) Box(Modifier.fillMaxSize().zIndex(9f)) {
+    io.github.mymoney.ui.design.SlideSubPage(visible = historyOpen, modifier = Modifier.fillMaxSize().zIndex(9f)) {
         RecognitionHistoryScreen(onBack = { historyOpen = false }, initialFilter = historyFilter, reserveDock = false)
     }
     if (newSource != null) key(newSource) {

@@ -72,3 +72,24 @@
   - `GroupHeader` / `GroupFooter` / 首页日期 / `AssetGroupTitle` / `LedgerDayHeader` / `LedgerFilters` 摘要：水平内缩统一为 `AbSpacing.m (12.dp)`，避开卡片 `AbRadius.group (20.dp)` 圆角弧度并与卡片内边距对齐。
   - `SubPageBar`：补齐底部 `0.5.dp` `p.separator` 分隔细线；`BillsScreen` 统计下钻范围说明补齐 `padding(horizontal = AbSpacing.page, vertical = AbSpacing.xs)` 并移除列表底部冗余的 `+ 64.dp` 留白。
 - **验证**：`scripts/check-ui-components.sh` 通过，`:app:testDebugUnitTest` + `:billkit:testDebugUnitTest` 全绿，`:app:assembleRelease` 构建并安装真机验收通过。
+
+## 2026-11-11 首页、账单详情（方案 A）、拖拽排序与统计/明细全局样式统一（用户验收通过）
+
+- **用户结论**：用户于 2026-11-11 明确确认**「验收通过，首页和统计页先这样」**（OpenSpec `refine-home-and-bill-row-density`）。
+- **核心组件与视觉约束**：
+  - **首页与总览卡（`HomeScreen` / `SummaryCard`）**：移除「账本」悬浮胶囊下方的独立今日日期行，总览卡直接作为首卡呈现；移除非 1 号记账周期下的起止日期范围文本（1 号起算显示「本月支出」，非 1 号显示「本期支出」）。
+  - **账单列表行（`BillRow` / `Typography`）**：右侧金额样式 `AbType.amountRow` 调整为 `15.sp Normal`；移除右侧「待报销 / 已报销」文字行，改用金额颜色编码（普通支出 `p.expense` 红色、待报销年轻明黄色 `0xFFF5A623` / `0xFFFFD60A`、已报销灰色 `p.secondaryLabel`）；左侧副标题去掉一级分类名，按 `时间 · 备注` 顺序拼接。
+  - **账单详情页方案 A（`BillActionsHost` / `DeleteBillDialog`）**：合并原两级页面为单页「账单详情」；主卡采用紧凑收据头（`CategoryBadge` + `一级分类 · 二级分类` + 类型副标题 + 右侧金额）与左右单行键值对 `BillDetailRow`；隐藏默认态的「未标记」报销与「已计入账户余额」，识别元数据收纳于默认收起的「来源与识别信息」折叠卡；底部操作栏采用 `48.dp` 圆角方形（`14.dp` 圆角）图标按钮（灰色/蓝色发票 `AbIcons.Receipt` + 旁边展开报销状态按钮、铅笔修改 `AbIcons.Pencil`、红色垃圾桶删除 `AbIcons.Trash`）；删除确认框精简文案并采用人性化「删除后金额将返回『XX』」表述。
+  - **全局点击态、分隔线、拖拽与子页过渡（`Theme` / `Components` / `DragReorder` / `Chrome`）**：
+    - `MyMoneyTheme` 提供 `LocalIndication provides NoIndication` 且 `SwitchCanvas` 显式 `indication = null`，消除开关与按钮上的灰色矩形按压/悬停底色；
+    - `InsetDivider` 增加右侧内边距 `endInset`，使卡片内分隔线左右留白对称不顶边；
+    - `DragReorderColumn` 使用静态 `.drawWithContent` 修饰符绘制托起态（`14.dp` 圆角矩形实心 `p.cardBg` 底 + 约 `8%` 极浅细描边与 `2.2%` 外缘柔光），不重建手势节点链且无黑重阴影；
+    - `SlideSubPage` / `SlideSubPageValue` 及 `AnimatedContent` 统一子页 220ms 左右横滑推入/推出动画，详情打开编辑面板保留完整底部弹簧上滑动画。
+  - **统计页（`StatsScreen` / `StatisticsCharts`）**：
+    - 顶部 `[周 | 月]` 与 `< 周期 >` 换行阈值收紧为 `260.dp` 保持同行，`[支出 | 收入 | 退款]` 切换条采用 `Segmented(..., compact = true)`（`32.dp` 高度）；总览卡去掉「转账 X 笔不计收支」尾注；
+    - 每日趋势卡去掉底部重复合计与图例，选中日详情（`M月d日 周X · ¥XX.XX · N 笔`）显示在卡片右上角；周柱状图与月热力图选中某天时其余项柔和变淡，月热力图选中格采用 `1.dp` 语义色浅描边与浅色底，去除原 `2.dp` 黑框；
+    - 「构成占比」一体卡合并标题、紧凑 `[分类 | 账户]` 切换器、圆环图（中心动态显示选中项名称/金额/占比/笔数）与排行列表（`StatisticsBreakdownRow`：左侧 `CategoryBadge`/`AccountAvatar`、中间 `名称 + 百分比` + `4.dp` 进度条、右侧 `金额 + 笔数` + `ChevronRight`）。
+  - **明细页（`BillsScreen` / `LedgerFilters` / `MainActivity`）**：
+    - 顶栏右侧精简为「记录历史」与「记一笔」图标按钮；搜索框压缩为 `38.dp` 无边框胶囊，筛选胶囊（`LedgerFilterPill`）统一为 `32.dp` 紧凑高度，底部单行展示汇总说明与 `清除筛选`，筛选弹窗统一使用 `AppChoiceDialog`；
+    - 统计下钻进入时顶部展示 `InsetGroup` 汇总头卡（左侧 `周期 · 类型` + `共 N 笔`，右侧总金额），且点击排行行直接下钻、不挂起等待全屏截图、不闪烁首帧加载占位卡；
+    - 每日账单卡片统一采用与首页一致的卡片内日汇总头 `LedgerCardDayHeader`（左侧 `MM/dd`，右侧当日收支小计 + 缩进分隔线），移除卡片外逐日 SQL 汇总查询及列表底部冗余历史卡与脚注。

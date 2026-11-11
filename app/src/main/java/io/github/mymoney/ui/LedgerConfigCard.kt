@@ -173,10 +173,10 @@ fun LedgerConfigPage(
                             LedgerConfig.reorderGroups(type, next.map { it.name })
                         }.onSuccess { version++ }
                     },
-                ) { group, index, _ ->
+                ) { group, index, dragging ->
                                 GroupRow(
                                     group = group,
-                                    dividerAbove = index > 0,
+                                    dividerAbove = index > 0 && !dragging,
                                     onClick = { openGroup = group.name },
                                 )
                             }
@@ -435,10 +435,10 @@ private fun SubCategoryPage(
                                     LedgerConfig.reorderSubs(type, fresh.name, next)
                                 }.onSuccess { onChanged() }
                             },
-                        ) { sub, index, _ ->
+                        ) { sub, index, dragging ->
                             ListRow(
                                 title = sub,
-                                dividerAbove = index > 0,
+                                dividerAbove = index > 0 && !dragging,
                                 trailing = {
                                     Box(
                                         Modifier
@@ -531,11 +531,11 @@ private fun AccountsSection(
                         }.onSuccess { onChanged() }
                             .onFailure { accountError = it.message ?: "账户排序失败，请重试" }
                     },
-                ) { row, index, _ ->
+                ) { row, index, dragging ->
                     ListRow(
                         title = row.name,
                         subtitle = if (!row.initialized) "待设置余额" else null,
-                        dividerAbove = index > 0,
+                        dividerAbove = index > 0 && !dragging,
                         leading = {
                             io.github.mymoney.ui.design.AccountAvatar(
                                 name = row.name,

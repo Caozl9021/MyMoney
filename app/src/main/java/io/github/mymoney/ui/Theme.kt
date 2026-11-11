@@ -1,7 +1,13 @@
 package io.github.mymoney.ui
 
+import androidx.compose.foundation.IndicationNodeFactory
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.graphics.drawscope.ContentDrawScope
+import androidx.compose.ui.node.DelegatableNode
+import androidx.compose.ui.node.DrawModifierNode
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -91,7 +97,23 @@ fun MyMoneyTheme(
     ) {
         MaterialTheme(
             colorScheme = colorScheme,
-            content = content,
-        )
+        ) {
+            CompositionLocalProvider(
+                LocalIndication provides NoIndication,
+                content = content,
+            )
+        }
     }
+}
+
+private object NoIndication : IndicationNodeFactory {
+    private class Node : androidx.compose.ui.Modifier.Node(), DrawModifierNode {
+        override fun ContentDrawScope.draw() {
+            drawContent()
+        }
+    }
+
+    override fun create(interactionSource: InteractionSource): DelegatableNode = Node()
+    override fun hashCode(): Int = -1
+    override fun equals(other: Any?): Boolean = other === this
 }

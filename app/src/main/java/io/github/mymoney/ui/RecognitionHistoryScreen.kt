@@ -196,8 +196,10 @@ fun RecognitionHistoryScreen(onBack: () -> Unit, initialFilter: String = "ALL", 
             }
         }
     }
-    selectedBillId?.let { id -> BillActionsHost(billId = id, onClose = { selectedBillId = null }) }
-    selectedDeletionId?.let { eventId ->
+    SlideSubPageValue(value = selectedBillId, modifier = Modifier.fillMaxSize()) { id ->
+        BillActionsHost(billId = id, onClose = { selectedBillId = null })
+    }
+    SlideSubPageValue(value = selectedDeletionId, modifier = Modifier.fillMaxSize()) { eventId ->
         deletions.orEmpty().firstOrNull { it.eventId == eventId }?.let { removed ->
             BillActionsHost(billId = removed.principalId, onClose = { selectedDeletionId = null }, deletedSnapshot = removed)
         }
