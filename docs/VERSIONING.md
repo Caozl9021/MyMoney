@@ -1,7 +1,7 @@
 # 版本号与交付节奏规则
 
 <!-- release-162-20261114 -->
-> **当前版本 1.10.3/162**（2026-11-14 构建并用户验收通过）。`versionName` 1.10.2→1.10.3、`versionCode` 161→162；内容为 11-11 与 11-12 两批已验收界面改动。上一发布线 1.10.2/161（GitHub Release `v1.10.2`）。详见[ACCEPTANCE](ACCEPTANCE.md)。
+> **当前版本 1.10.3/162**（2026-11-14 构建、用户验收通过并发布，GitHub Release `v1.10.3`）。`versionName` 1.10.2→1.10.3、`versionCode` 161→162；内容为 11-11 与 11-12 两批已验收界面改动。上一发布线 1.10.2/161（GitHub Release `v1.10.2`）。详见[ACCEPTANCE](ACCEPTANCE.md)。
 <!-- /release-162-20261114 -->
 
 <!-- asset-tab-layout-20261112 -->

@@ -1,6 +1,6 @@
 # 麦米 My Money
 
-> 当前版本 **1.10.3/162**（2026-11-14 用户验收通过）：含 11-11 验收的首页/账单详情/统计/明细页样式重构与 11-12 验收的资产 Tab 布局精简，产物见 `dist/app/1.10.3-162/`。上一发布线 1.10.2/161（GitHub Release `v1.10.2`）。说明见 [资产](docs/ASSET_MANAGEMENT.md)，验收见 [验收记录](docs/ACCEPTANCE.md)。
+> 当前版本 **1.10.3/162**（2026-11-14 用户验收通过，已发 [GitHub Release `v1.10.3`](https://github.com/Caozl9021/MyMoney/releases/tag/v1.10.3)）：含 11-11 验收的首页/账单详情/统计/明细页样式重构与 11-12 验收的资产 Tab 布局精简，产物见 `dist/app/1.10.3-162/`。说明见 [资产](docs/ASSET_MANAGEMENT.md)，验收见 [验收记录](docs/ACCEPTANCE.md)。
 
 ## 当前版本1.10.0/158
 
