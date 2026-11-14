@@ -1,7 +1,11 @@
 # 打包文件存放规则
 
+<!-- release-162-20261114 -->
+> **当前版本 1.10.3/162**（2026-11-14 本机构建，用户验收通过）。`dist/app/1.10.3-162/20261114-210520-_fz1no14/`，release SHA-256 `a3042783…fbc81`，签名 `05212beb…66c0`，`SHA256SUMS` 5/5；`dist/latest-app.json` → 162。发布快照 `dist/releases/v1.10.3/upload/`。验收详见[ACCEPTANCE](ACCEPTANCE.md)。
+<!-- /release-162-20261114 -->
+
 <!-- release-161-20261111 -->
-> **当前发布线1.10.2/161**（2026-11-11）。候选 `dist/app/1.10.2-161/20261111-160823-jjsjbc9_/`，release SHA-256 `dfadae27…d7320d`，签名 `05212beb…66c0`；GitHub Release `v1.10.2`；`dist/latest-app.json` → 161，`pending_acceptance`；上传快照 `dist/releases/v1.10.2/upload/`。验收详见[ACCEPTANCE](ACCEPTANCE.md)。
+> **发布线1.10.2/161**（2026-11-11）。候选 `dist/app/1.10.2-161/20261111-160823-jjsjbc9_/`，release SHA-256 `dfadae27…d7320d`，签名 `05212beb…66c0`；GitHub Release `v1.10.2`；上传快照 `dist/releases/v1.10.2/upload/`。验收详见[ACCEPTANCE](ACCEPTANCE.md)。
 <!-- /release-161-20261111 -->
 
 <!-- acceptance-158-20261107 -->

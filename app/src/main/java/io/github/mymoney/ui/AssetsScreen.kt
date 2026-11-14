@@ -44,6 +44,9 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 private val assetKinds = linkedMapOf("CASH" to "现金", "PAYMENT" to "支付账户", "SAVINGS" to "储蓄卡", "CREDIT" to "信用账户", "OTHER_ASSET" to "其他资产", "OTHER_DEBT" to "其他负债")
+/** 资产 Tab 显示账户数达到该值才按类型分组（用户 2026-11-12 确认：少于 5 个不分组）。 */
+internal const val ASSET_GROUP_THRESHOLD = 5
+private val assetGroupOrder = listOf("PAYMENT", "SAVINGS", "CREDIT", "CASH", "OTHER_ASSET", "OTHER_DEBT")
 internal fun assetMoney(cents: Long): String = (if (cents < 0) "−" else "") + "¥" + BigDecimal.valueOf(cents, 2).abs().toPlainString()
 private fun assetNumber(cents: Long): String = BigDecimal.valueOf(cents, 2).toPlainString()
 private fun positionLabel(account: AssetAccount, cents: Long): String = when {
@@ -181,53 +184,48 @@ fun AssetsScreen(onBack: () -> Unit, isTab: Boolean = false, onSubpageVisibility
                         onToggleHidden = {
                             hidden = !hidden; prefs.edit().putBoolean("hide_amount", hidden).apply()
                         }) }
-                    if (isTab) item {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AbCardDensity.gap)) {
-                            AssetMetricTile("总资产", summary.assets, up = true, hidden = hidden, hasValue = anyValue, modifier = Modifier.weight(1f))
-                            AssetMetricTile("总负债", summary.debts, up = false, hidden = hidden, hasValue = anyValue, modifier = Modifier.weight(1f))
-                        }
-                    }
-                    item {
-                        Column {
-                            AssetGroupTitle(
-                                "资金账户（${visible.size}）",
-                                if (!anyValue || hidden) null else "余额 ${assetMoney(summary.net)}",
-                            )
-                            if (visible.size > 1) {
-                                Text(
-                                    "长按拖动排序",
-                                    style = AbType.caption1,
-                                    color = LocalAbPalette.current.secondaryLabel,
-                                    modifier = Modifier.padding(start = AbSpacing.xs, top = AbSpacing.xs),
+                    // 账户少时一张卡即可；≥5 个才按类型分组，组标题右侧给小计。
+                    val groups: List<Pair<String, List<AssetAccount>>> =
+                        if (visible.size >= ASSET_GROUP_THRESHOLD) assetGroupOrder.mapNotNull { kind ->
+                            visible.filter { it.kind == kind }.takeIf { it.isNotEmpty() }?.let { (assetKinds[kind] ?: kind) to it }
+                        } + visible.filter { it.kind !in assetGroupOrder }.takeIf { it.isNotEmpty() }?.let { listOf("其他" to it) }.orEmpty()
+                        else listOf("资金账户（${visible.size}）" to visible)
+                    val grouped = visible.size >= ASSET_GROUP_THRESHOLD
+                    groups.forEach { (title, rows) ->
+                        item(key = "asset-group-$title") {
+                            Column {
+                                AssetGroupTitle(
+                                    title,
+                                    if (!grouped || hidden) null
+                                    else assetMoney(rows.fold(0L) { sum, a -> Math.addExact(sum, AssetMath.balance(a.id, entries)) }),
                                 )
-                            }
-                        }
-                    }
-                    item {
-                        InsetGroup {
-                            if (visible.isEmpty()) {
-                                ListRow(
-                                    title = "还没有账户",
-                                    subtitle = "点这里添加，保存后即可记账",
-                                    onClick = { form = "new" },
-                                )
-                            } else {
-                                DragReorderColumn(
-                                    items = visible,
-                                    keyOf = { it.id },
-                                    onReorder = { next ->
-                                        runCatching {
-                                            AssetStore.reorderActive(next.map { it.id })
-                                        }.onFailure { error = it.message ?: "排序失败，请重试" }
-                                    },
-                                ) { row, index, dragging ->
-                                    AssetAccountRow(
-                                        account = row,
-                                        balance = AssetMath.balance(row.id, entries),
-                                        hidden = hidden,
-                                        dividerAbove = index > 0 && !dragging,
-                                        onClick = { selected = row.id },
-                                    )
+                                InsetGroup {
+                                    if (rows.isEmpty()) {
+                                        ListRow(
+                                            title = "还没有账户",
+                                            subtitle = "点这里添加，保存后即可记账",
+                                            onClick = { form = "new" },
+                                        )
+                                    } else {
+                                        DragReorderColumn(
+                                            items = rows,
+                                            keyOf = { it.id },
+                                            onReorder = { next ->
+                                                // 只传本组 id：reorderActive 在原槽位内重排，其它账户不动。
+                                                runCatching {
+                                                    AssetStore.reorderActive(next.map { it.id })
+                                                }.onFailure { error = it.message ?: "排序失败，请重试" }
+                                            },
+                                        ) { row, index, dragging ->
+                                            AssetAccountRow(
+                                                account = row,
+                                                balance = AssetMath.balance(row.id, entries),
+                                                hidden = hidden,
+                                                dividerAbove = index > 0 && !dragging,
+                                                onClick = { selected = row.id },
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -285,10 +283,9 @@ fun AssetsScreen(onBack: () -> Unit, isTab: Boolean = false, onSubpageVisibility
 }
 
 /**
- * 净资产主卡：顶部一行「净资产 + 眼睛」，下面是超大金额。
+ * 资产总览单卡：「净资产 + 眼睛」、超大金额；有负债时卡内分隔线下并排「总资产 │ 总负债」。
  *
- * 金额是这一页唯一的主角，所以只放一枚数字；总资产/总负债拆到下面两枚并排小卡，
- * 避免同一组数字在一屏里重复两遍（参考图里主卡下面那一行也只是补充信息）。
+ * 无负债时总资产必然等于净资产，那一行只会重复同一个数字，所以整行隐藏（用户 2026-11-12 选 A）。
  */
 @Composable
 private fun AssetNetWorthCard(
@@ -327,62 +324,29 @@ private fun AssetNetWorthCard(
                 !hasValue -> "还没有可计入的余额"
                 else -> assetMoney(summary.net)
             },
-            style = AbType.amountHero,
-            color = p.label,
-            modifier = Modifier.padding(top = AbSpacing.xs),
+            style = if (hasValue || hidden) AbType.amountHero else AbType.body,
+            color = if (hasValue && !hidden && summary.net < 0) p.expense else if (hasValue || hidden) p.label else p.secondaryLabel,
         )
+        if (hasValue && summary.debts > 0) {
+            Box(Modifier.padding(vertical = AbSpacing.m).fillMaxWidth().height(1.dp).background(p.separator))
+            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), verticalAlignment = Alignment.CenterVertically) {
+                AssetSplitValue("总资产", if (hidden) "••••" else assetMoney(summary.assets), p.label, Modifier.weight(1f))
+                Box(Modifier.padding(horizontal = AbSpacing.m).width(1.dp).fillMaxHeight().background(p.separator))
+                AssetSplitValue("总负债", if (hidden) "••••" else assetMoney(summary.debts), if (hidden) p.label else p.expense, Modifier.weight(1f))
+            }
+        }
     }
 }
 
-/** 并排小卡：左上角一枚实心色块图标，右侧标签 + 金额。 */
 @Composable
-private fun AssetMetricTile(
-    label: String,
-    cents: Long,
-    up: Boolean,
-    hidden: Boolean,
-    hasValue: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    val p = LocalAbPalette.current
-    // 资产走收入绿，负债走与参考图同款的深色块；两者都用 pageBg 画图标，
-    // 浅色/深色主题下都能立刻分辨，且不引入硬编码颜色。
-    val tile = if (up) p.income else p.label
-    Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(AbRadius.card))
-            .background(p.cardBg)
-            .padding(AbCardDensity.content),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
-    ) {
-        Box(
-            Modifier.size(32.dp).clip(RoundedCornerShape(AbRadius.chip)).background(tile),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = if (up) AbIcons.ArrowUpRight else AbIcons.ArrowDownLeft,
-                contentDescription = null,
-                modifier = Modifier.size(AbSize.iconSm),
-                tint = p.pageBg,
-            )
-        }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Text(label, style = AbType.caption1, color = p.secondaryLabel, maxLines = 1)
-            Text(
-                text = when {
-                    hidden -> "••••"
-                    !hasValue -> "—"
-                    else -> assetMoney(cents)
-                },
-                style = AbType.amountRow,
-                color = p.label,
-            )
-        }
+private fun AssetSplitValue(label: String, value: String, color: Color, modifier: Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(label, style = AbType.caption1, color = LocalAbPalette.current.secondaryLabel, maxLines = 1)
+        Text(value, style = AbType.amountRow, color = color, maxLines = 1)
     }
 }
 
-/** 分组标题一行：左侧「资金账户（5）」，右侧当前余额。 */
+/** 分组标题一行：左侧组名，右侧（分组时）该组余额小计。 */
 @Composable
 private fun AssetGroupTitle(text: String, trailing: String?) {
     val p = LocalAbPalette.current

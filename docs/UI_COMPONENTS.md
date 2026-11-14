@@ -93,3 +93,11 @@
     - 顶栏右侧精简为「记录历史」与「记一笔」图标按钮；搜索框压缩为 `38.dp` 无边框胶囊，筛选胶囊（`LedgerFilterPill`）统一为 `32.dp` 紧凑高度，底部单行展示汇总说明与 `清除筛选`，筛选弹窗统一使用 `AppChoiceDialog`；
     - 统计下钻进入时顶部展示 `InsetGroup` 汇总头卡（左侧 `周期 · 类型` + `共 N 笔`，右侧总金额），且点击排行行直接下钻、不挂起等待全屏截图、不闪烁首帧加载占位卡；
     - 每日账单卡片统一采用与首页一致的卡片内日汇总头 `LedgerCardDayHeader`（左侧 `MM/dd`，右侧当日收支小计 + 缩进分隔线），移除卡片外逐日 SQL 汇总查询及列表底部冗余历史卡与脚注。
+
+## 2026-11-12 资产 Tab 布局精简（用户验收通过；未出包）
+
+- **用户结论**：用户于 2026-11-12 明确确认**「验收通过」**（OpenSpec `refine-asset-tab-layout`）。本次不升版本、不出包。
+- **总览卡（`AssetNetWorthCard`，仅 `isTab`）**：一张卡。有金额时净资产用 `AbType.amountHero`；净资产为负且未隐藏金额时用 `p.expense`。总负债大于 0 时，卡内 `1.dp` 分隔线下并排「总资产 │ 总负债」，总负债未隐藏时用 `p.expense`。总负债为 0 时不画这一行。隐藏金额时净资产和总负债都用 `p.label`。已删除 `AssetMetricTile`。
+- **账户列表（`AssetsScreen`，Tab 与设置 → 资产共用）**：`ASSET_GROUP_THRESHOLD = 5`。达到阈值时按支付账户、储蓄卡、信用账户、现金、其他资产、其他负债分组，空组不显示；组标题（`AssetGroupTitle`）右侧是该组可见账户 `AssetMath.balance` 之和，隐藏金额或未分组时不显示。不足 5 个时一张「资金账户（N）」，标题右侧无金额。不显示「长按拖动排序」。
+- **排序**：每组一个 `DragReorderColumn`，`onReorder` 只把本组 id 交给 `AssetStore.reorderActive`。信用账户行不增加「欠款/溢缴」。
+- **未在实机覆盖**：深色、大字、隐藏金额时的负债色、组内长按拖动。证据 `runs/20261112-1423-asset-tab-layout/outputs/verification.md`。

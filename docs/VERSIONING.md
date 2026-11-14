@@ -1,5 +1,13 @@
 # 版本号与交付节奏规则
 
+<!-- release-162-20261114 -->
+> **当前版本 1.10.3/162**（2026-11-14 构建并用户验收通过）。`versionName` 1.10.2→1.10.3、`versionCode` 161→162；内容为 11-11 与 11-12 两批已验收界面改动。上一发布线 1.10.2/161（GitHub Release `v1.10.2`）。详见[ACCEPTANCE](ACCEPTANCE.md)。
+<!-- /release-162-20261114 -->
+
+<!-- asset-tab-layout-20261112 -->
+> **2026-11-12 资产 Tab 布局精简已用户验收**，当时未出包、未升版本；该布局已随 2026-11-14 的 1.10.3/162 候选进入安装包。详见[ACCEPTANCE](ACCEPTANCE.md)。
+<!-- /asset-tab-layout-20261112 -->
+
 <!-- release-161-20261111 -->
 > **当前发布线1.10.2/161**（2026-11-11 已发 GitHub Release `v1.10.2`；`dist/latest-app.json` pending_acceptance）。资产向导功能验收通过；整版含报销待用户确认。家庭服务 `cloud-backup-161`。前一整版验收为1.10.0/158。详见[ACCEPTANCE](ACCEPTANCE.md)。
 <!-- /release-161-20261111 -->

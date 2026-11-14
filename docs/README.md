@@ -1,5 +1,9 @@
 # 文档索引
 
+<!-- asset-tab-layout-20261112 -->
+> **2026-11-12 资产 Tab 布局精简用户验收通过，本次不出包。** 发布线仍是 1.10.2/161；已发 `v1.10.2` 不含这次布局，源码未提交。详见[ACCEPTANCE](ACCEPTANCE.md)、[资产说明](ASSET_MANAGEMENT.md)。
+<!-- /asset-tab-layout-20261112 -->
+
 <!-- release-161-20261111 -->
 > **当前发布线1.10.2/161**（2026-11-11 已发 GitHub Release `v1.10.2`；`latest-app.json` pending_acceptance）。**资产添加向导及相关交互**、**首页/账单详情（方案 A）/拖拽样式/统计与明细页全局样式统一（`refine-home-and-bill-row-density`）**均于 2026-11-11 获用户验收通过；整版含报销待用户确认。家庭服务 `cloud-backup-161`（format 8–12）。前一整版验收为1.10.0/158。淘宝被动抓取已判定不可行。详见[ACCEPTANCE](ACCEPTANCE.md)、[PROGRESS](PROGRESS.md)、[实时验证交接](SHANGOU_LIVE_VALIDATION_HANDOFF.md)。
 <!-- /release-161-20261111 -->
@@ -16,6 +20,7 @@
 | 想了解什么 | 文档 |
 | --- | --- |
 | 当前进度、安装事实、最新反馈 | [PROGRESS](PROGRESS.md) |
+| 资产账户与资产 Tab | [ASSET_MANAGEMENT](ASSET_MANAGEMENT.md) |
 | 当前未关闭问题与待做项 | [PLAN_1.0](PLAN_1.0.md) |
 | 用户已验收和仍待确认 | [ACCEPTANCE](ACCEPTANCE.md) |
 | 个人云备份设计/身份/边界 | [PERSONAL_CLOUD_BACKUP_PLAN](PERSONAL_CLOUD_BACKUP_PLAN.md) |
