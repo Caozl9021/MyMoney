@@ -2,6 +2,7 @@ package io.github.mymoney.ui
 
 import kotlinx.coroutines.launch
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -36,6 +37,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.unit.dp
 import io.github.mymoney.data.CaptureMode
@@ -178,20 +181,41 @@ fun HomeScreen(
                 )
             }
             if (health.attention) homeCardItem(key = "runtime-attention") {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-                    Column(Modifier.weight(1f).clip(RoundedCornerShape(AbRadius.row))
-                        .clickable { healthDetails = true }.heightIn(min = 48.dp)
-                        .padding(vertical = AbSpacing.xs), verticalArrangement = Arrangement.Center) {
-                        Text(if (health.title.startsWith("已开启")) "自动记账需处理" else health.title, style = AbType.footnote, color = p.label)
-                        Text("点此查看原因", style = AbType.caption1, color = p.secondaryLabel)
-                    }
-                    health.actions.firstOrNull()?.let { action ->
-                        TextButton(onClick = {
-                            performCaptureAction(context, action, onOpenSettings) {
-                                historyFilter = RecognitionStatus.PENDING; historyOpen = true
-                            }
-                        }, modifier = Modifier.heightIn(min = 48.dp)) { Text("处理", color = p.accent) }
+                val primaryAction = health.actions.firstOrNull()
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .clip(RoundedCornerShape(AbRadius.row))
+                        .background(p.fill)
+                        .clickable { healthDetails = true }
+                        .padding(start = AbSpacing.m, end = if (primaryAction == null) AbSpacing.m else AbSpacing.xs),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
+                ) {
+                    Text(
+                        text = if (health.title.startsWith("已开启")) "自动记账需处理" else health.title,
+                        style = AbType.footnote,
+                        color = p.secondaryLabel,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    primaryAction?.let { action ->
+                        TextButton(
+                            onClick = {
+                                performCaptureAction(context, action, onOpenSettings) {
+                                    historyFilter = RecognitionStatus.PENDING; historyOpen = true
+                                }
+                            },
+                            modifier = Modifier.heightIn(min = 48.dp),
+                        ) {
+                            Text(
+                                "处理",
+                                style = AbType.footnote.copy(fontWeight = FontWeight.SemiBold),
+                                color = p.accent,
+                            )
+                        }
                     }
                 }
             }

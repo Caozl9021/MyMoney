@@ -214,7 +214,7 @@ fun StatsScreen(onOpenDetails: () -> Unit = {}, onOpenGroup: (StatisticsDrilldow
                                 Text("${if (followsToday) "本期" else "该周期"}${statisticsTypeLabel(type)}",
                                     style = AbType.footnote, color = p.secondaryLabel, modifier = Modifier.weight(1f))
                                 Text("共 ${summary.count} 笔",
-                                    style = AbType.caption1, color = p.tertiaryLabel,
+                                    style = AbType.caption1, color = p.secondaryLabel,
                                     textAlign = androidx.compose.ui.text.style.TextAlign.End)
                             }
                             AmountText(formatAmount(primary), AbType.amountHero, amountTint(p, type),
@@ -394,7 +394,7 @@ private fun StatisticsBreakdownRow(
     onClick: () -> Unit,
 ) {
     val p = LocalAbPalette.current
-    val swatch = AbAccentSwatches[index % AbAccentSwatches.size]
+    val swatch = swatchFor(group.name, index)
     Column(Modifier.fillMaxWidth()) {
         Row(
             Modifier

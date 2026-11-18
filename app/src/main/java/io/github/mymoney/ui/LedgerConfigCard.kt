@@ -145,14 +145,16 @@ fun LedgerConfigPage(
 
             if (!presetsOnly) {
                 item(key = "hdr") {
-                    GroupHeader(if (tab == 0) "支出分类" else "收入分类")
-                    if (groups.size > 1) {
-                        Text(
-                            "长按拖动排序",
-                            style = AbType.caption1,
-                            color = p.secondaryLabel,
-                            modifier = Modifier.padding(start = AbSpacing.page, bottom = AbSpacing.xs),
-                        )
+                    Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.xxs)) {
+                        GroupHeader(if (tab == 0) "支出分类" else "收入分类")
+                        if (groups.size > 1) {
+                            Text(
+                                "长按拖动排序",
+                                style = AbType.caption1,
+                                color = p.secondaryLabel,
+                                modifier = Modifier.padding(start = AbSpacing.m, bottom = AbSpacing.xs),
+                            )
+                        }
                     }
                 }
 

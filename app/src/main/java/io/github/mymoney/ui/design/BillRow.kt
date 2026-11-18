@@ -122,7 +122,7 @@ fun BillListRow(
     hideAmount: Boolean = false,
 ) {
     val p = LocalAbPalette.current
-    val accent = billIconTint(p, bill.type)
+    val accent = billIconTint(p, bill.type, bill.category, bill.subCategory)
     val time = if (showTime) timeOfDay(bill.timeMillis) else null
     val assetAccounts by io.github.mymoney.data.AssetStore.accounts.collectAsStateWithLifecycle()
     val account = displayOrNull(assetAccounts.firstOrNull { it.id == bill.accountId }?.name ?: bill.account)
@@ -137,8 +137,11 @@ fun BillListRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(AbSpacing.m),
     ) {
-        CategoryBadge(category = bill.category, tint = accent, size = AbCardDensity.icon,
-            foreground = if (p.cardBg.luminance() > 0.5f) Color.White else badgeForeground(accent))
+        CategoryBadge(
+            category = bill.category,
+            tint = accent,
+            size = AbCardDensity.icon,
+        )
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(AbSpacing.xxs)) {
             Text(
                 text = billRowTitle(bill.category, bill.subCategory, bill.type),
@@ -173,7 +176,7 @@ fun BillListRow(
             if (account != null) Text(
                 text = account,
                 style = AbType.caption2,
-                color = p.tertiaryLabel,
+                color = p.secondaryLabel,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.End,
@@ -197,12 +200,11 @@ internal fun amountTint(p: AbPalette, type: String): Color = when (type) {
     else -> p.expense
 }
 
-/** 账单图案由分类决定，色彩只表达账单类型。 */
-internal fun billIconTint(p: AbPalette, type: String): Color = when (type) {
-    "INCOME" -> p.incomeIcon
-    "REFUND" -> p.refund
+/** 账单徽章颜色：转账用中性灰、退款用青蓝；其余按一级分类稳定取色（与分类设置、统计页一致）。 */
+internal fun billIconTint(p: AbPalette, type: String, category: String? = null, subCategory: String? = null): Color = when (type) {
     "TRANSFER" -> p.transfer
-    else -> p.expenseIcon
+    "REFUND" -> p.refund
+    else -> swatchFor(displayOrNull(category) ?: displayOrNull(subCategory) ?: "未分类")
 }
 
 /** 左滑露出的删除底衬（红底 + 白字）。 */

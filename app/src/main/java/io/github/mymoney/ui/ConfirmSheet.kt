@@ -249,6 +249,11 @@ fun ConfirmSheet(
 
     // ---- 金额：新建为空（0.00 只是占位）；已有金额首次点入全选，直接键入即替换 ----
     val isNew = draft.priceCents <= 0L
+    LaunchedEffect(accounts) {
+        if (isNew && editableDetails && account == null && (touched and io.github.mymoney.data.CaptureFields.ACCOUNT == 0L)) {
+            account = accounts.firstOrNull()
+        }
+    }
     var amount by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue(initialAmountText(draft.priceCents))) }
     var selectAllOnFocus by remember { mutableStateOf(!isNew) }
     var forceSelectAll by remember { mutableStateOf(false) }
@@ -525,7 +530,12 @@ fun ConfirmSheet(
                                 if (type != next) {
                                     haptic.tick(); picker.cancel()
                                     if (reimbursable && type == BillType.EXPENSE) pendingType = next
-                                    else { type = next; category = null; subCategory = null }
+                                    else {
+                                        type = next
+                                        category = if (isNew && editableDetails && next != BillType.TRANSFER)
+                                            LedgerConfig.groupsFor(next).firstOrNull()?.name else null
+                                        subCategory = null
+                                    }
                                 }
                                 importError = null
                             }
@@ -547,7 +557,8 @@ fun ConfirmSheet(
                                 onConfirm = {
                                     reimbursable = false
                                     type = next
-                                    category = null
+                                    category = if (isNew && editableDetails && next != BillType.TRANSFER)
+                                        LedgerConfig.groupsFor(next).firstOrNull()?.name else null
                                     subCategory = null
                                     pendingType = null
                                 },

@@ -3,7 +3,7 @@ package io.github.mymoney.ui.design
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -12,20 +12,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /** Fixed, opaque feature colors: independent of wallpaper accent and list order. */
 internal object SettingsIconColors {
-    val orange = Color(0xFFFF9C38)
-    val blue = Color(0xFF4E9BFF)
-    val yellow = Color(0xFFFFD24B)
-    val pink = Color(0xFFFF6E98)
-    val violet = Color(0xFFAC80F5)
-    val teal = Color(0xFF30BFC7)
-    val green = Color(0xFF39B97E)
-    val indigo = Color(0xFF7B8DF1)
+    val orange = Color(0xFFE67E22)
+    val blue = Color(0xFF3B82F6)
+    val yellow = Color(0xFFD97706)
+    val pink = Color(0xFFE04F5F)
+    val violet = Color(0xFF8B5CF6)
+    val teal = Color(0xFF0D9488)
+    val green = Color(0xFF10B981)
+    val indigo = Color(0xFF6366F1)
 }
 
 /** White symbols on strong colors; yellow uses dark ink for a clear silhouette. */
@@ -53,22 +52,28 @@ internal fun SettingsIconBadge(title: String, fallback: ImageVector, size: Dp = 
         "钱迹账单" -> "receipt_long"
         "分类", "支出分类", "收入分类", "分类预设" -> "category"
         "资产" -> "account_balance_wallet"
-        "备注", "备注模板", "备注建议", "确认卡", "规则文件", "导入说明" -> "receipt_long"
-        "自动记账" -> "bolt"
+        "备注", "备注模板", "备注建议" -> null
+        "确认卡", "超级岛确认", "识别后弹出确认卡", "规则文件", "导入说明" -> "receipt_long"
+        "自动记账", "启用自动记账" -> "bolt"
         "记录历史" -> "work_history"
-        "备份", "完整备份与恢复", "权限与后台运行" -> "shield"
-        "应用与通道", "识别通道", "页面诊断" -> "smartphone"
-        "记账周期" -> "work_history"
+        "备份", "完整备份与恢复", "权限与后台运行", "权限" -> "shield"
+        "应用与通道", "识别通道", "应用范围" -> "smartphone"
+        "记账周期" -> "calendar"
         "餐段设置" -> "restaurant"
         "学习记忆" -> "school"
         "通知模板" -> "payments"
         else -> null
     }
-    Box(Modifier.size(size).clip(RoundedCornerShape(12.dp)).background(color), contentAlignment = Alignment.Center) {
-        // Decorative glyphs are paired with a readable row title; keep the bright tiles light.
-        val foreground = if (color == colors.yellow) Color(0xFF5C4300) else Color.White
-        if (glyph != null) Icon(painterResource(CategoryIcons.resourceFor(glyph)), null,
-            Modifier.size(size * 0.58f), tint = foreground)
-        else Icon(fallback, null, Modifier.size(size * 0.56f), tint = foreground)
+    val dark = p.cardBg.luminance() < 0.5f
+    Box(
+        Modifier.size(size).clip(CircleShape).background(color.copy(alpha = if (dark) 0.22f else 0.14f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = glyph?.let(CategoryIcons::vectorFor) ?: fallback,
+            contentDescription = null,
+            modifier = Modifier.size(size * 0.52f),
+            tint = color,
+        )
     }
 }

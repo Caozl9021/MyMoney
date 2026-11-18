@@ -27,20 +27,19 @@ class RuleSyncApiTest {
     }
 
     @Test
-    fun fixedTailscaleEndpointAndExistingPoliciesAreAllowed() {
+    fun tailscaleCgnatAndExistingPoliciesAreAllowed() {
         listOf(
             "http://100.65.248.62:18080", "http://100.65.248.62:18080/v1/pair",
+            "http://100.124.31.107:18080", "http://100.64.0.1:18080", "http://100.127.255.254:8080",
             "http://192.168.31.90:18080", "http://10.0.0.2", "http://172.16.0.1:8080",
             "http://localhost:18080", "http://127.0.0.1:18080", "https://example.com",
         ).forEach { assertTrue(it, RuleSyncApi.isAllowedServiceUrl(URL(it))) }
     }
 
     @Test
-    fun tailscaleExceptionDoesNotAllowOtherEndpointsOrUrlCredentials() {
+    fun publicHttpAndUrlCredentialsAreRejected() {
         listOf(
-            "http://100.65.248.61:18080", "http://100.65.248.63:18080",
-            "http://100.64.0.1:18080", "http://100.65.248.62:8080",
-            "http://100.65.248.62", "http://100.65.248.62:80",
+            "http://100.63.255.254:18080", "http://100.128.0.1:18080",
             "http://100.65.248.62.example.com:18080", "http://1000.65.248.62:18080",
             "http://100.65.248.62@evil.example:18080", "http://user@100.65.248.62:18080",
             "http://100.65.248.62:18080/#fragment", "https://user@example.com",

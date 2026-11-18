@@ -72,6 +72,18 @@ class BillRowTextTest {
         assertEquals(p.refund, amountTint(p, "REFUND"))
     }
 
+    @Test fun billIconTintFollowsStableCategorySwatchAndSemanticTypes() {
+        val p = LightPalette
+        assertEquals(swatchFor("餐饮"), billIconTint(p, "EXPENSE", "餐饮", "午餐"))
+        assertEquals(swatchFor("餐饮"), billIconTint(p, "EXPENSE", "餐饮", "晚餐"))
+        assertEquals(swatchFor("工资"), billIconTint(p, "INCOME", "工资"))
+        assertEquals(swatchFor("购物"), billIconTint(p, "EXPENSE", null, "购物"))
+        assertEquals(swatchFor("未分类"), billIconTint(p, "EXPENSE", null, null))
+        assertNotEquals(billIconTint(p, "EXPENSE", "餐饮"), billIconTint(p, "EXPENSE", "购物"))
+        assertEquals(p.transfer, billIconTint(p, "TRANSFER", "餐饮"))
+        assertEquals(p.refund, billIconTint(p, "REFUND", "餐饮"))
+    }
+
     @Test fun semanticColorsReachWcagContrastOnTheirSurfaces() {
         assertTrue(contrast(LightPalette.expense, 0xFFFFFFFF.toInt()) >= 4.5)
         assertTrue(contrast(LightPalette.income, 0xFFFFFFFF.toInt()) >= 4.5)

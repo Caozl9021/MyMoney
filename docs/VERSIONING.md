@@ -9,7 +9,7 @@
 <!-- /asset-tab-layout-20261112 -->
 
 <!-- release-161-20261111 -->
-> **当前发布线1.10.2/161**（2026-11-11 已发 GitHub Release `v1.10.2`；`dist/latest-app.json` pending_acceptance）。资产向导功能验收通过；整版含报销待用户确认。家庭服务 `cloud-backup-161`。前一整版验收为1.10.0/158。详见[ACCEPTANCE](ACCEPTANCE.md)。
+> **历史发布线1.10.2/161**（2026-11-11 已发 GitHub Release `v1.10.2`）。资产向导功能验收通过；报销等同批能力无单独验收原话。家庭服务 `cloud-backup-161`。前一整版验收为1.10.0/158。详见[ACCEPTANCE](ACCEPTANCE.md)。
 <!-- /release-161-20261111 -->
 
 <!-- acceptance-158-20261107 -->

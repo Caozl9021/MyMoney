@@ -46,6 +46,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -547,7 +548,7 @@ private fun ActionButton(
 // 图标徽章
 // ---------------------------------------------------------------------------
 
-/** 图标徽章：实色圆角底，前景按对比度选择。 */
+/** 图标徽章：圆形柔光底 + 同色前景。 */
 @Composable
 fun IconBadge(
     icon: ImageVector,
@@ -555,15 +556,19 @@ fun IconBadge(
     modifier: Modifier = Modifier,
     size: Dp = AbCardDensity.settingsIcon,
 ) {
-    val background = tint.copy(alpha = 1f)
+    val p = LocalAbPalette.current
+    val dark = p.cardBg.luminance() < 0.5f
+    val neutral = tint.alpha < 1f
+    val bg = if (neutral) p.fill else tint.copy(alpha = if (dark) 0.22f else 0.14f)
+    val fg = if (neutral) p.secondaryLabel else tint
     Box(
         modifier = modifier
             .size(size)
-            .clip(RoundedCornerShape(if (size >= 40.dp) 12.dp else 9.dp))
-            .background(background),
+            .clip(CircleShape)
+            .background(bg),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = null, Modifier.size(size * 0.56f), tint = badgeForeground(background))
+        Icon(icon, contentDescription = null, Modifier.size(size * 0.54f), tint = fg)
     }
 }
 

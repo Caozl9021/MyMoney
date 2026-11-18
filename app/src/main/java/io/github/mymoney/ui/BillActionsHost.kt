@@ -136,9 +136,19 @@ fun BillActionsHost(
                             }
                         }
                         else -> {
+                            val linkedAssetAccount = assetAccounts.firstOrNull { it.id == bill.accountId }
+                                ?: bill.account?.let { name -> assetAccounts.firstOrNull { it.name == name } }
+                            val accountName = if (deletedSnapshot != null) bill.account
+                                else linkedAssetAccount?.name ?: bill.account
+                            val canLinkUnlinkedBill = !bill.assetLinked && (bill.type == "TRANSFER" || linkedAssetAccount?.initialized == true)
+                            val isPureManual = (bill.strategy == "手动记账" ||
+                                (bill.sourcePkg.startsWith("io.github.mymoney.manual.") && !bill.sourcePkg.startsWith("io.github.mymoney.manual.ocr."))) &&
+                                bill.merchant.isNullOrBlank() && bill.method.isNullOrBlank() &&
+                                bill.orderTail.isNullOrBlank() && bill.recognitionId.isNullOrBlank()
+
                             item("summary") {
                                 InsetGroup {
-                                    val accent = billIconTint(p, bill.type)
+                                    val accent = billIconTint(p, bill.type, bill.category, bill.subCategory)
                                     Row(
                                         Modifier
                                             .fillMaxWidth()
@@ -150,7 +160,6 @@ fun BillActionsHost(
                                             category = bill.category,
                                             tint = accent,
                                             size = AbCardDensity.icon,
-                                            foreground = if (p.cardBg.luminance() > 0.5f) Color.White else badgeForeground(accent),
                                         )
                                         Column(
                                             Modifier.weight(1f),
@@ -197,9 +206,9 @@ fun BillActionsHost(
                                                 BillDetailRow("一同删除的手续费", fees.joinToString { formatAmount(it.priceCents) })
                                             }
                                         }
-                                        val accountName = if (deletedSnapshot != null) bill.account
-                                        else assetAccounts.firstOrNull { it.id == bill.accountId }?.name ?: bill.account
-                                        BillDetailRow("账户", accountName)
+                                        if (!accountName.isNullOrBlank()) {
+                                            BillDetailRow("账户", accountName)
+                                        }
                                         if (bill.type == "TRANSFER") {
                                             val transferTarget = if (deletedSnapshot != null) bill.transferAccount ?: "未补全"
                                             else assetAccounts.firstOrNull { it.id == bill.transferAccountId }?.name ?: bill.transferAccount ?: "未补全"
@@ -232,10 +241,15 @@ fun BillActionsHost(
                                             }
                                         }
 
-                                        if (deletedSnapshot != null || !bill.assetLinked) {
+                                        if (deletedSnapshot != null && bill.assetLinked) {
                                             BillDetailRow(
-                                                label = if (deletedSnapshot != null) "删除前余额联动" else "余额联动",
-                                                value = if (bill.assetLinked) "已计入账户余额" else "未计入账户余额",
+                                                label = "删除前余额联动",
+                                                value = "已计入账户余额",
+                                            )
+                                        } else if (deletedSnapshot == null && canLinkUnlinkedBill) {
+                                            BillDetailRow(
+                                                label = "余额联动",
+                                                value = "未计入账户余额",
                                             )
                                         }
                                     }
@@ -245,7 +259,7 @@ fun BillActionsHost(
                                 }
                             }
 
-                            if (deletedSnapshot == null && (bill.feeParentKey != null || !bill.assetLinked)) {
+                            if (deletedSnapshot == null && (bill.feeParentKey != null || canLinkUnlinkedBill)) {
                                 item("link-or-parent") {
                                     InsetGroup {
                                         if (bill.feeParentKey != null) {
@@ -256,7 +270,7 @@ fun BillActionsHost(
                                                 chevron = parent != null,
                                                 onClick = parent?.let { { parentId = it.id } },
                                             )
-                                        } else if (!bill.assetLinked) {
+                                        } else if (canLinkUnlinkedBill) {
                                             ListRow(
                                                 title = if (bill.type == "TRANSFER") "补全转账账户并计入余额" else "计入账户余额",
                                                 subtitle = "仅在当前余额尚未包含这笔账单时使用",
@@ -270,38 +284,40 @@ fun BillActionsHost(
                                 }
                             }
 
-                            item("recognition") {
-                                InsetGroup {
-                                    ListRow(
-                                        title = "来源与识别信息",
-                                        onClick = { recognitionExpanded = !recognitionExpanded },
-                                        trailing = {
-                                            Text(
-                                                if (recognitionExpanded) "收起" else "展开",
-                                                style = AbType.footnote,
-                                                color = p.accent,
-                                            )
-                                        },
-                                    )
-                                    if (recognitionExpanded) {
-                                        InsetDivider()
-                                        Column(
-                                            Modifier
-                                                .fillMaxWidth()
-                                                .padding(vertical = AbSpacing.xs),
-                                        ) {
-                                            BillDetailRow("商户原文", bill.merchant)
-                                            BillDetailRow("支付方式", bill.method)
-                                            BillDetailRow("订单尾号", bill.orderTail)
-                                            BillDetailRow("来源包名", bill.sourcePkg)
-                                            BillDetailRow("识别策略", bill.strategy)
-                                            BillDetailRow("创建时间", billTime(bill.createdAt))
-                                            BillDetailRow("账单编号", "#${bill.id}")
-                                            if (!bill.recognitionId.isNullOrBlank()) {
-                                                BillDetailRow("识别记录编号", bill.recognitionId)
+                            if (!isPureManual) {
+                                item("recognition") {
+                                    InsetGroup {
+                                        ListRow(
+                                            title = "来源与识别信息",
+                                            onClick = { recognitionExpanded = !recognitionExpanded },
+                                            trailing = {
+                                                Text(
+                                                    if (recognitionExpanded) "收起" else "展开",
+                                                    style = AbType.footnote,
+                                                    color = p.accent,
+                                                )
+                                            },
+                                        )
+                                        if (recognitionExpanded) {
+                                            InsetDivider()
+                                            Column(
+                                                Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = AbSpacing.xs),
+                                            ) {
+                                                bill.merchant?.takeIf { it.isNotBlank() }?.let { BillDetailRow("商户原文", it) }
+                                                bill.method?.takeIf { it.isNotBlank() }?.let { BillDetailRow("支付方式", it) }
+                                                bill.orderTail?.takeIf { it.isNotBlank() }?.let { BillDetailRow("订单尾号", it) }
+                                                bill.sourcePkg.takeIf { it.isNotBlank() }?.let { BillDetailRow("来源包名", it) }
+                                                bill.strategy.takeIf { it.isNotBlank() }?.let { BillDetailRow("识别策略", it) }
+                                                BillDetailRow("创建时间", billTime(bill.createdAt))
+                                                BillDetailRow("账单编号", "#${bill.id}")
+                                                if (!bill.recognitionId.isNullOrBlank()) {
+                                                    BillDetailRow("识别记录编号", bill.recognitionId)
+                                                }
                                             }
+                                            GroupFooter("仅显示本地已保存字段；本地创建时间不代表实际支付或识别时间。")
                                         }
-                                        GroupFooter("仅显示本地已保存字段；本地创建时间不代表实际支付或识别时间。")
                                     }
                                 }
                             }
@@ -473,7 +489,7 @@ private fun RoundedSquareIconButton(
 ) {
     val p = LocalAbPalette.current
     val haptic = rememberAbHaptic()
-    val shape = RoundedCornerShape(14.dp)
+    val shape = CircleShape
     val bg by animateColorAsState(
         targetValue = containerColor ?: p.cardBg,
         animationSpec = tween(if (LocalReduceMotion.current) 0 else AbMotion.selection),
@@ -520,7 +536,7 @@ private fun RoundedSquareStatusButton(
 ) {
     val p = LocalAbPalette.current
     val haptic = rememberAbHaptic()
-    val shape = RoundedCornerShape(14.dp)
+    val shape = RoundedCornerShape(AbRadius.capsule)
     Row(
         modifier = modifier
             .height(48.dp)

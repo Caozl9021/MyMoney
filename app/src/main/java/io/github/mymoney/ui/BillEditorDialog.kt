@@ -14,6 +14,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import androidx.compose.foundation.layout.Box
@@ -44,11 +45,23 @@ fun BillEditorDialog(original: BillEntity?, newSource: String, newTime: Long, so
     val context = LocalContext.current
     val app = context.applicationContext
     val haptic = rememberAbHaptic()
+    val assetAccounts by io.github.mymoney.data.AssetStore.accounts.collectAsStateWithLifecycle()
+    val defaultAccount = remember(assetAccounts) {
+        assetAccounts
+            .filter { !it.archived && (it.initialized || it.name == "钱包") }
+            .sortedWith(compareBy({ it.sortOrder }, { it.createdAt }, { it.id }))
+            .firstOrNull()?.name ?: "钱包"
+    }
+    val defaultCategory = remember {
+        io.github.mymoney.data.LedgerConfig.groupsFor(BillType.EXPENSE).firstOrNull()?.name
+    }
     val draft = remember(original?.id, newSource) {
         original?.let(BillWriter::toDraft) ?: BillDraft(
             priceCents = 0, type = BillType.EXPENSE, timeMillis = newTime,
             merchant = null, method = null, orderTail = null,
             sourcePkg = newSource, strategy = "手动记账",
+            category = defaultCategory,
+            account = defaultAccount,
         )
     }
     val operationKey = original?.let { "edit:${it.id}" } ?: newSource

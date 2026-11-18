@@ -112,14 +112,14 @@ object RuleSyncApi {
         return nums[0] == 10 ||
             (nums[0] == 172 && nums[1] in 16..31) ||
             (nums[0] == 192 && nums[1] == 168) ||
+            (nums[0] == 100 && nums[1] in 64..127) ||
             nums[0] == 127
     }
 
-    /** 共用端点策略：保留私网HTTP，仅为指定Tailscale IP和端口增加例外。 */
+    /** 共用端点策略：公网必须 HTTPS；私网/回环/Tailscale CGNAT (100.64.0.0/10) 允许明文 HTTP。 */
     internal fun isAllowedServiceUrl(url: URL): Boolean {
         if (url.userInfo != null || url.ref != null) return false
-        return url.protocol == "https" || (url.protocol == "http" &&
-            (isPrivateHttpHost(url.host) || (url.host == "100.65.248.62" && url.port == 18080)))
+        return url.protocol == "https" || (url.protocol == "http" && isPrivateHttpHost(url.host))
     }
 
     internal fun request(

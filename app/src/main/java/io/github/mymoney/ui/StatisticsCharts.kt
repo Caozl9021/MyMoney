@@ -128,7 +128,7 @@ internal fun StatisticsMonthHeatmap(
     Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
             listOf("一", "二", "三", "四", "五", "六", "日").forEach { weekday ->
-                Text(weekday, style = AbType.caption2, color = p.tertiaryLabel,
+                Text(weekday, style = AbType.caption2, color = p.secondaryLabel,
                     textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
             }
         }
@@ -200,7 +200,7 @@ internal fun StatisticsRing(
     onSelect: (String) -> Unit,
 ) {
     val p = LocalAbPalette.current
-    val colors = groups.indices.map { AbAccentSwatches[it % AbAccentSwatches.size] }
+    val colors = groups.mapIndexed { index, group -> swatchFor(group.name, index) }
     val total = groups.sumOf { it.cents }
     val strokeWidth = 24.dp
     val edgeInset = 3.dp
@@ -276,7 +276,7 @@ internal fun StatisticsRing(
                     else -> "${groups.size} 项"
                 },
                 style = AbType.caption2,
-                color = p.tertiaryLabel,
+                color = p.secondaryLabel,
                 maxLines = 1,
             )
         }

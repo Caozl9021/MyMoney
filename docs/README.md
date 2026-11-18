@@ -1,11 +1,15 @@
 # 文档索引
 
-<!-- asset-tab-layout-20261112 -->
-> **2026-11-12 资产 Tab 布局精简用户验收通过，本次不出包。** 发布线仍是 1.10.2/161；已发 `v1.10.2` 不含这次布局，源码未提交。详见[ACCEPTANCE](ACCEPTANCE.md)、[资产说明](ASSET_MANAGEMENT.md)。
-<!-- /asset-tab-layout-20261112 -->
+<!-- ui-polish-20261118 -->
+> **源码最新进度（2026-11-18）**：`master` 已合入全局视觉一致性、圆形 Tonal 徽章与 **Lucide Icons** 全套图标统一重构（含悬浮 Dock 24dp 安全留白、记一笔默认分类与账户、详情页去工程化、Apple HIG / M3 语义色板；已完成 1200 项 JVM 单测与 Android 15 模拟器浅色/深色逐页实测）。本次不升版本号、不出新包，版本与发布指针保持 **1.10.3/162** 待随下版发布。详见 [UI_COMPONENTS](UI_COMPONENTS.md)、[CHANGELOG](../CHANGELOG.md)、[ACCEPTANCE](ACCEPTANCE.md)。
+<!-- /ui-polish-20261118 -->
+
+<!-- release-162-20261114 -->
+> **当前已发布版本 1.10.3/162**（2026-11-14 用户验收通过并已发 GitHub Release `v1.10.3`；`dist/latest-app.json` → 162，`status=accepted`）。包内汇总 2026-11-11 已验收的首页/账单详情/统计/明细页样式重构（`refine-home-and-bill-row-density`）与 2026-11-12 已验收的资产 Tab 布局精简（`refine-asset-tab-layout`）；数据层 Room 13 / JSON 12。详见[ACCEPTANCE](ACCEPTANCE.md)、[PROGRESS](PROGRESS.md)、[资产说明](ASSET_MANAGEMENT.md)。
+<!-- /release-162-20261114 -->
 
 <!-- release-161-20261111 -->
-> **当前发布线1.10.2/161**（2026-11-11 已发 GitHub Release `v1.10.2`；`latest-app.json` pending_acceptance）。**资产添加向导及相关交互**、**首页/账单详情（方案 A）/拖拽样式/统计与明细页全局样式统一（`refine-home-and-bill-row-density`）**均于 2026-11-11 获用户验收通过；整版含报销待用户确认。家庭服务 `cloud-backup-161`（format 8–12）。前一整版验收为1.10.0/158。淘宝被动抓取已判定不可行。详见[ACCEPTANCE](ACCEPTANCE.md)、[PROGRESS](PROGRESS.md)、[实时验证交接](SHANGOU_LIVE_VALIDATION_HANDOFF.md)。
+> **前一发布线 1.10.2/161**（2026-11-11 GitHub Release `v1.10.2`）：资产添加向导及相关交互于 2026-11-11 获用户验收通过；报销等同批能力未另出单独验收原话。家庭服务 `cloud-backup-161`（format 8–12）。更早整版验收为 1.10.0/158。淘宝被动抓取已判定不可行，详见[实时验证交接](SHANGOU_LIVE_VALIDATION_HANDOFF.md)。
 <!-- /release-161-20261111 -->
 
 

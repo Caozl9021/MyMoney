@@ -1,11 +1,28 @@
 # 更新日志
 
-> 最新（2026-11-14）：**1.10.3/162 用户验收通过并已发布**（GitHub Release `v1.10.3`，tag `v1.10.3` → `0d51d1f`）。汇总 11-11 已验收的首页/账单详情/统计/明细页样式重构与 11-12 已验收的资产 Tab 布局精简；`latest-app.json` → 162。
+> 最新（2026-11-18）：**全局视觉一致性、圆形 Tonal 徽章与 Lucide 图标体系重构已合入源码（本次不升版本号、不出包，版本保持 `1.10.3/162` 待随下版发布）**；已完成 App 961 + Billkit 239 单元测试与 Android 15 模拟器浅色/深色逐页实测。
+>
+> 最近发布（2026-11-14）：**1.10.3/162 用户验收通过并已发布**（GitHub Release `v1.10.3`，tag `v1.10.3` → `0d51d1f`）。汇总 11-11 已验收的首页/账单详情/统计/明细页样式重构与 11-12 已验收的资产 Tab 布局精简；`latest-app.json` → 162。
 >
 > 更早（2026-11-12）：**资产 Tab 布局精简**（用户验收通过；当时未出包，现进入 1.10.3/162 候选）。
 > 更早（2026-11-11）：**首页、账单详情（方案 A）、拖拽排序与统计/明细页全局样式统一**（用户验收通过）；**1.10.2/161 资产添加向导 + 报销**（已发 GitHub Release `v1.10.2`；资产向导功能验收通过；家庭服务 `cloud-backup-161`）。
 > 更早（2026-11-07）：**1.10.0/158 云备份管理台 + 扫码连接 + 历史备份恢复改进**验收通过。
 > 更早（2026-11-07）：1.9.0/157 AA历史备份与恢复改进验收通过。
+
+## 2026-11-18 全局视觉一致性、圆形 Tonal 徽章与 Lucide 图标体系重构（源码已提交，本次不出包，版本保持 1.10.3/162）
+
+- **底部悬浮 Dock 安全留白（`Chrome.kt`）**：`PageScaffold` 与 `SubPageScaffold(reserveDock = true)` 新增 `dockClearance = 24.dp`，彻底解决首页「记录历史」、统计页「未分类」、设置页「关于」等列表末项被底部悬浮导航栏与投影遮挡的问题。
+- **记一笔默认选中与账单详情/首页去工程化（`BillEditorDialog.kt` / `ConfirmSheet.kt` / `BillActionsHost.kt` / `HomeScreen.kt`）**：
+  - 新建手动账单默认选中首个分类（如支出默认「餐饮」，切换收入自动默认「工资」）与首个可用资金账户（如「钱包」）。
+  - 账单详情页空账户时不再显示「账户：未提供」；仅当关联了已初始化资产账户或未联动转账时才展示「余额联动 · 未计入账户余额」与「计入账户余额」联动开关；纯手动账单无扩展识别信息时隐藏「来源与识别信息」折叠卡，并过滤卡片内空白可选字段；详情底部操作按钮统一为 `CircleShape` 圆形按钮（`RoundedSquareStatusButton` 保持胶囊圆角）。
+  - 首页「自动记账已暂停」提示收敛为单行 `RoundedCornerShape(AbRadius.row)` 浅底提示条，弱化工程术语感。
+- **圆形 Tonal 徽章与语义色板统一（`Tokens.kt` / `CategoryIcons.kt` / `SettingsIcons.kt` / `Components.kt` / `AccountLogos.kt` / `BillRow.kt` / `StatsScreen.kt` / `StatisticsCharts.kt` / `AssetsScreen.kt` / `LedgerConfigCard.kt`）**：
+  - 全应用分类徽章（`CategoryBadge`）、设置页徽章（`SettingsIconBadge`）、通用图标徽章（`IconBadge`）、账户文字头像（`AccountAvatar`）与详情底部图标按钮统一采用 `CircleShape` + Tonal 柔光容器（浅色 `14%` 透明底 / 深色 `22%` 透明底 + 高饱和度主色图标），消除方形/彩色实心块混用。
+  - 重构 `AbAccentSwatches` 10 色语义色板与 `swatchFor` 确定性映射（`餐饮` `#E67E22` 暖琥珀橙、`购物/服饰/人情` `#E04F5F` 珊瑚粉、`交通/旅行/数码` `#3B82F6` 矢车菊蓝、`居住/通讯/缴费` `#0D9488` 青黛绿、`娱乐/学习` `#8B5CF6` 鸢尾紫、`医疗/运动/育儿/宠物` `#10B981` 翡翠绿、`工资/奖金/理财` `#D97706` 琥珀金、`退款` `#0E7490`、`其他/未分类/转账` `#64748B` 石板蓝灰），使首页账单行、详情收据头、统计圆环图与构成排行颜色完全一一对应。
+  - 次级文字对比度统一提升至 `secondaryLabel`（`AssetsScreen` 组小计、`BillRow` 账户标签、`StatsScreen` / `StatisticsCharts` 笔数与星期标签）；`AssetNetWorthCard` 圆角对齐 `AbRadius.group (20.dp)`；`LedgerConfigCard` 使用 `Column` 纵向排列分类页标题与「长按拖动排序」避免文本重叠。
+- **全量统一开源 Lucide Icons 图标集（`Icons.kt` / `CategoryIcons.kt` / `SettingsIcons.kt`）**：`AbIcons` 34 个系统图标与 `CategoryIcons` 全量收支分类与设置图标全部替换为官方 **Lucide Icons**（`24×24` 视口、`2.0f` 等粗圆头圆角线性矢量），与底部 Dock 导航图标（`AnimatedTabIcons`）风格同源；消除设置页重复图标（记账周期 `calendar`、记录历史 `work_history`、备注 `AbIcons.Note`、外观 `palette`）。
+- **Tailscale CGNAT 规则同步放行（`RuleSyncApi.kt` / `network_security_config.xml` / `RuleSyncApiTest.kt`）**：私网明文 HTTP 放行范围从单一固定 IP 扩展至 Tailscale CGNAT 网段 `100.64.0.0/10`（公网地址仍强制 HTTPS）。
+- **验证**：`scripts/check-ui-components.sh` 通过；`:app:testDebugUnitTest`（961 项）+ `:billkit:testDebugUnitTest`（239 项）共 **1200 项全绿**；`emulator-5554`（Android 15 AVD `mymoney_api35`）浅色与深色模式逐页截图检查通过。本次仅提交源码与文档，不升 `versionName`/`versionCode`，不构建 release 产物，不改 `dist/latest-app.json`。
 
 ## 1.10.3/162（用户验收通过并发布，2026-11-14）
 

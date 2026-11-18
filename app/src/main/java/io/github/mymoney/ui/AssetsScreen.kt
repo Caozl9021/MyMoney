@@ -298,7 +298,7 @@ private fun AssetNetWorthCard(
     val haptic = rememberAbHaptic()
     Column(
         Modifier.fillMaxWidth()
-            .clip(RoundedCornerShape(AbRadius.card))
+            .clip(RoundedCornerShape(AbRadius.group))
             .background(p.cardBg)
             .padding(AbCardDensity.content),
     ) {
@@ -355,7 +355,7 @@ private fun AssetGroupTitle(text: String, trailing: String?) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(text, style = AbType.sectionHeader, color = p.secondaryLabel, modifier = Modifier.weight(1f))
-        if (trailing != null) Text(trailing, style = AbType.footnote, color = p.tertiaryLabel, maxLines = 1)
+        if (trailing != null) Text(trailing, style = AbType.footnote, color = p.secondaryLabel, maxLines = 1)
     }
 }
 

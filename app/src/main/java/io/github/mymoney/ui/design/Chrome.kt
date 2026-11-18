@@ -356,6 +356,9 @@ private fun TabCell(
     }
 }
 
+/** 悬浮底栏上方的呼吸间距，避免滚到底部时最后一张卡片贴死 Dock 上沿或被投影压住。 */
+private val dockClearance = 24.dp
+
 /**
  * 页面骨架：大标题在上、内容在下，胶囊 Tab 栏由宿主（MainActivity）浮动在内容之上。
  *
@@ -392,7 +395,7 @@ fun PageScaffold(
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     if (floatingHeader && onBack == null) {
-        FloatingPageScaffold(title = title, bottomPadding = dockHeight() + navBottom + AbLayout.pageBottom,
+        FloatingPageScaffold(title = title, bottomPadding = dockHeight() + navBottom + AbLayout.pageBottom + dockClearance,
             modifier = modifier,
             onTitleClick = onTitleClick, actions = actions, content = content)
         return
@@ -415,7 +418,7 @@ fun PageScaffold(
                 androidx.compose.foundation.layout.PaddingValues(
                     // 明细页把胶囊 Tab 栏留在原位（可以在明细里直接切页），所以照样留白。
                     top = if (onBack != null) AbLayout.pageTop else 0.dp,
-                    bottom = dockHeight() + navBottom + AbLayout.pageBottom,
+                    bottom = dockHeight() + navBottom + AbLayout.pageBottom + dockClearance,
                 ),
             )
         }
@@ -517,7 +520,7 @@ fun SubPageScaffold(
         content(
             androidx.compose.foundation.layout.PaddingValues(
                 top = AbLayout.pageTop,
-                bottom = if (reserveDock) dockHeight() + navBottom + AbLayout.pageBottom else navBottom + AbLayout.pageBottom,
+                bottom = if (reserveDock) dockHeight() + navBottom + AbLayout.pageBottom + dockClearance else navBottom + AbLayout.pageBottom,
             ),
         )
     }

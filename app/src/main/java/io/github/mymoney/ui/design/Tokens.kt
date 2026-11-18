@@ -199,26 +199,41 @@ object AbMotion {
     const val slow = 320
 }
 
-/** 分类色板（iOS system colors），分类图标/统计条用。 */
+/** 分类色板（温和语义色，兼顾浅底 14% 柔光与前景图标 100% 对比度）。 */
 val AbAccentSwatches = listOf(
-    Color(0xFFFF9500), // orange
-    Color(0xFF007AFF), // blue
-    Color(0xFFAF52DE), // purple
-    Color(0xFF34C759), // green
-    Color(0xFFFF2D55), // pink
-    Color(0xFF30B0C7), // teal
-    Color(0xFF5856D6), // indigo
-    Color(0xFFFFCC00), // yellow
-    Color(0xFFA2845E), // brown
-    Color(0xFF8E8E93), // gray
+    Color(0xFFE67E22), // 0: 暖琥珀橙（餐饮/饮品）
+    Color(0xFFE04F5F), // 1: 柔和珊瑚粉（购物/服饰/美容/人情）
+    Color(0xFF3B82F6), // 2: 矢车菊蓝（交通/旅行/数码）
+    Color(0xFF0D9488), // 3: 青黛蓝绿（居住/水电/通讯/缴费）
+    Color(0xFF8B5CF6), // 4: 鸢尾紫（娱乐/游戏/会员/学习）
+    Color(0xFF10B981), // 5: 森林翡翠绿（医疗/运动/育儿/宠物）
+    Color(0xFFD97706), // 6: 琥珀金棕（工资/奖金/理财）
+    Color(0xFF6366F1), // 7: 靛青蓝
+    Color(0xFF8D6E63), // 8: 暖咖棕
+    Color(0xFF64748B), // 9: 高级石板蓝灰（其他/未分类）
 )
 
-/** 按名字稳定取色：同一个分类每次颜色一致，不会因为顺序变化而跳。 */
+private val swatchRules: List<Pair<Color, List<String>>> = listOf(
+    Color(0xFF64748B) to listOf("其他", "其它", "未分类"),
+    Color(0xFFE67E22) to listOf("餐饮", "三餐", "早餐", "午餐", "晚餐", "夜宵", "外卖", "食", "零食", "饭", "咖啡", "奶茶", "茶饮", "饮料", "酒水"),
+    Color(0xFFE04F5F) to listOf("购物", "日用", "超市", "百货", "网购", "电商", "商场", "逛街", "服饰", "衣", "鞋", "包", "美容", "护肤", "理发", "人情", "礼物", "礼金", "红包"),
+    Color(0xFF3B82F6) to listOf("交通", "公交", "地铁", "高铁", "火车", "通勤", "打车", "出租车", "网约", "滴滴", "加油", "停车", "油费", "充电桩", "旅行", "机票", "酒店", "旅游", "数码", "电子", "手机", "电脑", "电器"),
+    Color(0xFF0D9488) to listOf("居住", "家", "装修", "房租", "房贷", "物业", "水电", "电费", "燃气", "暖", "通讯", "话费", "宽带", "流量", "缴费", "账单", "手续费"),
+    Color(0xFF8B5CF6) to listOf("娱乐", "电影", "演出", "KTV", "游戏", "电竞", "会员", "订阅", "软件", "学习", "课程", "书", "教育", "培训"),
+    Color(0xFF10B981) to listOf("医疗", "门诊", "药", "体检", "看病", "健身", "运动", "体育", "育儿", "孩子", "母婴", "奶粉", "宠物", "猫", "狗"),
+    Color(0xFFD97706) to listOf("工资", "薪", "兼职", "报酬", "奖金", "奖", "理财", "基金", "股票", "利息", "收益"),
+    Color(0xFF0E7490) to listOf("退款", "返现"),
+    Color(0xFF64748B) to listOf("转账"),
+)
+
+/** 按语义稳定取色，未命中预设语义的自定义分类在前 9 个彩色色板内哈希。 */
 fun swatchFor(name: String, fallbackIndex: Int = 0): Color {
     if (name.isEmpty()) return AbAccentSwatches[fallbackIndex % AbAccentSwatches.size]
+    swatchRules.firstOrNull { (_, words) -> words.any { it in name } }?.let { return it.first }
+    val customPalette = AbAccentSwatches.take(9)
     var h = 0
     for (c in name) h = h * 31 + c.code
-    return AbAccentSwatches[((h % AbAccentSwatches.size) + AbAccentSwatches.size) % AbAccentSwatches.size]
+    return customPalette[((h % customPalette.size) + customPalette.size) % customPalette.size]
 }
 
 val LocalAbPalette = compositionLocalOf { LightPalette }

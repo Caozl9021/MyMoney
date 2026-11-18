@@ -101,3 +101,18 @@
 - **账户列表（`AssetsScreen`，Tab 与设置 → 资产共用）**：`ASSET_GROUP_THRESHOLD = 5`。达到阈值时按支付账户、储蓄卡、信用账户、现金、其他资产、其他负债分组，空组不显示；组标题（`AssetGroupTitle`）右侧是该组可见账户 `AssetMath.balance` 之和，隐藏金额或未分组时不显示。不足 5 个时一张「资金账户（N）」，标题右侧无金额。不显示「长按拖动排序」。
 - **排序**：每组一个 `DragReorderColumn`，`onReorder` 只把本组 id 交给 `AssetStore.reorderActive`。信用账户行不增加「欠款/溢缴」。
 - **未在实机覆盖**：深色、大字、隐藏金额时的负债色、组内长按拖动。证据 `runs/20261112-1423-asset-tab-layout/outputs/verification.md`。
+
+## 2026-11-18 全局设计系统收束：Lucide 图标体系、圆形 Tonal 徽章与跨页一致性（源码已提交，版本保持 1.10.3/162）
+
+> 本次改动已提交 `master`，**不升版本号、不出新安装包**；已通过 JVM 单测与 Android 15 模拟器浅色/深色模式逐页核对，待随下次发版一并交付与真机整版验收。
+
+| 规范项 | 当前约束与实现 |
+| --- | --- |
+| 底部悬浮 Dock 留白 | `PageScaffold` 与 `SubPageScaffold(reserveDock = true)` 统一叠加 `dockClearance = 24.dp`，滚动到底部时卡片/列表末项完整避开悬浮胶囊与阴影 |
+| 图标规范（Lucide） | `AbIcons`（34 项）与 `CategoryIcons`（全量收支分类与设置图标）全量迁移为官方 **Lucide Icons**（`24×24`、`2.0f` 等宽圆头圆角线性矢量），与底部 `AnimatedTabIcons` 完全同源 |
+| 圆形 Tonal 容器 | `CategoryBadge`、`SettingsIconBadge`、`IconBadge`、`AccountAvatar` 文字头像及详情页 `RoundedSquareIconButton` 统一采用 `CircleShape` + 柔光底（浅色 `14%` 透明 / 深色 `22%` 透明 + 主色矢量图标）；`RoundedSquareStatusButton` 使用 `AbRadius.capsule`；设置页周期/历史/备注/外观图标已去重 |
+| 语义色板（`Tokens`） | `AbAccentSwatches` 与 `swatchFor(name)` 按语义固定映射（`餐饮` `#E67E22`、`购物/服饰/人情` `#E04F5F`、`交通/数码/旅行` `#3B82F6`、`居住/通讯/缴费` `#0D9488`、`娱乐/学习` `#8B5CF6`、`医疗/运动/育儿/宠物` `#10B981`、`工资/奖金/理财` `#D97706`、`退款` `#0E7490`、`其他/未分类/转账` `#64748B`），保证 `BillRow`、`BillActionsHost`、`StatisticsRing`、`StatisticsBreakdownRow` 颜色一致 |
+| 默认值与去工程化 | `BillEditorDialog` / `ConfirmSheet` 新建手动账单默认选中首个分类（「餐饮」/切换收入为「工资」）与首个可用资产账户（如「钱包」）；`BillActionsHost` 隐藏空账户「未提供」、未初始化账户隐藏余额联动状态与开关、纯手动无扩展字段账单隐藏「来源与识别信息」；`HomeScreen` 暂停提示改为单行浅底圆角条 |
+| 跨页细节与对比度 | `AssetNetWorthCard` 圆角统一为 `AbRadius.group (20.dp)`；`BillRow` 账户标签、`AssetGroupTitle` 组小计、`StatsScreen` / `StatisticsCharts` 次级标签统一提升至 `p.secondaryLabel`；`LedgerConfigCard` 头部采用 `Column` 竖排标题与「长按拖动排序」避免文本重叠 |
+
+- **验证**：`scripts/check-ui-components.sh` 输出 `UI component check passed.`；`:app:testDebugUnitTest`（961 项）+ `:billkit:testDebugUnitTest`（239 项）共 1200 项全部通过（0 失败/错误/跳过）；`emulator-5554`（AVD `mymoney_api35`，Android 15）在浅色与深色模式下分别完成首页、账单详情、记一笔、统计、资产、设置与分类页截图检查。
