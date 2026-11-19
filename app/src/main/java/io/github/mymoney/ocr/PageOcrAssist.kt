@@ -11,8 +11,8 @@ import com.example.billkit.BillDraft
 import com.example.billkit.BillType
 import com.example.billkit.UiSnapshot
 import com.example.billkit.visual.VisualBillParser
+import io.github.mymoney.capture.CaptureConfigToken
 import io.github.mymoney.capture.CaptureCoordinator
-import io.github.mymoney.capture.NotificationIngress
 import io.github.mymoney.data.Settings
 import io.github.mymoney.data.CaptureMergePolicy
 import kotlinx.coroutines.*
@@ -56,7 +56,7 @@ object PageOcrAssist {
             io.github.mymoney.capture.BillAccessibilityService.instance === service &&
             (service as? io.github.mymoney.capture.BillAccessibilityService)?.isObservationCurrent(observation) == true && prefs.enabled && prefs.generation == generation &&
             Settings(service).let { it.enabled && it.pageEnabled && snapshot.packageName in it.whitelist } &&
-            token == NotificationIngress.configurationToken(service) &&
+            token == CaptureConfigToken.of(service) &&
             (service.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager)?.isKeyguardLocked != true
         if (!allowed() || !safeWindow()) return false
         val key = CaptureMergePolicy.digest("${snapshot.packageName}|$windowId|${snapshot.items}")

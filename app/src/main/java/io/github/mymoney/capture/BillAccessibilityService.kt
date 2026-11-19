@@ -122,7 +122,7 @@ class BillAccessibilityService : AccessibilityService() {
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> AccessibilityCaptureSchedule.Event.CONTENT
             else -> return
         }
-        val token = NotificationIngress.configurationToken(this)
+        val token = CaptureConfigToken.of(this)
         if (pendingPackage != pkg || pendingToken != token) clearPending()
         // A queued snapshot may not outlive a new target-window/content observation.
         invalidateObservations()
@@ -153,7 +153,7 @@ class BillAccessibilityService : AccessibilityService() {
         if (!settings.pageActive) { clearPending(); invalidateObservations(); return }
         val pkg = pendingPackage ?: return
         val token = pendingToken ?: return
-        if (token != NotificationIngress.configurationToken(this)) { clearPending(); return }
+        if (token != CaptureConfigToken.of(this)) { clearPending(); return }
         val root = rootInActiveWindow
 
         // 事件到了但无障碍树还没建好（支付宝这类自绘/WebView 页面很常见）：
@@ -216,7 +216,7 @@ class BillAccessibilityService : AccessibilityService() {
         }
         clearPending()
         worker.execute {
-            if (settings.pageActive && token == NotificationIngress.configurationToken(this) &&
+            if (settings.pageActive && token == CaptureConfigToken.of(this) &&
                 observations.allows(snapshot.pageObservationId)) {
                 BillKit.offer(snapshot)
             }

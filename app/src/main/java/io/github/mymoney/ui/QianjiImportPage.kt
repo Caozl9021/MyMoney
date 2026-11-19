@@ -96,7 +96,7 @@ internal fun QianjiImportPage(onBack: () -> Unit) {
                 io.github.mymoney.ui.design.SectionColumn {
                     GroupHeader("导入文件")
                     InsetGroup {
-                        ListRow(title = "钱迹账单", subtitle = fileName ?: "选择钱迹导出的 XLSX 文件",
+                        ListRow(title = "钱迹账单", subtitle = fileName ?: "选择 XLSX 文件",
                             leading = { SettingsIconBadge("钱迹账单", AbIcons.Export) }, subtitleMaxLines = 2)
                         Column(Modifier.padding(start = AbSpacing.m, end = AbSpacing.m, bottom = AbSpacing.m)) {
                             if (current == null) PrimaryButton("选择文件", selectFile, Modifier.fillMaxWidth(),
@@ -206,8 +206,8 @@ internal fun QianjiImportPage(onBack: () -> Unit) {
         }
     }
     if (confirm) AppAlertDialog(
-        title = "导入到当前账本？",
-        message = "将新增 ${report?.count(QianjiImport.State.READY) ?: 0} 条账单，跳过其余记录。原账本名称和预览列出的附加信息不会保留，资产余额保持不变。",
+        title = "导入账单？",
+        message = "将新增 ${report?.count(QianjiImport.State.READY) ?: 0} 条账单，不改动账户余额。",
         onDismiss = { if (!busy) confirm = false },
         confirmLabel = "确认导入",
         onConfirm = {

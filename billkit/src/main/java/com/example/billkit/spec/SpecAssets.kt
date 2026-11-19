@@ -12,7 +12,6 @@ import java.io.InputStream
 object SpecAssets {
     const val COMMON_JS = "spec/js_common.js"
     const val CATEGORY_JS = "spec/js_category.js"
-    const val RULES_ALL = "spec/rules_all.json"
     const val CATEGORIES = "spec/categories.json"
     const val ASSETS = "spec/assets.json"
 
@@ -23,10 +22,6 @@ object SpecAssets {
             ?: throw IllegalStateException("找不到规格资产 $name")
         return stream.use { it.readBytes().toString(Charsets.UTF_8) }
     }
-
-    /** 解析 `rules_all.json` 成规则列表，顺序保持文件内的顺序（引擎按注册顺序短路）。 */
-    fun parseRules(json: String): List<SpecRuleModel> =
-        SpecJson.decodeArray(json).mapNotNull { SpecRuleModel.fromJson(it) }
 }
 
 /** 分类表一行（对应 `categories.json`）。 */

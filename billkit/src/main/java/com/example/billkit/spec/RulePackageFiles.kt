@@ -20,15 +20,6 @@ class RulePackageFiles(private val directory: File) {
         return State(ref("active"), ref("previous"), m["canRollback"] == true, enabled, versions,
             m["personalRules"]?.let { PersonalRuleCodec.decodeRows(it) }.orEmpty())
     }
-    fun load(ref: String): PortableRulePackage {
-        require(Regex("[a-f0-9]{64}").matches(ref))
-        return File(directory, "$ref.zip").inputStream().use { PortableRulePackage.load(it) }.also { require(it.digest == ref) { "活动规则文件损坏" } }
-    }
-    fun stage(bytes: ByteArray, pack: PortableRulePackage) {
-        require(PortableRulePackage.hash(bytes) == pack.digest)
-        val f = File(directory, "${pack.digest}.zip")
-        if (!f.exists()) atomic(f, bytes)
-    }
     fun commit(state: State) {
         atomic(File(directory, "state.json"), SpecJson.encode(mapOf("active" to state.active,
             "previous" to state.previous, "canRollback" to state.canRollback,

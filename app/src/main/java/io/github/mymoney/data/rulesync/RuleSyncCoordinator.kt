@@ -5,7 +5,6 @@ import io.github.mymoney.data.MiniJson
 import io.github.mymoney.data.ledgersync.LedgerSyncRepository
 import io.github.mymoney.data.ledgersync.LedgerSyncSettings
 import io.github.mymoney.data.NoteFillStore
-import io.github.mymoney.data.SpecRuleStore
 import java.io.IOException
 import java.time.Instant
 import kotlinx.coroutines.delay
@@ -296,7 +295,6 @@ object RuleSyncCoordinator {
             } while (page.hasMore)
 
             RuleSyncRepository.reload()
-            runCatching { SpecRuleStore.refreshFromRepository(context) }
             NoteFillStore.refreshFromRepository()
             val now = System.currentTimeMillis()
             _state.value = _state.value.copy(busy = false, message = "同步完成", lastSyncAt = now)

@@ -53,7 +53,7 @@ class SystemEntryPolicyTest {
 
     @Test fun `磁贴只说自动记账状态不报预设名`() {
         // 预设退化为界面概念之后，同一台机器上三条通道可能各走各的实现，写「Root / 无障碍」会误导。
-        for (mode in listOf(null, CaptureMode.ROOT, CaptureMode.ACCESSIBILITY)) {
+        for (mode in listOf(CaptureMode.ROOT, CaptureMode.ACCESSIBILITY)) {
             val on = SystemEntryPolicy.tile(CaptureModeState(mode, true, notificationsEnabled = true))
             assertTrue(on.active)
             assertEquals("自动记账已开启", on.subtitle)

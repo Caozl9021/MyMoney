@@ -33,16 +33,10 @@ class App : Application() {
         io.github.mymoney.data.AssetStore.init(this)
         io.github.mymoney.data.ledgersync.RealtimeSyncTrigger.init(this)
         io.github.mymoney.data.LocalRuleStore.init(this)
-        io.github.mymoney.data.ExternalRuleStore.init(this)
-        io.github.mymoney.data.CoverageStore.init(this)
         ConfirmDelivery.ensureChannel(this)
         ensureGuardianChannel()
-        io.github.mymoney.root.RootForegroundService.ensureChannel(this)
 
         io.github.mymoney.systems.SystemIntegration.init(this)
-        io.github.mymoney.capture.HookTargetMonitor.init(this)
-        // 规则就绪后重放「到达时规则还没就绪」的凭证；不启动这一条，冷启动窗口里的单会一直躺着。
-        io.github.mymoney.capture.HookIngress.start(this)
         CaptureModeManager.init(this)
         val settings = Settings(this)
 
@@ -62,8 +56,6 @@ class App : Application() {
             runCatching { io.github.mymoney.data.BackupStore.completePendingConfiguration(this@App) }
                 .onFailure { android.util.Log.e("MyMoney", "恢复配置尚未完成", it) }
         }
-        // 原创规则包经完整校验后载入；失败只影响规则通道，不阻塞其它采集路径。
-        scope.launch { io.github.mymoney.data.SpecRuleStore.init(this@App) }
         // 规格的 64 条分类正则（js_category.js），只在项目内置分类认不出时补一刀。
         scope.launch { io.github.mymoney.data.SpecCategoryStore.init(this@App) }
         data class PageDelivery(val draft: com.example.billkit.BillDraft, val diagnostic: DebugBus.State?, val token: String, val receivedAt: Long)
@@ -72,11 +64,11 @@ class App : Application() {
             for ((draft, diagnostic, token, receivedAt) in deliveries) {
                 try {
                     fun allowed(): Boolean = settings.enabled && settings.pageEnabled && draft.sourcePkg in settings.whitelist &&
-                        token == io.github.mymoney.capture.NotificationIngress.configurationToken(this@App) &&
+                        token == io.github.mymoney.capture.CaptureConfigToken.of(this@App) &&
                         io.github.mymoney.capture.BillAccessibilityService.instance?.isObservationCurrent(draft.pageObservationId) == true
                     if (!allowed()) { BillKit.retryFailedDraft(draft); continue }
                     val suggestion = io.github.mymoney.data.SpecCategoryStore.fill(this@App, draft,
-                        CategorySuggester.suggest(draft, candidates = io.github.mymoney.data.ExternalRuleStore.candidates()))
+                        CategorySuggester.suggest(draft))
                     val named = draft.copy(category = suggestion.category, subCategory = suggestion.subCategory, account = suggestion.account)
                     // 账户映射与其它三条通道保持一致：规则/页面给出的是「招商银行信用卡(1234)」这类原文，
                     // 账本账户名是「信用卡」，不映射就挂不上资产。preferred 非空时直接采用，避免覆盖学习结果。

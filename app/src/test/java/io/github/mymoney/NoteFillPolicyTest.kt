@@ -1,8 +1,6 @@
 package io.github.mymoney
 
 import com.example.billkit.*
-import com.example.billkit.spec.SpecRuleObject
-import com.example.billkit.spec.SpecDraftAdapter
 import io.github.mymoney.data.*
 import org.junit.Assert.*
 import org.junit.Test
@@ -48,7 +46,7 @@ class NoteFillPolicyTest {
         val unknown=draft().copy(note=product);assertEquals(unknown,apply(unknown,config(rule(NoteFillMode.NONE))))
     }
     @Test fun trustedSourceGoodsAreNotMistakenForManualNote() {
-        val d=SpecDraftAdapter.toDraft(SpecRuleObject(type="Expend",money=17.53,shopName=shop,shopItem=product,currency="CNY"),"com.eg.android.AlipayGphone","spec-product",1793506849000)!!
+        val d=draft().copy(note=product,noteOrigin=NoteFillPolicy.PRODUCT)
         assertEquals(NoteFillPolicy.PRODUCT,apply(d).noteOrigin)
         assertNull(apply(d,config(rule(NoteFillMode.NONE))).note)
     }

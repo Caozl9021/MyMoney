@@ -285,7 +285,7 @@ object CaptureCoordinator {
             val unique = LedgerConfig.accounts.distinct().filter { name ->
                 CategorySuggester.matchAccount(incoming.method, listOf(name)) == name
             }.singleOrNull()
-            val old = CategorySuggester.suggest(row.toDraft(), candidates = ExternalRuleStore.candidates()).accountHit
+            val old = CategorySuggester.suggest(row.toDraft()).accountHit
             unique == incoming.account && old?.source == RuleSource.BUILTIN && old.account == row.account
         }.getOrDefault(false)
     }

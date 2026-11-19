@@ -260,19 +260,26 @@ internal fun CloudBackupPage(
     }, onBack = onBack) {
         if (destination == CloudBackupDestination.HOME) {
             InsetGroup {
-                ListRow(title = when { busy -> "正在处理…"; verified -> "已连接到我的服务器"; needsAuthorization -> "连接云备份"; else -> "等待验证连接" },
-                    subtitle = if (config.deviceName.isNotBlank()) "当前设备：${config.deviceName}" else "账本备份到自己的服务器")
-                if (!needsAuthorization) ListRow(title = "最近成功备份", subtitle = lastBackup, dividerAbove = true)
+                ListRow(
+                    title = when {
+                        busy -> "正在处理…"
+                        verified -> "已连接"
+                        needsAuthorization -> "连接云备份"
+                        else -> "等待连接"
+                    },
+                    subtitle = config.deviceName.ifBlank { null },
+                )
+                if (!needsAuthorization) ListRow(title = "最近备份", subtitle = lastBackup, dividerAbove = true)
                 if (!needsAuthorization) {
                     val realtimeStatus = when {
-                        !realtimeEnabled -> "已暂停，仅「立即备份」时上传"
-                        syncState.pending > 0 -> "待同步 ${syncState.pending} 项（等待网络）"
-                        syncState.lastSyncAt != null -> "实时同步已开启 · 最近同步 " +
+                        !realtimeEnabled -> "已关闭"
+                        syncState.pending > 0 -> "待同步 ${syncState.pending} 项"
+                        syncState.lastSyncAt != null -> "最近 " +
                             SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(syncState.lastSyncAt!!))
-                        else -> "实时同步已开启 · 记账后自动上传"
+                        else -> "已开启"
                     }
                     ListRow(
-                        title = "新记录自动实时同步",
+                        title = "实时同步",
                         subtitle = realtimeStatus,
                         dividerAbove = true,
                         trailing = {
@@ -292,9 +299,9 @@ internal fun CloudBackupPage(
                     onClick = { operate(CloudBackupBusy.BACKUP) {
                         val entry = LedgerBackupCoordinator.backupNow(context)
                         lastBackup = "${cloudBackupDate(entry.uploadedAt)} · ${entry.billCount}笔账单"
-                        message = "备份成功，已保存在服务器"
+                        message = "备份成功"
                     } }, modifier = Modifier.fillMaxWidth())
-                InsetGroup { ListRow(title = "历史备份", subtitle = "只显示这台设备的备份", chevron = true,
+                InsetGroup { ListRow(title = "历史备份", chevron = true,
                     onClick = { if (!busy && verified) { onOpenHistory() } }) }
                 if (!verified && !busy) SecondaryButton(text = "重试连接", onClick = { operate { refreshConnected() } }, modifier = Modifier.fillMaxWidth())
             }
@@ -316,14 +323,13 @@ internal fun CloudBackupPage(
         }
         if ((destination == CloudBackupDestination.HOME || destination == CloudBackupDestination.CONNECTION) && needsAuthorization && enrollment == null) {
             SecondaryButton(text = "扫码连接", enabled = !busy, onClick = { showScanner = true }, modifier = Modifier.fillMaxWidth())
-            InsetGroup { InputRow(label = "连接码", value = code, onValueChange = { code = it }, placeholder = "粘贴服务器生成的完整连接码") }
+            InsetGroup { InputRow(label = "连接码", value = code, onValueChange = { code = it }, placeholder = "粘贴连接码") }
             SecondaryButton(text = "粘贴连接码", enabled = !busy, onClick = {
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 val text = clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()
-                if (text.isNullOrBlank()) message = "剪贴板中没有连接码" else code = text
+                if (text.isNullOrBlank()) message = "剪贴板为空" else code = text
             }, modifier = Modifier.fillMaxWidth())
             PrimaryButton(text = "连接", busy = busy, enabled = !busy && code.isNotBlank(), onClick = { operate { doConnect(code) } }, modifier = Modifier.fillMaxWidth())
-            GroupFooter("扫码或粘贴服务器管理页生成的连接码即可连接。普通断网无需重新配对，重新安装可接替原设备并保留历史。")
         }
         enrollment?.let { pending ->
             if (enrollmentLocked) {
@@ -355,14 +361,14 @@ internal fun CloudBackupPage(
                     CloudBackupCoordinator.rename(context, newName); message = "设备名称已更新"
                 } }, modifier = Modifier.fillMaxWidth())
                 }
-                InsetGroup { ListRow(title = "退出连接", subtitle = "撤销本安装访问，服务器历史备份保留", chevron = true,
+                InsetGroup { ListRow(title = "退出连接", chevron = true,
                     onClick = { if (!busy) showSignOut = true }) }
             }
             InsetGroup {
                 // Offline entries stay enabled: a failed connection must not lock the user out
                 // of the local backup file screen or diagnostics.
-                ListRow(title = "本地备份文件", subtitle = "导出备份或从文件恢复", chevron = true, onClick = onOpenLocalFiles)
-                ListRow(title = "诊断信息", subtitle = if (showDiagnostics) diagnostics else "连接异常时查看", dividerAbove = true,
+                ListRow(title = "本地备份文件", chevron = true, onClick = onOpenLocalFiles)
+                ListRow(title = "诊断信息", subtitle = if (showDiagnostics) diagnostics else null, dividerAbove = true,
                     chevron = true, onClick = {
                         showDiagnostics = !showDiagnostics
                         if (showDiagnostics) operate {
@@ -372,8 +378,7 @@ internal fun CloudBackupPage(
             }
         }
         if (destination == CloudBackupDestination.HISTORY) {
-            GroupFooter("只有这台设备的历史备份。恢复会先保存当前账本，确认后才替换。")
-            if (historyLoaded && entries.isEmpty()) InsetGroup { ListRow(title = "尚无备份", subtitle = "返回云备份页面，点击立即备份") }
+            if (historyLoaded && entries.isEmpty()) InsetGroup { ListRow(title = "暂无备份") }
             if (entries.isNotEmpty()) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     if (managing) TextButton(enabled = !busy, onClick = {
@@ -409,29 +414,28 @@ internal fun CloudBackupPage(
                 PrimaryButton(text = if (selected.isEmpty()) "删除所选" else "删除所选（${selected.size}）",
                     enabled = !busy && selected.isNotEmpty(),
                     onClick = { confirmDelete = true }, modifier = Modifier.fillMaxWidth())
-                GroupFooter("只删除服务器上的备份文件，本机账本和已下载的恢复前快照不受影响。")
             }
         }
         if (message.isNotBlank()) InsetGroup { ListRow(title = "状态", subtitle = message) }
     }
     sourceToReplace?.let { source -> AppAlertDialog(
         title = "接替“${source.name}”？",
-        message = "原安装将失去访问权限，历史备份完整保留。若原设备仍在使用，请确认没有选错。",
+        message = "原安装将失效，历史备份完整保留。",
         onDismiss = { if (!busy) sourceToReplace = null },
-        confirmLabel = if (enrollmentLocked) "重试确认连接" else "确认接替",
+        confirmLabel = if (enrollmentLocked) "重试" else "确认接替",
         onConfirm = { operate { finishConnection(if (enrollmentLocked) submittedSource else source) } },
         destructive = true,
         busy = busy,
     ) }
     if (showSignOut) AppAlertDialog(
-        title = "退出云备份连接？",
-        message = "撤销此安装的访问权限，服务器上的历史备份保留。再次连接需要授权接替原设备。",
+        title = "退出连接？",
+        message = "撤销本机访问权限，服务器历史备份保留。",
         onDismiss = { if (!busy) showSignOut = false },
-        confirmLabel = "退出连接",
+        confirmLabel = "退出",
         onConfirm = {
             operate {
                 CloudBackupCoordinator.disconnect(context); showSignOut = false; verified = false; needsAuthorization = true
-                lastBackup = "尚未备份"; entries = emptyList(); message = "已退出，历史备份保留"
+                lastBackup = "尚未备份"; entries = emptyList(); message = "已退出"
             }
         },
         destructive = true,
@@ -441,8 +445,8 @@ internal fun CloudBackupPage(
         val chosen = entries.filter { it.id in selected }
         val totalBytes = chosen.sumOf { it.sizeBytes }
         AppAlertDialog(
-            title = "删除 ${chosen.size} 份服务器备份？",
-            message = "将删除服务器上的 ${chosen.size} 份备份，共约 ${cloudBackupSize(totalBytes)}。删除不可恢复，也不影响本机账本与恢复前快照。",
+            title = "删除 ${chosen.size} 份备份？",
+            message = "共约 ${cloudBackupSize(totalBytes)}，仅删除服务器备份，不影响本机账本。",
             onDismiss = { if (!busy) confirmDelete = false },
             confirmLabel = "确认删除",
             onConfirm = {
@@ -478,7 +482,7 @@ internal fun CloudBackupPage(
                 }
                 PreparePhase.VERIFYING -> Text("正在校验…")
                 PreparePhase.PARSING -> Text("正在解析…")
-                else -> Text("恢复前只读取这份备份，不会改动本机账本。")
+                else -> Unit
             }
             if (preparing) {
                 SecondaryButton("取消下载", onClick = { cancelPrepare() }, modifier = Modifier.fillMaxWidth())
@@ -495,13 +499,13 @@ internal fun CloudBackupPage(
     }
     // AA1 step 2/3: content preview after download, then final restore confirmation.
     preview?.let { current -> AppDialog(
-        title = if (confirmRestore) "确认恢复此备份？" else "内容预览",
+        title = if (confirmRestore) "确认恢复备份？" else "内容预览",
         onDismiss = { if (!busy) { preview = null; confirmRestore = false } },
     ) {
-        Text("${cloudBackupDate(current.entry.snapshotAt)}\n账单 ${current.snapshot.bills.size}笔，识别记录 ${current.snapshot.history?.size ?: 0}条，账户 ${current.snapshot.assets?.accounts?.size ?: 0}个。" +
-            (if (current.fromCache) "\n（本机缓存副本）" else "") + "\n\n" +
-            if (confirmRestore) "将替换当前账单；备份含资产/识别记录时也会替换对应内容，不含时保留本机内容。删除日志按事件合并，配置和连接保留。会先保存恢复前快照，保存失败则停止恢复。"
-            else "请核对日期和内容，下一步仍需确认。设备连接与权限不会随备份替换。")
+        Text(
+            if (confirmRestore) "将替换当前账单、识别记录与资产（共 ${current.snapshot.bills.size} 笔），并自动保留恢复前快照。"
+            else "${cloudBackupDate(current.entry.snapshotAt)}\n账单 ${current.snapshot.bills.size} 笔 · 账户 ${current.snapshot.assets?.accounts?.size ?: 0} 个",
+        )
         AppDialogActions(
             confirmLabel = if (confirmRestore) "确认恢复" else "继续恢复",
             onConfirm = {

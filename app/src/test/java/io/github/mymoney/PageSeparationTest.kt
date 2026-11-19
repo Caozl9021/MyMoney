@@ -1,7 +1,6 @@
 package io.github.mymoney
 
 import com.example.billkit.*
-import com.example.billkit.spec.PersonalPageRules
 import io.github.mymoney.capture.PageObservationScope
 import org.junit.After
 import org.junit.Assert.*
@@ -10,7 +9,7 @@ import org.junit.Test
 class PageSeparationTest {
     private fun page(items: List<String>, pkg: String = Packages.WECHAT) = UiSnapshot(pkg, null, items)
     private val result = listOf("支付成功", "¥73.41", "完成", "付款方式", "零钱")
-    @After fun cleanup() { BillKit.reset(); DebugBus.clear(); PersonalPageRules.install(emptyList()) }
+    @After fun cleanup() { BillKit.reset(); DebugBus.clear() }
 
     @Test fun paymentResultsCannotDispatchEvenWhenParserCanReadThem() {
         for (pkg in listOf(Packages.WECHAT, Packages.ALIPAY)) {
@@ -75,11 +74,8 @@ class PageSeparationTest {
         repeat(20) { scope.observe("$it","same-order") }
         assertFalse(scope.allows("0")); assertTrue(scope.allows("19"))
     }
-    @Test fun resultPageNeverReachesPersonalRuleDispatch() {
-        PersonalPageRules.install(listOf(com.example.billkit.spec.PersonalRule(
-            "personal_gphase01", "结果页不能绕过", keyword="支付成功", merchant="测试商户")))
-        assertNotNull(PersonalPageRules.match(page(result),10000))
-        // The automatic gate precedes personal rules; preview can still parse result pages.
+    @Test fun resultPageNeverReachesPageCaptureDispatch() {
+        // The automatic gate rejects payment result pages; preview can still parse result pages.
         assertTrue(BillPipeline().process(page(result)) is BillPipeline.Outcome.Draft)
         assertEquals("scene:payment-result-not-page-capture",
             (BillPipeline().processForCapture(page(result)) as BillPipeline.Outcome.Skipped).reason)

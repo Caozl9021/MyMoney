@@ -1,13 +1,10 @@
 package io.github.mymoney.ui
 
-import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
@@ -15,12 +12,12 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
-import io.github.mymoney.data.LedgerConfig
-import io.github.mymoney.data.NoteTemplate
-import io.github.mymoney.data.NoteFillStore
-import io.github.mymoney.ui.design.*
 import com.example.billkit.BillDraft
 import com.example.billkit.BillType
+import io.github.mymoney.data.LedgerConfig
+import io.github.mymoney.data.NoteFillStore
+import io.github.mymoney.data.NoteTemplate
+import io.github.mymoney.ui.design.*
 
 @Composable
 internal fun NoteTemplatePage(onBack: () -> Unit) {
@@ -43,20 +40,30 @@ internal fun NoteTemplatePage(onBack: () -> Unit) {
         if (leave != null) leave() else onBack()
     })
     val sample = remember(example) {
-        BillDraft(2350, BillType.EXPENSE, System.currentTimeMillis(), if (example == 1) null else "瑞幸咖啡", "零钱", null,
-            "com.example.demo", "示例", category = "餐饮", subCategory = if (example == 1) null else "咖啡", account = "微信",
-            productName = if (example == 2) "生椰拿铁" else null)
+        BillDraft(
+            2350, BillType.EXPENSE, System.currentTimeMillis(),
+            if (example == 1) null else "瑞幸咖啡", "零钱", null,
+            "com.example.demo", "示例", category = "餐饮",
+            subCategory = if (example == 1) null else "咖啡", account = "微信",
+            productName = if (example == 2) "生椰拿铁" else null,
+        )
     }
     SubPageScaffold(title = "备注模板", onBack = ::back) { padding ->
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(padding).padding(horizontal = AbSpacing.page),
-            verticalArrangement = Arrangement.spacedBy(AbLayout.groupGap)) {
-            io.github.mymoney.ui.design.SectionColumn {
+        Column(
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(padding).padding(horizontal = AbSpacing.page),
+            verticalArrangement = Arrangement.spacedBy(AbLayout.groupGap),
+        ) {
+            SectionColumn {
                 GroupHeader("模板")
                 InsetGroup {
-                    BasicTextField(value = value, onValueChange = { value = it }, textStyle = AbType.body.copy(color = palette.label),
-                        cursorBrush = SolidColor(palette.accent), modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(AbSpacing.m))
+                    BasicTextField(
+                        value = value,
+                        onValueChange = { value = it },
+                        textStyle = AbType.body.copy(color = palette.label),
+                        cursorBrush = SolidColor(palette.accent),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(AbSpacing.m),
+                    )
                 }
-                // 变量：单行横滑的快捷工具条（不换行成网格墙，和分类横滑同款交互）。
                 Row(
                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
@@ -68,20 +75,20 @@ internal fun NoteTemplatePage(onBack: () -> Unit) {
                         })
                     }
                 }
-                if (unknown.isNotEmpty()) InlineMessage("未知变量：${unknown.joinToString()}，请改正或用双花括号保留。", isError = true)
+                if (unknown.isNotEmpty()) InlineMessage("未知变量：${unknown.joinToString()}", isError = true)
             }
-            io.github.mymoney.ui.design.SectionColumn {
-                GroupHeader("实时预览 · 示例")
-                val exampleLabels = listOf("普通", "缺少字段", "已点选商品")
-                Segmented(options = exampleLabels, selected = example, onSelect = { example = it })
-                InsetGroup { ListRow(title = NoteTemplate.render(sample, value.text, includeProduct = example == 2).ifBlank { "（空）" },
-                    subtitle = if (example == 2) "商品自动填充由“备注填充”设置控制，此处仅预览模板" else "按账单发生日期生成，不修改已有备注") }
+            SectionColumn {
+                GroupHeader("预览")
+                Segmented(options = listOf("普通", "缺字段", "含商品"), selected = example, onSelect = { example = it })
+                InsetGroup {
+                    ListRow(title = NoteTemplate.render(sample, value.text, includeProduct = example == 2).ifBlank { "（空）" })
+                }
             }
             Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-                PrimaryButton("保存模板", enabled = unknown.isEmpty(), onClick = {
+                PrimaryButton("保存", enabled = unknown.isEmpty(), onClick = {
                     NoteFillStore.saveNoteTemplate(value.text); saved = value.text; onBack()
-                })
-                SecondaryButton("恢复默认", onClick = { value = TextFieldValue("{商户}", TextRange(4)) })
+                }, modifier = Modifier.fillMaxWidth())
+                SecondaryButton("恢复默认", onClick = { value = TextFieldValue("{商户}", TextRange(4)) }, modifier = Modifier.fillMaxWidth())
             }
         }
     }

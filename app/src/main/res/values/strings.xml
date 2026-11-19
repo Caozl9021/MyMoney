@@ -4,11 +4,8 @@
     <string name="accessibility_label">麦米 · 账单识别</string>
     <string name="accessibility_summary">读取支付页面文字，生成待确认账单。</string>
     <string name="accessibility_description">读取所选应用的支付页面文字，生成待确认账单。跳过输入框，数据仅保存在本机。</string>
-    <string name="notification_listener_label">麦米 · 交易通知</string>
     <string name="notification_confirm_channel">麦米 · 账单待确认</string>
-    <string name="notification_root_channel">麦米 · 通知识别</string>
     <string name="notification_guardian_channel">麦米 · 无障碍守护</string>
-    <string name="notification_root_title">麦米正在读取账单通知</string>
     <string name="notification_guardian_title">麦米守护中</string>
     <string name="notification_guardian_alert_title">麦米 · 无障碍服务异常</string>
     <string name="notification_bill_title">麦米 · %1$s待确认：¥%2$s</string>

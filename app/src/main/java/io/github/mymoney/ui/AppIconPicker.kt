@@ -164,7 +164,7 @@ internal fun AppIconPicker() {
         }
     } }
     }
-    val hint = "图标与主题色同步；切换时可能返回桌面。通知和组件保持默认图标"
+    val hint = "切换图标将同步更新主题色"
     BoxWithConstraints(Modifier.fillMaxWidth().layoutId(SectionRole.FOOTER)) {
         val footerHeight = with(density) {
             val width = (maxWidth - AbSpacing.xs * 2).roundToPx().coerceAtLeast(1)

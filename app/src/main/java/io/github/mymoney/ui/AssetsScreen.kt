@@ -170,12 +170,9 @@ fun AssetsScreen(onBack: () -> Unit, isTab: Boolean = false, onSubpageVisibility
                     val visible = accounts.filter { (showArchived || !it.archived) && it.initialized }
                     val anyValue = accounts.any { it.included && it.initialized }
                     if (!isTab) item { InsetGroup {
-                        ListRow(title = "转账 / 还款", subtitle = "两端资金划转，本金不计收支", chevron = true,
-                            dividerAbove = false,
-                            onClick = if (accounts.count { !it.archived && it.initialized } >= 2) { { form = "transfer" } } else null)
-                        ListRow(title = "账户管理", subtitle = "确认卡清单、长按排序与默认账户", chevron = true,
-                            dividerAbove = true, onClick = { form = "candidates" })
-                        ListRow(title = "显示归档账户", subtitle = "归档保留余额，默认继续纳入总览", dividerAbove = true,
+                        ListRow(title = "账户管理", chevron = true,
+                            dividerAbove = false, onClick = { form = "candidates" })
+                        ListRow(title = "显示归档账户", dividerAbove = true,
                             trailing = { AbSwitch(showArchived) { showArchived = it; prefs.edit().putBoolean("show_archived", it).apply() } },
                             onClick = { showArchived = !showArchived; prefs.edit().putBoolean("show_archived", showArchived).apply() })
                     } }

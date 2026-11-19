@@ -39,23 +39,3 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlin:kotlin-test")
 }
-
-// 源脚本与最终资产必须一致，避免只改可读源却忘记更新随包文件。
-val verifyOriginalRules by tasks.registering(Exec::class) {
-    workingDir(rootProject.projectDir)
-    commandLine("python3", layout.projectDirectory.file("rules/generate.py").asFile.absolutePath, "--check")
-}
-tasks.named("preBuild") { dependsOn(verifyOriginalRules) }
-
-// No APK assembly: compile the production JVM-compatible protocol and use its real engine.
-val ruleValidator = configurations.create("ruleValidator")
-dependencies {
-    add(ruleValidator.name, "org.jetbrains.kotlin:kotlin-stdlib:2.0.21")
-    add(ruleValidator.name, "org.mozilla:rhino:1.7.15")
-}
-tasks.register<JavaExec>("validateRulePackage") {
-    dependsOn("compileDebugKotlin")
-    classpath = files(layout.buildDirectory.dir("tmp/kotlin-classes/debug")) + ruleValidator
-    mainClass.set("com.example.billkit.spec.RulePackageCli")
-    doFirst { args = listOf(providers.gradleProperty("rulePackage").get()) }
-}

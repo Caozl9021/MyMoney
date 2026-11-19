@@ -108,7 +108,6 @@ class PageClassifier {
         if (items.size < 3) return null
         if (looksLikeListPage(items) || looksLikeNonBillPage(items)) return null
 
-        ExternalPageRules.match(snapshot.copy(items = items))?.let { return it }
         val pkg = snapshot.packageName
         return when {
             pkg == Packages.WECHAT -> wechat(snapshot.activityClass, items)

@@ -49,7 +49,7 @@ internal fun LedgerPeriodPage(onBack: () -> Unit) {
     SettingsContentPage("记账周期", { if (!busy) onBack() }) {
         GroupHeader("每月起始日")
         InsetGroup {
-            ListRow(title = "每月 $selected 日", subtitle = "从这一天开始统计一个月的收支", chevron = true,
+            ListRow(title = "每月 $selected 日", chevron = true,
                 onClick = { if (!busy) picker = true })
         }
         GroupHeader("周期预览")

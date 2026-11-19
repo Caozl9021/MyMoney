@@ -64,11 +64,11 @@ echo "🧪 运行单元测试..."
 
 # 构建主 App (Debug / Release)
 echo ""
-echo "🔨 构建主 App (Debug，包含内置 LSP 增强)..."
+echo "🔨 构建主 App (Debug)..."
 ./gradlew :app:assembleDebug
 
 echo ""
-echo "🔨 构建主 App (Release，包含内置 LSP 增强)..."
+echo "🔨 构建主 App (Release)..."
 ./gradlew :app:assembleRelease
 
 APP_DEBUG="app/build/outputs/apk/debug/app-debug.apk"
@@ -87,8 +87,3 @@ echo ""
 echo "=========================================="
 echo "✅ 构建完成"
 echo "=========================================="
-echo ""
-echo "LSP 模块已内置，无需第二个 APK："
-echo "  - 标准模式：直接安装使用"
-echo "  - LSP 模式：在 LSPosed 中启用麦米 My Money，作用域只勾「微信」和「支付宝」"
-echo "    （系统框架 android 不属于推荐作用域，不要再勾选）"

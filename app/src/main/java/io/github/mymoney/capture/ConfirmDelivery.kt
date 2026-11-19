@@ -107,7 +107,7 @@ object ConfirmDelivery {
      * @param waitReceipt 主线程上不能阻塞等回执（会把 UI 卡住 1.5s），只有后台线程才等
      */
     private fun launchConfirm(context: Context, draft: BillDraft, waitReceipt: Boolean, allowed: () -> Boolean): Boolean {
-        val presentationToken = NotificationIngress.configurationToken(context)
+        val presentationToken = CaptureConfigToken.of(context)
         if (!allowed()) return false
         ConfirmLaunch.begin(draft.historyId ?: draft.fingerprint)
         val started = try {

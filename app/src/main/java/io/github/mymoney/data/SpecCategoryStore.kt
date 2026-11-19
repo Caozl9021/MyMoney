@@ -14,7 +14,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** 原创规则分类兼容入口，只在用户推荐为空时补充，不创建分类或覆盖配置。 */
+/** 内置分类兜底入口，只在用户推荐为空时补充，不创建分类或覆盖配置。 */
 object SpecCategoryStore {
 
     private const val TAG = "SpecCategoryStore"
@@ -23,7 +23,6 @@ object SpecCategoryStore {
     private val lock = Mutex()
 
     @Volatile private var initialized = false
-    @Volatile private var sourceDigest = ""
 
     fun isReady(): Boolean = initialized && engine.isReady()
 
@@ -34,17 +33,15 @@ object SpecCategoryStore {
     }
 
     suspend fun ensureReady(context: Context) {
-        if (initialized && engine.isReady() && SpecRuleStore.isReady() && sourceDigest == SpecRuleStore.status.value.digest) return
+        if (initialized && engine.isReady()) return
         lock.withLock {
-            if (initialized && engine.isReady() && SpecRuleStore.isReady() && sourceDigest == SpecRuleStore.status.value.digest) return
+            if (initialized && engine.isReady()) return
             withContext(Dispatchers.IO) {
                 val app = context.applicationContext
-                val source = SpecRuleStore.categorySource(app)
-                val common = source.first
-                val category = source.second
+                val common = app.assets.open(SpecAssets.COMMON_JS).use { it.readBytes().toString(Charsets.UTF_8) }
+                val category = app.assets.open(SpecAssets.CATEGORY_JS).use { it.readBytes().toString(Charsets.UTF_8) }
                 engine.rebuild(common, category)
                 initialized = engine.isReady()
-                sourceDigest = source.third
             }
         }
     }
@@ -58,7 +55,6 @@ object SpecCategoryStore {
     suspend fun classify(context: Context, draft: BillDraft): Pair<String, String?>? {
         runCatching { ensureReady(context) }.onFailure { return null }
         if (!isReady()) return null
-        // 转账无分类，交给项目双端账户逻辑。
         if (draft.type == BillType.TRANSFER) return null
         val groups = LedgerConfig.groupsFor(draft.type)
         if (groups.isEmpty()) return null

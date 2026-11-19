@@ -166,8 +166,8 @@ fun LedgerConfigPage(
                         if (groups.isEmpty()) {
                             EmptyState(
                                 icon = AbIcons.Tag,
-                                title = "还没有分类",
-                                message = "在下面添加分类名称，用于本地账单归类与统计。",
+                                title = "暂无分类",
+                                message = "在下方添加新分类。",
                             )
                         } else {
                 DragReorderColumn(
@@ -234,7 +234,7 @@ fun LedgerConfigPage(
 
             if (presetsOnly) item(key = "meal-presets") {
                 InsetGroup {
-                    ListRow(title = "补齐餐饮子类", subtitle = "为支出餐饮添加缺少的早餐、午餐、晚餐、夜宵",
+                    ListRow(title = "补齐餐饮子类",
                         onClick = {
                             resetError = null
                             runCatching { LedgerConfig.addMealSubCategories() }
@@ -250,7 +250,6 @@ fun LedgerConfigPage(
                     ListRow(
                         title = "恢复默认分类",
                         destructive = true,
-                        subtitle = "替换支出与收入分类，保留账户和历史账单",
                         onClick = { resetError = null; resetConfirm = true },
                     )
                 }
@@ -318,7 +317,6 @@ private fun PresetPickerPage(
                         }
                     }
                 }
-                item(key = "foot") { GroupFooter("点右侧加号，把这个分类和它的二级分类一起加入账本；加入后仍可改名、删改。") }
             }
         }
     }
@@ -517,14 +515,13 @@ private fun AccountsSection(
         InsetGroup {
             ListRow(
                 title = "添加账户",
-                subtitle = "按类型从预设开通，保存即已设置",
                 chevron = true,
                 onClick = onAdd,
             )
         }
         InsetGroup {
             if (ordered.isEmpty()) {
-                ListRow(title = "还没有账户", subtitle = "点上方添加账户")
+                ListRow(title = "还没有账户")
             } else {
                 DragReorderColumn(
                     items = ordered,
@@ -609,14 +606,7 @@ internal fun AccountCandidatesPage(
         ) {
             if (storeError != null) item { InlineMessage(storeError.orEmpty(), isError = true, announce = true) }
             if (ready) {
-                item {
-                    Text(
-                        "添加请用预设向导；清单内长按拖动排序",
-                        style = AbType.footnote,
-                        color = LocalAbPalette.current.secondaryLabel,
-                    )
-                }
-                item { GroupHeader("确认卡账户清单") }
+                item { GroupHeader("账户清单") }
                 item {
                     AccountsSection(
                         version = listVersion,
@@ -629,7 +619,6 @@ internal fun AccountCandidatesPage(
                 item {
                     InsetGroup {
                         ListRow(title = "恢复默认账户清单", destructive = true,
-                            subtitle = "恢复为仅「钱包」，保留账户余额与流水",
                             onClick = { resetError = null; resetConfirm = true })
                     }
                 }
@@ -637,7 +626,7 @@ internal fun AccountCandidatesPage(
         }
     }
     if (resetConfirm) AppDialog(title = "恢复默认账户清单？", onDismiss = { resetConfirm = false }) {
-        Text("将恢复默认账户候选为仅「钱包」；其他账户归档，同名已归档默认账户会恢复。全部账户余额、流水、账单和分类保留。")
+        Text("恢复为仅「钱包」，其他账户归档；余额、流水与账单保留。")
         if (resetError != null) InlineMessage(resetError.orEmpty(), isError = true, announce = true)
         AppDialogActions(
             confirmLabel = "恢复默认账户",
@@ -655,8 +644,8 @@ internal fun AccountCandidatesPage(
 @Composable
 private fun RestoreCategoriesDefaultsDialog(onDismiss: () -> Unit, onConfirm: () -> Unit, errorMessage: String?) {
     AppDialog(title = "恢复默认分类？", onDismiss = onDismiss) {
-        Text("将替换全部支出分类、收入分类和二级分类。账户清单、账户余额、资产流水、账单、记录历史、备注模板和识别设置保留。")
+        Text("将重置支出与收入分类，不影响历史账单与账户。")
         if (errorMessage != null) InlineMessage(errorMessage, isError = true, announce = true)
-        AppDialogActions(confirmLabel = "恢复默认分类", onConfirm = onConfirm, onDismiss = onDismiss)
+        AppDialogActions(confirmLabel = "恢复", onConfirm = onConfirm, onDismiss = onDismiss)
     }
 }

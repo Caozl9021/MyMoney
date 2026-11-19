@@ -1,151 +1,206 @@
 package io.github.mymoney.ui
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import io.github.mymoney.data.CaptureMode
+import androidx.compose.ui.platform.LocalContext
+import io.github.mymoney.ocr.LocalOcrEngine
+import io.github.mymoney.ocr.OcrPreferences
 import io.github.mymoney.ui.design.*
 
-/**
- * 自动记账的总览页。回答「现在能不能记账」，通道细节都在下一层。
- *
- * 这里的每一块都按**设备具备什么**决定出不出：没有 root 就没有推荐配置，没有 LSPosed 就没有
- * 凭证入口。普通用户看到的只有「开没开、还缺哪个授权」，看不到任何自己用不上的名词。
- */
+internal enum class AutomationRoute { BACKGROUND, APPS, LEARNING, MEALS }
+
+/** 自动记账单页主控台：核心开关、权限保活、范围与偏好。 */
 @Composable
 internal fun AutomationPage(
-    mode: CaptureMode?,
     enabled: Boolean,
     health: CaptureHealth,
     autoConfirm: Boolean,
     islandConfirm: Boolean,
     islandSupported: Boolean,
-    capabilities: DeviceCapabilities,
-    showsLsp: Boolean,
-    notice: CapabilityNotice?,
+    accessibilityAuthorized: Boolean,
+    accessibilityBound: Boolean,
+    overlayGranted: Boolean,
+    appCount: Int,
+    learnedCount: Int,
     onBack: () -> Unit,
     onAction: (CaptureAction) -> Unit,
-    onApplyPreset: (CaptureMode) -> Unit,
     onToggleEnabled: (Boolean) -> Unit,
     onToggleConfirm: (Boolean) -> Unit,
     onToggleIsland: (Boolean) -> Unit,
-    onNavigate: (Route) -> Unit,
-    onDismissNotice: () -> Unit = {},
+    onNavigate: (AutomationRoute) -> Unit,
 ) {
+    val context = LocalContext.current
     val p = LocalAbPalette.current
+    val ocrPrefs = remember { OcrPreferences(context) }
+    var ocrEnabled by remember { mutableStateOf(ocrPrefs.enabled) }
+    var showOcrPrompt by remember { mutableStateOf(false) }
+
     SubPageScaffold(title = "自动记账", onBack = onBack) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = AbSpacing.page, end = AbSpacing.page,
-                top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding()),
+            contentPadding = PaddingValues(
+                start = AbSpacing.page,
+                end = AbSpacing.page,
+                top = padding.calculateTopPadding(),
+                bottom = padding.calculateBottomPadding(),
+            ),
             verticalArrangement = Arrangement.spacedBy(AbLayout.groupGap),
         ) {
-            if (notice != null) {
-                item {
-                    InsetGroup {
+            item {
+                InsetGroup {
+                    ListRow(
+                        title = "自动记账",
+                        leading = { SettingsIconBadge("自动记账", AbIcons.Accessibility) },
+                        trailing = { AbSwitch(enabled, onToggleEnabled) },
+                        onClick = { onToggleEnabled(!enabled) },
+                    )
+                    if (enabled && health.attention) {
+                        health.actions.firstOrNull()?.let { action ->
+                            ListRow(
+                                title = health.detail,
+                                dividerAbove = true,
+                                titleStyle = AbType.footnote,
+                                trailing = {
+                                    TextButton(onClick = { onAction(action) }) {
+                                        Text(action.label, color = p.accent)
+                                    }
+                                },
+                            )
+                        }
+                    }
+                    ListRow(
+                        title = "弹出确认卡",
+                        leading = { SettingsIconBadge("弹出确认卡", AbIcons.Note) },
+                        dividerAbove = true,
+                        trailing = { AbSwitch(autoConfirm, onToggleConfirm) },
+                        onClick = { onToggleConfirm(!autoConfirm) },
+                    )
+                    if (LocalOcrEngine.isSupported) {
                         ListRow(
-                            title = notice.title(),
-                            subtitle = notice.detail(),
-                            leading = { SettingsIconBadge(notice.title(), AbIcons.Layers) },
-                            trailing = { TextButton(onClick = onDismissNotice) { Text("知道了", color = p.accent) } },
-                            onClick = onDismissNotice,
+                            title = "页面 OCR 补全",
+                            leading = { SettingsIconBadge("页面 OCR 补全", AbIcons.Ocr) },
+                            dividerAbove = true,
+                            trailing = {
+                                AbSwitch(ocrEnabled) { value ->
+                                    if (value) showOcrPrompt = true
+                                    else if (ocrPrefs.setEnabled(false)) ocrEnabled = false
+                                }
+                            },
+                            onClick = {
+                                if (!ocrEnabled) showOcrPrompt = true
+                                else if (ocrPrefs.setEnabled(false)) ocrEnabled = false
+                            },
+                        )
+                    }
+                    if (islandSupported) {
+                        ListRow(
+                            title = "超级岛提醒",
+                            leading = { SettingsIconBadge("超级岛提醒", AbIcons.Note) },
+                            dividerAbove = true,
+                            trailing = { AbSwitch(islandConfirm, onToggleIsland) },
+                            onClick = { onToggleIsland(!islandConfirm) },
                         )
                     }
                 }
             }
-            item {
-                InsetGroup {
-                    ListRow(title = "启用自动记账", subtitle = health.title,
-                        leading = { SettingsIconBadge("启用自动记账", AbIcons.Accessibility) },
-                        trailing = { AbSwitch(enabled, onToggleEnabled) },
-                        onClick = { onToggleEnabled(!enabled) })
-                    if (enabled && health.attention) {
-                        health.actions.firstOrNull()?.let { action ->
-                            ListRow(title = health.detail, dividerAbove = true,
-                                titleStyle = AbType.footnote,
-                                trailing = { TextButton(onClick = { onAction(action) }) { Text(if (health.kind == CaptureHealthKind.SOURCES_DISABLED) "开启识别来源" else action.label, color = p.accent) } })
-                        }
-                    }
-                }
-            }
+
             item {
                 InsetGroup {
                     ListRow(
-                        title = "识别方式与增强",
-                        subtitle = if (showsLsp) "通知监听、页面识别与凭证采集" else "通知监听、页面识别",
-                        leading = { SettingsIconBadge("识别设置", AbIcons.Filter) },
-                        chevron = true, onClick = { onNavigate(Route.SOURCES) })
+                        title = "无障碍服务",
+                        leading = { SettingsIconBadge("无障碍服务", AbIcons.Accessibility) },
+                        trailing = {
+                            Text(
+                                text = when {
+                                    accessibilityBound -> "已连接"
+                                    accessibilityAuthorized -> "未连接"
+                                    else -> "未开启"
+                                },
+                                style = AbType.footnote,
+                                color = p.secondaryLabel,
+                            )
+                        },
+                        chevron = true,
+                        onClick = { onAction(CaptureAction.ACCESSIBILITY) },
+                    )
+                    ListRow(
+                        title = "悬浮窗权限",
+                        leading = { SettingsIconBadge("悬浮窗权限", AbIcons.Layers) },
+                        trailing = {
+                            Text(
+                                text = if (overlayGranted) "已允许" else "未允许",
+                                style = AbType.footnote,
+                                color = p.secondaryLabel,
+                            )
+                        },
+                        dividerAbove = true,
+                        chevron = true,
+                        onClick = { onAction(CaptureAction.OVERLAY) },
+                    )
+                    ListRow(
+                        title = "后台保活",
+                        leading = { SettingsIconBadge("后台保活", AbIcons.Shield) },
+                        dividerAbove = true,
+                        chevron = true,
+                        onClick = { onNavigate(AutomationRoute.BACKGROUND) },
+                    )
+                }
+            }
 
-                }
-            }
             item {
                 InsetGroup {
-                    ListRow(title = "识别后弹出确认卡",
-                        subtitle = if (autoConfirm) "通知监听和页面识别均适用，核对后保存" else "两种方式均不弹卡，稍后到待确认中处理",
-                        leading = { SettingsIconBadge("确认卡", AbIcons.Note) },
-                        trailing = { AbSwitch(autoConfirm, onToggleConfirm) },
-                        onClick = { onToggleConfirm(!autoConfirm) })
-                }
-            }
-            if (islandSupported) {
-                item {
-                    InsetGroup {
-                        ListRow(title = "超级岛确认（实验性）",
-                            subtitle = if (islandConfirm)
-                                "已开启 · 识别后尝试用系统超级岛提醒，点它打开确认页保存。实验功能：图标与细节仍在完善，部分机型/布局可能显示不全或不出岛，异常时自动回落原确认卡。"
-                            else "实验功能，默认关闭 · 识别后尝试用系统超级岛提醒（仅澎湃OS 小米机型）。功能尚不完善，异常时自动回落原确认卡。",
-                            leading = { SettingsIconBadge("超级岛确认", AbIcons.Note) },
-                            trailing = { AbSwitch(islandConfirm, onToggleIsland) },
-                            onClick = { onToggleIsland(!islandConfirm) })
-                    }
-                }
-            }
-            item {
-                InsetGroup {
-                    ListRow(title = "识别规则", subtitle = "查看已有规则、添加或导入", leading = { SettingsIconBadge("识别规则", AbIcons.Layers) },
-                        chevron = true, onClick = { onNavigate(Route.RULE_FILES) })
-                    ListRow(title = "更多设置", dividerAbove = true, leading = { SettingsIconBadge("更多设置", AbIcons.Settings) },
-                        chevron = true, onClick = { onNavigate(Route.MORE) })
+                    ListRow(
+                        title = "监控应用",
+                        leading = { SettingsIconBadge("监控应用", AbIcons.Store) },
+                        trailing = {
+                            Text("$appCount 个", style = AbType.footnote, color = p.secondaryLabel)
+                        },
+                        chevron = true,
+                        onClick = { onNavigate(AutomationRoute.APPS) },
+                    )
+                    ListRow(
+                        title = "学习记忆",
+                        leading = { SettingsIconBadge("学习记忆", AbIcons.Note) },
+                        trailing = {
+                            Text("$learnedCount 条", style = AbType.footnote, color = p.secondaryLabel)
+                        },
+                        dividerAbove = true,
+                        chevron = true,
+                        onClick = { onNavigate(AutomationRoute.LEARNING) },
+                    )
+                    ListRow(
+                        title = "餐段设置",
+                        leading = { SettingsIconBadge("餐段设置", AbIcons.Clock) },
+                        dividerAbove = true,
+                        chevron = true,
+                        onClick = { onNavigate(AutomationRoute.MEALS) },
+                    )
                 }
             }
         }
     }
+
+    if (showOcrPrompt) {
+        AppAlertDialog(
+            title = "开启页面 OCR 补全？",
+            message = "仅在微信、支付宝交易详情页本地识别缺失字段，不上传图片。",
+            onDismiss = { showOcrPrompt = false },
+            confirmLabel = "开启",
+            onConfirm = {
+                if (ocrPrefs.setEnabled(true)) ocrEnabled = true
+                showOcrPrompt = false
+            },
+            dismissLabel = "取消",
+        )
+    }
 }
-
-internal enum class Route { SOURCES, LSP, MORE, SUPPORTED_APPS, LEARNING, TEMPLATES, RULE_FILES, MEALS, STATISTICS }
-
-/** Uses raw permission/binding signals, including while the master switch is paused. */
-internal data class CaptureModeStateSnapshot(
-    val notificationsEnabled: Boolean,
-    /** 此刻实际在跑的实现；null 表示这一刻没有可用实现。 */
-    val notificationPlan: io.github.mymoney.data.NotificationPath?,
-    val notificationAuthorized: Boolean,
-    val notificationBound: Boolean,
-    val smsEnabled: Boolean,
-    val smsGranted: Boolean,
-    val hookEnabled: Boolean,
-    val pageEnabled: Boolean,
-    val accessibilityAuthorized: Boolean,
-    val accessibilityBound: Boolean,
-    val overlayAllowed: Boolean,
-    val notifyGranted: Boolean,
-    val rootGranted: Boolean,
-    val enabled: Boolean = true,
-    val rootNotificationReady: Boolean = false,
-    /** 模块加载是否已确认；凭证行要据此区分「开着」和「开着但没确认加载」。 */
-    val hookReady: Boolean = false,
-)
-
-internal fun captureSettingsSnapshot(input: CaptureHealthInput, notifyGranted: Boolean, rootGranted: Boolean?) =
-    CaptureModeStateSnapshot(input.notificationsEnabled, input.notificationPlan,
-        input.notificationAuthorized, input.notificationBound,
-        input.smsEnabled, input.smsGranted, input.hookEnabled, input.pageEnabled,
-        input.accessibilityAuthorized, input.accessibilityBound, input.overlayAllowed, notifyGranted,
-        rootGranted == true, input.enabled, input.rootNotificationReady, input.hookReady)

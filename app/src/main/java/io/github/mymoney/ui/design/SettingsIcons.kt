@@ -41,29 +41,28 @@ internal fun SettingsIconBadge(title: String, fallback: ImageVector, size: Dp = 
         "支出分类" -> colors.pink
         "收入分类" -> colors.green
         "分类", "餐段设置", "记账周期" -> colors.orange
-        "资产", "识别通道", "导出到 iCost", "页面诊断" -> colors.blue
-        "备注", "备注模板", "确认卡" -> colors.yellow
-        "自动记账", "通知模板" -> colors.pink
-        "记录历史", "学习记忆", "外观", "分类预设" -> colors.violet
-        "备份", "完整备份与恢复", "权限与后台运行", "规则文件" -> colors.teal
-        "导出", "导入导出", "迁移与备份", "钱迹账单", "应用与通道", "识别统计" -> colors.green
+        "资产", "导出到 iCost", "页面诊断", "无障碍服务" -> colors.blue
+        "备注", "备注模板", "商品说明优先", "商家备注规则", "弹出确认卡", "超级岛提醒", "确认卡" -> colors.yellow
+        "自动记账", "启用自动记账" -> colors.pink
+        "记录历史", "学习记忆", "外观", "分类预设", "悬浮窗权限" -> colors.violet
+        "后台保活", "云备份", "本地备份文件", "备份" -> colors.teal
+        "迁移与备份", "钱迹账单", "监控应用" -> colors.green
+        "页面 OCR 补全", "关于" -> colors.indigo
         else -> colors.indigo
     }
     val glyph = when (title) {
-        "导入导出", "迁移与备份" -> "swap_horiz"
-        "钱迹账单" -> "receipt_long"
+        "迁移与备份", "导出到 iCost" -> "swap_horiz"
+        "钱迹账单", "弹出确认卡", "超级岛提醒", "确认卡", "导入说明" -> "receipt_long"
         "分类", "支出分类", "收入分类", "分类预设" -> "category"
         "资产" -> "account_balance_wallet"
-        "备注", "备注模板", "备注建议" -> null
-        "确认卡", "超级岛确认", "识别后弹出确认卡", "规则文件", "导入说明" -> "receipt_long"
+        "备注", "备注模板", "商品说明优先", "商家备注规则" -> null
         "自动记账", "启用自动记账" -> "bolt"
         "记录历史" -> "work_history"
-        "备份", "完整备份与恢复", "权限与后台运行", "权限" -> "shield"
-        "应用与通道", "识别通道", "应用范围" -> "smartphone"
+        "后台保活", "本地备份文件", "备份" -> "shield"
+        "监控应用" -> "smartphone"
         "记账周期" -> "calendar"
         "餐段设置" -> "restaurant"
         "学习记忆" -> "school"
-        "通知模板" -> "payments"
         else -> null
     }
     Box(

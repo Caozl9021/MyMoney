@@ -1,32 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <permission android:name="io.github.mymoney.permission.LSP_PROBE" android:protectionLevel="signature" />
-    <uses-permission android:name="io.github.mymoney.permission.LSP_PROBE" />
-
-    <!-- 仅用户主动检查/下载公开GitHub规则包与 App 更新；采集和账本不联网。 -->
+    <!-- 仅用户主动检查/下载公开 GitHub App 更新；采集和账本仅按用户配置同步。 -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- 仅用户点「扫码」并授权后启动相机扫连接码；不后台开启，识别确认前不联网。 -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
     <!-- 仅用户点击“安装更新”后交给系统安装器；不在后台静默安装。 -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
-    <!-- 悬浮确认卡片（root 路径下唯一不受后台启动限制的弹窗方式） -->
+    <!-- 悬浮确认卡片 -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- root 轮询常驻：把采集跑在前台服务里，避免"离开设置页就停" -->
+    <!-- 无障碍守护前台服务，避免被系统后台清理 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <!--
       用 specialUse 而不是 dataSync：dataSync 在 Android 15 上有 6 小时/天 的上限，
-      且不允许从 BOOT_COMPLETED 拉起 —— 常驻监听会被系统掐掉。
+      且不允许从 BOOT_COMPLETED 拉起 —— 守护监听会被系统掐掉。
       specialUse 需要在 service 里写 PROPERTY_SPECIAL_USE_FGS_SUBTYPE 说明用途。
     -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <!-- 开机后恢复 root 轮询 / 无障碍守护（仅当用户自己开启过） -->
+    <!-- 开机后恢复无障碍守护（仅当用户自己开启过） -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!--
       无障碍守护会引导用户把本 App 加入电池优化白名单。
-      只有用户主动点「保活体检」里的按钮才会跳这个系统对话框，不会偷偷弹。
+      只有用户主动点「后台保活」里的按钮才会跳这个系统对话框，不会偷偷弹。
     -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
@@ -38,12 +35,6 @@
     <queries>
         <package android:name="com.tencent.mm" />
         <package android:name="com.eg.android.AlipayGphone" />
-        <!-- Standard parasitic manager is hosted by the system shell package. -->
-        <package android:name="com.android.shell" />
-        <package android:name="org.lsposed.manager" />
-        <package android:name="com.android.shell.lsposed" />
-        <package android:name="io.github.lsposed.manager" />
-        <package android:name="me.weishu.exp" />
         <package android:name="com.gostraight.smallAccountBook.fltandroid" />
         <intent>
             <action android:name="android.intent.action.SEND" />
@@ -62,27 +53,6 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.MyMoney">
 
-        <provider
-            android:name=".lsp.LspStatusProvider"
-            android:authorities="io.github.mymoney.lsp.status"
-            android:exported="true"
-            android:grantUriPermissions="false" />
-
-        <!-- Xposed 模块元数据：仅微信、支付宝交易采集 -->
-        <meta-data
-            android:name="xposedmodule"
-            android:value="true" />
-        <meta-data
-            android:name="xposeddescription"
-            android:value="微信和支付宝交易凭证采集" />
-        <meta-data
-            android:name="xposedminversion"
-            android:value="93" />
-        <meta-data
-            android:name="xposedscope"
-            android:resource="@array/xposed_scope" />
-
-        <activity android:name=".ui.OcrImportActivity" android:exported="false" />
         <activity android:name=".ui.BillResultActivity" android:exported="false"
             android:windowSoftInputMode="adjustResize" />
 
@@ -177,16 +147,6 @@
             android:noHistory="true"
             android:theme="@style/Theme.MyMoney.Translucent" />
 
-        <!-- root 轮询常驻服务（用户手动开启后才启动） -->
-        <service
-            android:name=".root.RootForegroundService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="root 模式下按固定节拍读取当前界面文字，用于生成本地账单草稿（个人自用，不联网）" />
-        </service>
-
         <!--
           无障碍守护：无障碍模式下每 30s 检查一次服务还在不在，掉了发提醒。
           它是前台服务（specialUse），所以在通知栏有一条常驻的低优先级通知。
@@ -200,9 +160,9 @@
                 android:value="无障碍模式下周期检查本应用的无障碍服务是否被系统或厂商关闭，必要时提醒用户重新开启（个人自用，不联网）" />
         </service>
 
-        <!-- 开机/更新后恢复 root 轮询 -->
+        <!-- 开机/更新后恢复无障碍守护 -->
         <receiver
-            android:name=".root.BootReceiver"
+            android:name=".capture.BootReceiver"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
@@ -221,17 +181,6 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
-
-        <!-- User-granted notification access; independent from accessibility and our own notifications. -->
-        <service
-            android:name=".capture.PaymentNotificationListener"
-            android:exported="true"
-            android:label="@string/notification_listener_label"
-            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
-            <intent-filter>
-                <action android:name="android.service.notification.NotificationListenerService" />
-            </intent-filter>
-        </service>
 
         <!--
           无障碍服务：诚实申报

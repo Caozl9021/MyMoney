@@ -1,16 +1,11 @@
-package io.github.mymoney.root
+package io.github.mymoney.capture
 
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import io.github.mymoney.capture.CaptureModeManager
 
 /**
- * 开机后把 root 轮询拉回来。
- *
- * 前台服务本身不是开机自启的；用户既然把它设成主力采集方式，
- * 重启手机后就得继续工作，否则每次开机都要手动去设置页点一下。
- * 只在已选择 Root 模式且识别总开关开启时启动。
+ * 开机或应用更新后恢复无障碍守护服务（仅当用户已开启自动记账时启动）。
  */
 class BootReceiver : BroadcastReceiver() {
 

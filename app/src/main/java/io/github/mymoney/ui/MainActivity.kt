@@ -79,9 +79,6 @@ class MainActivity : ComponentActivity() {
         // 用户经常是「去系统设置授权 → 返回应用」：回来时重算一次通道，别让授权前后的旧判定
         // 继续跑（真机上出现过授权后仍按无授权走 root 读通知）。reconcile 幂等，且读的是缓存。
         CaptureModeManager.reconcile(this)
-        // 凭证通道不受采集预设约束：只要通道是活的就探一次模块加载状态。
-        if (CaptureModeManager.state.value.hookActive)
-            io.github.mymoney.capture.HookTargetMonitor.detect(this)
     }
 
     override fun onPause() {
@@ -370,7 +367,7 @@ private fun AppContent(tabState: MutableIntState, requestAdd: Int, settingsRootR
 
     if (!captureState.configured) {
         CaptureModeScreen(onOrdinarySetup = {
-            captureSettingsDestination = CaptureSettingsDestination.SETUP
+            captureSettingsDestination = CaptureSettingsDestination.AUTOMATION
             tabState.intValue = 3
             CaptureModeManager.prepareOrdinarySetup(context)
         })

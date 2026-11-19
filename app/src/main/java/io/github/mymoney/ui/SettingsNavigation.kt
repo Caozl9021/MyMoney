@@ -13,20 +13,30 @@ import io.github.mymoney.ui.design.*
 /** Navigation rows share the same neutral cards and spacing as the statistics screen. */
 internal data class SettingsLink(
     val title: String,
-    val subtitle: String,
     val icon: ImageVector,
+    val subtitle: String? = null,
+    val trailingText: String? = null,
     val onClick: () -> Unit,
 )
 
 @Composable
 internal fun SettingsNavigationGroup(title: String, links: List<SettingsLink>) {
+    val p = LocalAbPalette.current
     Column(verticalArrangement = Arrangement.spacedBy(AbLayout.headingGap)) {
         GroupHeader(title)
         InsetGroup {
             links.forEachIndexed { index, link ->
-                ListRow(title = link.title, subtitle = link.subtitle,
+                ListRow(
+                    title = link.title,
+                    subtitle = link.subtitle,
                     leading = { SettingsIconBadge(link.title, link.icon) },
-                    dividerAbove = index > 0, chevron = true, onClick = link.onClick)
+                    trailing = link.trailingText?.let { value ->
+                        { Text(value, style = AbType.footnote, color = p.secondaryLabel) }
+                    },
+                    dividerAbove = index > 0,
+                    chevron = true,
+                    onClick = link.onClick,
+                )
             }
         }
     }
@@ -40,10 +50,16 @@ internal fun SettingsMenuPage(
     header: (@Composable () -> Unit)? = null,
 ) {
     SubPageScaffold(title = title, onBack = onBack) { padding ->
-        LazyColumn(Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = AbSpacing.page, end = AbSpacing.page,
-                top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding()),
-            verticalArrangement = Arrangement.spacedBy(AbLayout.groupGap)) {
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = AbSpacing.page,
+                end = AbSpacing.page,
+                top = padding.calculateTopPadding(),
+                bottom = padding.calculateBottomPadding(),
+            ),
+            verticalArrangement = Arrangement.spacedBy(AbLayout.groupGap),
+        ) {
             if (header != null) item { Column(verticalArrangement = Arrangement.spacedBy(AbCardDensity.gap)) { header() } }
             groups.forEach { (label, links) ->
                 item { SettingsNavigationGroup(label, links) }
@@ -59,8 +75,11 @@ internal fun SettingsContentPage(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     SubPageScaffold(title = title, onBack = onBack) { padding ->
-        io.github.mymoney.ui.design.SectionColumn(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-            .padding(horizontal = AbSpacing.page)
-            .padding(top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding()), content = content)
+        io.github.mymoney.ui.design.SectionColumn(
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                .padding(horizontal = AbSpacing.page)
+                .padding(top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding()),
+            content = content,
+        )
     }
 }

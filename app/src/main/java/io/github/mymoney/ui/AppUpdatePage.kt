@@ -8,30 +8,42 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.pm.PackageInfoCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.mymoney.data.update.AppUpdateStore
 import io.github.mymoney.data.update.GitHubAppUpdates
+import io.github.mymoney.ui.design.AbIcons
+import io.github.mymoney.ui.design.GroupFooter
 import io.github.mymoney.ui.design.InsetGroup
 import io.github.mymoney.ui.design.ListRow
 import io.github.mymoney.ui.design.PrimaryButton
 import io.github.mymoney.ui.design.SecondaryButton
+import io.github.mymoney.ui.design.SettingsIconBadge
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-/** 关于页：版本信息与 GitHub Release App 更新。 */
+/** 关于页：版本信息与 App 更新；连点版本号 5 次显示页面诊断。 */
 @Composable
-fun AppUpdatePage(onBack: () -> Unit, onOpenDevelopment: () -> Unit = {}) {
+fun AppUpdatePage(onBack: () -> Unit, onOpenDebug: () -> Unit = {}) {
     val context = LocalContext.current
     val state by AppUpdateStore.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val info = remember(context) { context.packageManager.getPackageInfo(context.packageName, 0) }
     val versionName = info.versionName ?: "未知"
     val versionCode = PackageInfoCompat.getLongVersionCode(info)
+    val prefs = remember(context) { context.getSharedPreferences("about_page", Context.MODE_PRIVATE) }
+    var devUnlocked by remember { mutableStateOf(prefs.getBoolean(KEY_DEV_UNLOCKED, false)) }
+    var taps by remember { mutableIntStateOf(0) }
+    var lastTapAt by remember { mutableLongStateOf(0L) }
+    var feedback by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         AppUpdateStore.init(context.applicationContext)
@@ -39,23 +51,41 @@ fun AppUpdatePage(onBack: () -> Unit, onOpenDevelopment: () -> Unit = {}) {
 
     SettingsContentPage("关于", onBack) {
         InsetGroup {
-            ListRow(title = "麦米 My Money", subtitle = "版本 $versionName（$versionCode）")
             ListRow(
-                title = "App 更新",
-                subtitle = statusText(state, versionName),
-                dividerAbove = true,
+                title = "麦米",
+                subtitle = "$versionName ($versionCode)",
+                onClick = {
+                    // 连点 5 次来回切换：未解锁则开启，已解锁则关闭。
+                    val now = System.currentTimeMillis()
+                    taps = if (now - lastTapAt > TAP_WINDOW_MS) 1 else taps + 1
+                    lastTapAt = now
+                    if (taps >= TAP_COUNT) {
+                        taps = 0
+                        devUnlocked = !devUnlocked
+                        prefs.edit().putBoolean(KEY_DEV_UNLOCKED, devUnlocked).apply()
+                        feedback = if (devUnlocked) "已开启开发者选项" else "已关闭开发者选项"
+                    }
+                },
             )
+            statusText(state, versionName)?.let { status ->
+                ListRow(
+                    title = "更新",
+                    subtitle = status,
+                    dividerAbove = true,
+                )
+            }
         }
+        feedback?.let { GroupFooter(it) }
 
         state.candidate?.let { candidate ->
             InsetGroup {
                 ListRow(
-                    title = "新版本 ${candidate.manifest.versionName}（${candidate.manifest.versionCode}）",
-                    subtitle = "需要 Android ${candidate.manifest.minSdk} 及以上 · ${formatSize(candidate.manifest.sizeBytes)}",
+                    title = "新版本 ${candidate.manifest.versionName} (${candidate.manifest.versionCode})",
+                    subtitle = "Android ${candidate.manifest.minSdk}+ · ${formatSize(candidate.manifest.sizeBytes)}",
                 )
                 ListRow(
                     title = "更新说明",
-                    subtitle = candidate.manifest.notes.ifBlank { "暂无说明" },
+                    subtitle = candidate.manifest.notes.ifBlank { "无" },
                     subtitleMaxLines = 20,
                     dividerAbove = true,
                 )
@@ -64,7 +94,7 @@ fun AppUpdatePage(onBack: () -> Unit, onOpenDevelopment: () -> Unit = {}) {
 
         when (state.status) {
             AppUpdateStore.Status.CHECKING -> PrimaryButton(
-                text = "正在检查…", onClick = {}, modifier = Modifier.fillMaxWidth(), enabled = false, busy = true,
+                text = "检查中…", onClick = {}, modifier = Modifier.fillMaxWidth(), enabled = false, busy = true,
             )
             AppUpdateStore.Status.DOWNLOADING -> {
                 PrimaryButton(
@@ -87,41 +117,46 @@ fun AppUpdatePage(onBack: () -> Unit, onOpenDevelopment: () -> Unit = {}) {
                     modifier = Modifier.fillMaxWidth(),
                 )
                 SecondaryButton(
-                    text = "删除已下载安装包", onClick = { AppUpdateStore.clearDownload() },
+                    text = "删除安装包", onClick = { AppUpdateStore.clearDownload() },
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
             AppUpdateStore.Status.NEED_PERMISSION -> PrimaryButton(
-                text = "去允许安装", onClick = { AppUpdateStore.openInstallPermissionSettings(context) },
+                text = "允许安装", onClick = { AppUpdateStore.openInstallPermissionSettings(context) },
                 modifier = Modifier.fillMaxWidth(),
             )
             AppUpdateStore.Status.INSTALL_LAUNCHED -> SecondaryButton(
                 text = "重新打开安装器", onClick = { AppUpdateStore.install(context) },
                 modifier = Modifier.fillMaxWidth(),
             )
-            AppUpdateStore.Status.INCOMPATIBLE -> {
-                PrimaryButton(
-                    text = "重新检查", onClick = {
-                        scope.launch(Dispatchers.IO) { AppUpdateStore.checkForUpdates() }
-                    }, modifier = Modifier.fillMaxWidth(),
-                )
-            }
+            AppUpdateStore.Status.INCOMPATIBLE -> PrimaryButton(
+                text = "重新检查", onClick = {
+                    scope.launch(Dispatchers.IO) { AppUpdateStore.checkForUpdates() }
+                }, modifier = Modifier.fillMaxWidth(),
+            )
             else -> PrimaryButton(
                 text = "检查更新", onClick = {
                     scope.launch(Dispatchers.IO) { AppUpdateStore.checkForUpdates() }
                 }, modifier = Modifier.fillMaxWidth(),
             )
         }
-        InsetGroup {
-            ListRow(title = "开发调试", subtitle = "识别帮助、通知与页面诊断",
-                leading = { io.github.mymoney.ui.design.SettingsIconBadge("开发调试", io.github.mymoney.ui.design.AbIcons.Terminal) },
-                chevron = true, onClick = onOpenDevelopment)
+
+        if (devUnlocked) {
+            InsetGroup {
+                ListRow(
+                    title = "页面诊断",
+                    leading = { SettingsIconBadge("页面诊断", AbIcons.Ocr) },
+                    chevron = true,
+                    onClick = onOpenDebug,
+                )
+            }
         }
+
         if (state.status != AppUpdateStore.Status.CHECKING &&
             state.status != AppUpdateStore.Status.DOWNLOADING
         ) {
             SecondaryButton(
-                text = "打开 GitHub Releases",
+                text = "GitHub Releases",
                 onClick = { openReleases(context) },
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -129,21 +164,26 @@ fun AppUpdatePage(onBack: () -> Unit, onOpenDevelopment: () -> Unit = {}) {
     }
 }
 
-private fun statusText(state: AppUpdateStore.State, currentVersion: String): String = when (state.status) {
-    AppUpdateStore.Status.IDLE -> state.message ?: "尚未检查。点击下方按钮从 GitHub Releases 检查更新。"
-    AppUpdateStore.Status.CHECKING -> "正在检查更新…"
-    AppUpdateStore.Status.UP_TO_DATE -> "当前已是最新版本（$currentVersion）。"
-    AppUpdateStore.Status.AVAILABLE -> state.message ?: "发现可用更新 ${state.candidate?.manifest?.versionName.orEmpty()}。"
+/** 连点版本号解锁开发者入口；解锁后常驻，不展示给普通用户。 */
+private const val TAP_COUNT = 5
+private const val TAP_WINDOW_MS = 2_000L
+private const val KEY_DEV_UNLOCKED = "dev_unlocked"
+
+private fun statusText(state: AppUpdateStore.State, currentVersion: String): String? = when (state.status) {
+    AppUpdateStore.Status.IDLE -> state.message
+    AppUpdateStore.Status.CHECKING -> "检查中…"
+    AppUpdateStore.Status.UP_TO_DATE -> "已是最新（$currentVersion）"
+    AppUpdateStore.Status.AVAILABLE -> state.message ?: "有新版本 ${state.candidate?.manifest?.versionName.orEmpty()}"
     AppUpdateStore.Status.INCOMPATIBLE -> {
         val manifest = state.incompatible?.manifest
-        if (manifest == null) "当前系统没有可用的更新版本。"
-        else "最新版本需要 Android ${manifest.minSdk} 及以上；当前系统为 API ${Build.VERSION.SDK_INT}。"
+        if (manifest == null) "暂无兼容版本"
+        else "需要 Android ${manifest.minSdk}+（当前 API ${Build.VERSION.SDK_INT}）"
     }
-    AppUpdateStore.Status.DOWNLOADING -> "正在下载 ${state.progress}%…"
-    AppUpdateStore.Status.READY -> "已下载 ${state.downloaded?.manifest?.versionName.orEmpty()}，可交给系统安装器。"
-    AppUpdateStore.Status.NEED_PERMISSION -> state.message ?: "请允许麦米安装应用。"
-    AppUpdateStore.Status.INSTALL_LAUNCHED -> state.message ?: "已打开系统安装器。"
-    AppUpdateStore.Status.ERROR -> state.message ?: "检查更新失败，请稍后重试。"
+    AppUpdateStore.Status.DOWNLOADING -> "下载中 ${state.progress}%"
+    AppUpdateStore.Status.READY -> "已下载 ${state.downloaded?.manifest?.versionName.orEmpty()}"
+    AppUpdateStore.Status.NEED_PERMISSION -> state.message ?: "请允许安装应用"
+    AppUpdateStore.Status.INSTALL_LAUNCHED -> state.message ?: "已打开安装器"
+    AppUpdateStore.Status.ERROR -> state.message ?: "检查失败"
 }
 
 private fun formatSize(bytes: Long): String =

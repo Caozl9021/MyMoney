@@ -55,56 +55,45 @@ class CaptureModePolicyTest {
         assertEquals(CaptureMode.ROOT, CaptureModePolicy.restore(null, true))
         assertNull(CaptureModePolicy.restore(null, false))
     }
-    @Test fun notificationOnlyDoesNotNeedPageModeAndPauseStopsAllSources() {
-        val only = CaptureModeState(mode = null, enabled = true, pageEnabled = false, notificationsEnabled = true)
-        assertTrue(only.configured)
-        // 通道开着就是开着。这一刻能不能真读到通知取决于 listener/root 的可用性，
-        // 不再是 CaptureModeState 的答案——那是 ChannelSelection 的事。
-        assertTrue(only.notificationActive)
-        assertFalse(only.copy(enabled = false).notificationActive)
+    @Test fun legacyFlagsAloneDoNotCountAsConfigured() {
+        val legacyOnly = CaptureModeState(
+            mode = null,
+            enabled = true,
+            pageEnabled = false,
+            notificationsEnabled = true,
+            smsEnabled = true,
+            hookEnabled = true,
+        )
+        assertFalse(legacyOnly.configured)
+        assertFalse(legacyOnly.pageActive)
     }
 
-    @Test fun disablingPageKeepsChoiceAndNotificationActivity() {
-        for (mode in CaptureMode.entries) {
-            val state = CaptureModeState(mode, true, pageEnabled = false, notificationsEnabled = true)
-            assertEquals(mode, state.mode)
-            assertTrue(state.notificationActive)
-            assertFalse(state.pageActive)
-        }
-    }
-
-    @Test fun selectingPageFromPausedNotificationOnlyPreservesPause() {
-        val current = CaptureModeState(null, false, false, true)
-        val next = CaptureModePolicy.select(current, CaptureMode.ACCESSIBILITY)
-        assertFalse(next.enabled)
-        assertTrue(next.notificationsEnabled)
-        assertFalse(next.pageEnabled)
+    @Test fun firstSelectionFromUnconfiguredEnablesRecognitionAndPage() {
+        val next = CaptureModePolicy.select(
+            CaptureModeState(mode = null, enabled = false, pageEnabled = false),
+            CaptureMode.ACCESSIBILITY,
+        )
+        assertTrue(next.configured)
+        assertTrue(next.enabled)
+        assertTrue(next.pageEnabled)
+        assertTrue(next.pageActive)
         assertEquals(CaptureMode.ACCESSIBILITY, next.mode)
-        assertFalse(next.pageActive)
     }
 
-    @Test fun switchingPreservesExplicitChannelChoices() {
-        val current = CaptureModeState(CaptureMode.ROOT, false, pageEnabled = false,
-            notificationsEnabled = false, smsEnabled = true, hookEnabled = true)
+    @Test fun switchingBetweenConfiguredModesPreservesPause() {
+        val current = CaptureModeState(mode = CaptureMode.ROOT, enabled = false, pageEnabled = true)
         val next = CaptureModePolicy.select(current, CaptureMode.ACCESSIBILITY)
+        assertTrue(next.configured)
         assertFalse(next.enabled)
-        assertFalse(next.pageEnabled)
-        assertFalse(next.notificationsEnabled)
-        assertTrue(next.smsEnabled)
-        assertTrue(next.hookEnabled)
-        assertFalse(next.hookActive)
-        // 切换模式不影响凭证通道：它只看总开关和自己的开关，两种模式下都该是活的。
-        assertTrue(next.copy(mode = CaptureMode.ROOT, enabled = true).hookActive)
-        assertTrue(next.copy(mode = CaptureMode.ACCESSIBILITY, enabled = true).hookActive)
+        assertFalse(next.pageActive)
+        assertEquals(CaptureMode.ACCESSIBILITY, next.mode)
     }
 
-    @Test fun alreadyConfiguredModeNullKeepsIndependentChannels() {
-        val smsOnly = CaptureModeState(null, false, pageEnabled = false, smsEnabled = true)
-        val next = CaptureModePolicy.select(smsOnly, CaptureMode.ACCESSIBILITY)
-        assertFalse(next.enabled)
-        assertFalse(next.pageEnabled)
-        assertFalse(next.notificationsEnabled)
-        assertTrue(next.smsEnabled)
+    @Test fun disablingMasterSwitchStopsPageActivityWhileKeepingChoice() {
+        val paused = CaptureModeState(mode = CaptureMode.ACCESSIBILITY, enabled = false, pageEnabled = true)
+        assertTrue(paused.configured)
+        assertFalse(paused.pageActive)
+        assertTrue(paused.copy(enabled = true).pageActive)
     }
 
     @Test fun pageDefaultNeverFollowsARestoredRootMode() {

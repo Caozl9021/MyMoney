@@ -24,3 +24,19 @@ object SampleIndex {
         return target
     }
 }
+
+internal fun atomicText(file: File, text: String) {
+    file.parentFile?.mkdirs()
+    val temp = File(file.parentFile, file.name + ".tmp")
+    try {
+        temp.outputStream().use { it.write(text.toByteArray(Charsets.UTF_8)); it.fd.sync() }
+        java.nio.file.Files.move(
+            temp.toPath(),
+            file.toPath(),
+            java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+            java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+        )
+    } finally {
+        temp.delete()
+    }
+}

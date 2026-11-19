@@ -1,6 +1,7 @@
 package io.github.mymoney
 
 import android.app.Instrumentation
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
@@ -95,9 +96,12 @@ class SettingsNavigationInstrumentation : Instrumentation() {
             AppUpdateStore.init(targetContext)
             Thread.sleep(300)
             val opened = AtomicInteger()
+            // 关于页的「页面诊断」默认隐藏，由连点版本号 5 次解锁；此处预先解锁后验证入口可用。
+            targetContext.getSharedPreferences("about_page", Context.MODE_PRIVATE)
+                .edit().putBoolean("dev_unlocked", true).apply()
             runOnMainSync {
                 activity!!.findViewById<ComposeView>(R.id.main_content).setContent {
-                    MyMoneyTheme { AppUpdatePage(onBack={}, onOpenDevelopment={opened.incrementAndGet()}) }
+                    MyMoneyTheme { AppUpdatePage(onBack={}, onOpenDebug={opened.incrementAndGet()}) }
                 }
             }
             for (status in AppUpdateStore.Status.entries) {
@@ -108,7 +112,7 @@ class SettingsNavigationInstrumentation : Instrumentation() {
                     picture.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
                 }
                 val before = opened.get()
-                click("开发调试")
+                click("页面诊断")
                 check(opened.get() == before + 1) { "Development unreachable at $status" }
                 check(states.value.status == status) { "Navigation changed update state" }
                 checks += "about-development-clickable-without-update-side-effect:$status"

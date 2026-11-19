@@ -117,17 +117,6 @@ dependencies {
     // ML Kit remains exclusively in the comparison test APK.
     androidTestImplementation("com.google.mlkit:text-recognition-chinese:16.0.1")
 
-    // Xposed API（内置 LSP 增强模块）
-    compileOnly("de.robv.android.xposed:api:82")
-
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlin:kotlin-test")
 }
-
-// Display the same release metadata used by the independent rule packager.
-val ruleReleaseAssets = tasks.register<Copy>("prepareRuleReleaseAssets") {
-    from(rootProject.file("billkit/rules/package.json")) { rename { "official-rule-release.json" } }
-    into(layout.buildDirectory.dir("generated/ruleReleaseAssets"))
-}
-android.sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/ruleReleaseAssets"))
-tasks.named("preBuild").configure { dependsOn(ruleReleaseAssets) }

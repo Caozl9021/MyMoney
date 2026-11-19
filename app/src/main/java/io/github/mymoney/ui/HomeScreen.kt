@@ -286,7 +286,7 @@ fun HomeScreen(
             if (!recognized && FirstRunGuide.configurationComplete(healthInput)) homeCardItem(key = "guide") {
                 InsetGroup {
                     ListRow(title = "识别第一笔账单",
-                        subtitle = "在所选应用收到交易通知或打开交易详情后，识别结果会进入待确认。")
+                        subtitle = "打开微信或支付宝交易详情页后自动识别。")
                 }
             }
 

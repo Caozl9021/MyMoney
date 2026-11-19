@@ -78,7 +78,7 @@ class ConfirmActivity : ComponentActivity() {
         val token = incoming.getStringExtra("mymoney_auto_capture_token") ?: return true
         val settings = io.github.mymoney.data.Settings(this)
         return settings.enabled && settings.autoConfirm &&
-            token == io.github.mymoney.capture.NotificationIngress.configurationToken(this) &&
+            token == io.github.mymoney.capture.CaptureConfigToken.of(this) &&
             (getSystemService(KEYGUARD_SERVICE) as? android.app.KeyguardManager)?.isKeyguardLocked != true
     }
 
