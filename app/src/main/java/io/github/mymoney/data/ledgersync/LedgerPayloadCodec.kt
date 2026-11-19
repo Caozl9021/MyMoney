@@ -147,6 +147,20 @@ object LedgerPayloadCodec {
         deletedAt = (payload["deletedAt"] as? Number)?.toLong(),
     )
 
+    // ---------------- 账本配置（meta:config） ----------------
+    fun encodeMeta(
+        monthStartDay: Int,
+        expenseGroups: List<io.github.mymoney.data.CategoryGroup>,
+        incomeGroups: List<io.github.mymoney.data.CategoryGroup>,
+        updatedAt: Long,
+    ): Map<String, Any?> = linkedMapOf(
+        "syncId" to "config",
+        "monthStartDay" to monthStartDay,
+        "expenseCategories" to expenseGroups.map { linkedMapOf("name" to it.name, "subs" to it.subs) },
+        "incomeCategories" to incomeGroups.map { linkedMapOf("name" to it.name, "subs" to it.subs) },
+        "updatedAt" to updatedAt,
+    )
+
     fun decodeBillPayload(payloadJson: String): Map<*, *> =
         MiniJson.decode(payloadJson) as? Map<*, *> ?: throw IllegalArgumentException("账本条目内容不是对象")
 

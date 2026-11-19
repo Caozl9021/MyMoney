@@ -27,6 +27,7 @@ object RuleSyncSettings {
     private const val KEY_INITIAL_MERGE_PENDING = "initial_merge_pending"
     private const val KEY_USE_EMBEDDED = "use_embedded"
     private const val KEY_CTRL_URL = "ctrl_url"
+    private const val KEY_REALTIME_SYNC = "realtime_sync_enabled"
 
     fun load(context: Context): RuleSyncConfig {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -60,6 +61,17 @@ object RuleSyncSettings {
     fun setInitialMergePending(context: Context, pending: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean(KEY_INITIAL_MERGE_PENDING, pending)
+            .apply()
+    }
+
+    /** 「新记录自动实时同步」默认开启；与配对状态无关，未配对时不会真正发请求。 */
+    fun realtimeSyncEnabled(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_REALTIME_SYNC, true)
+
+    fun setRealtimeSyncEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_REALTIME_SYNC, enabled)
             .apply()
     }
 

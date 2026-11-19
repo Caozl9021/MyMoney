@@ -10,6 +10,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
@@ -27,17 +28,18 @@ internal object SettingsIconColors {
     val indigo = Color(0xFF6366F1)
 }
 
-/** White symbols on strong colors; yellow uses dark ink for a clear silhouette. */
-internal fun badgeForeground(background: Color): Color =
-    if (1.05f / (background.luminance() + 0.05f) >= 3f) Color.White else Color(0xFF202024)
+/** 纯色圆形徽章底色：保持不透明饱和色，过亮的浅色（如深色模式文字色）适当压深以确保白色图标清晰。 */
+internal fun solidBadgeBackground(tint: Color): Color {
+    val opaque = tint.copy(alpha = 1f)
+    return if (opaque.luminance() > 0.38f) lerp(opaque, Color.Black, 0.28f) else opaque
+}
 
 @Composable
 internal fun SettingsIconBadge(title: String, fallback: ImageVector, size: Dp = AbCardDensity.settingsIcon) {
     val colors = SettingsIconColors
-    val p = LocalAbPalette.current
     val color = when (title) {
-        "支出分类" -> p.expenseIcon
-        "收入分类" -> p.incomeIcon
+        "支出分类" -> colors.pink
+        "收入分类" -> colors.green
         "分类", "餐段设置", "记账周期" -> colors.orange
         "资产", "识别通道", "导出到 iCost", "页面诊断" -> colors.blue
         "备注", "备注模板", "确认卡" -> colors.yellow
@@ -64,16 +66,15 @@ internal fun SettingsIconBadge(title: String, fallback: ImageVector, size: Dp = 
         "通知模板" -> "payments"
         else -> null
     }
-    val dark = p.cardBg.luminance() < 0.5f
     Box(
-        Modifier.size(size).clip(CircleShape).background(color.copy(alpha = if (dark) 0.22f else 0.14f)),
+        Modifier.size(size).clip(CircleShape).background(solidBadgeBackground(color)),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = glyph?.let(CategoryIcons::vectorFor) ?: fallback,
             contentDescription = null,
-            modifier = Modifier.size(size * 0.52f),
-            tint = color,
+            modifier = Modifier.size(size * 0.54f),
+            tint = Color.White,
         )
     }
 }

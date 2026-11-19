@@ -340,9 +340,9 @@ fun BillActionsHost(
                                             RoundedSquareIconButton(
                                                 icon = AbIcons.Receipt,
                                                 contentDescription = if (isReimbursable) "取消报销" else "标为可报销",
-                                                tint = if (isReimbursable) reimburseBlue else p.secondaryLabel,
-                                                containerColor = if (isReimbursable) reimburseBlue.copy(alpha = 0.14f) else p.cardBg,
-                                                borderColor = if (isReimbursable) reimburseBlue.copy(alpha = 0.35f) else null,
+                                                tint = if (isReimbursable) Color.White else p.secondaryLabel,
+                                                containerColor = if (isReimbursable) reimburseBlue else p.cardBg,
+                                                borderColor = null,
                                             ) {
                                                 val target = if (isReimbursable) Reimburse.NONE else Reimburse.PENDING
                                                 requestReimbursement(app, bill, target)

@@ -56,6 +56,12 @@ object BillWriter {
             runCatching { io.github.mymoney.data.ledgersync.LedgerSyncRepository.enqueueBill(app, bill, deleted = true) }
                 .onFailure { android.util.Log.e("LedgerEnqueue", "enqueue deleted syncId=${bill.syncId} failed", it) }
         }
+        if (ids.isNotEmpty() || deleted.isNotEmpty()) {
+            // 账单联动产生的资产流水也在同一事务里写好了：补一次资产 diff 入队，再触发防抖推送。
+            runCatching { AssetStore.publishAssetChanges() }
+                .onFailure { android.util.Log.e("LedgerEnqueue", "publish asset changes failed", it) }
+            io.github.mymoney.data.ledgersync.RealtimeSyncTrigger.notifyChanged(app)
+        }
     }
 
     data class SaveResult(val inserted: Boolean, val bill: BillEntity?)

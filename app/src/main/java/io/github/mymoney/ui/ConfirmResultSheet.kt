@@ -52,6 +52,7 @@ import io.github.mymoney.ui.design.AbType
 import io.github.mymoney.ui.design.LocalAbPalette
 import io.github.mymoney.ui.design.PrimaryButton
 import io.github.mymoney.ui.design.SecondaryButton
+import io.github.mymoney.ui.design.solidBadgeBackground
 import com.example.billkit.BillDraft
 import com.example.billkit.BillType
 import java.text.SimpleDateFormat
@@ -116,9 +117,9 @@ fun ConfirmResultSheet(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AbSpacing.m)) {
                     Box(
-                        Modifier.size(32.dp).clip(RoundedCornerShape(AbRadius.capsule)).background(p.green.copy(alpha = 0.12f)),
+                        Modifier.size(32.dp).clip(RoundedCornerShape(AbRadius.capsule)).background(solidBadgeBackground(p.green)),
                         contentAlignment = Alignment.Center,
-                    ) { Icon(AbIcons.Check, contentDescription = null, tint = p.green, modifier = Modifier.size(18.dp)) }
+                    ) { Icon(AbIcons.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp)) }
                     Text(title, style = AbType.headline, color = p.label,
                         modifier = Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite })
                 }

@@ -199,7 +199,7 @@ object AbMotion {
     const val slow = 320
 }
 
-/** 分类色板（温和语义色，兼顾浅底 14% 柔光与前景图标 100% 对比度）。 */
+/** 分类色板（纯色实底 + 白色图标，兼顾浅/深双模式下的高对比度与辨识度）。 */
 val AbAccentSwatches = listOf(
     Color(0xFFE67E22), // 0: 暖琥珀橙（餐饮/饮品）
     Color(0xFFE04F5F), // 1: 柔和珊瑚粉（购物/服饰/美容/人情）

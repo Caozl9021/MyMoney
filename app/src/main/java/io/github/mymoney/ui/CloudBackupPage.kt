@@ -25,10 +25,16 @@ import io.github.mymoney.data.rulesync.LedgerBackupCoordinator
 import io.github.mymoney.data.rulesync.RuleSyncApiException
 import io.github.mymoney.data.rulesync.RuleSyncSettings
 import io.github.mymoney.data.rulesync.TsnetSession
+import io.github.mymoney.data.ledgersync.LedgerSyncCoordinator
+import io.github.mymoney.data.ledgersync.RealtimeSyncTrigger
 import io.github.mymoney.ui.design.*
 import io.github.mymoney.ui.scan.CameraPermissionDialog
 import io.github.mymoney.ui.scan.QrScannerScreen
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -71,6 +77,9 @@ internal fun CloudBackupPage(
     var scannedError by remember { mutableStateOf("") }
     var showPermissionHint by remember { mutableStateOf(false) }
     var lastBackup by remember { mutableStateOf(LedgerBackupCoordinator.lastBackup(context)) }
+    var realtimeEnabled by remember { mutableStateOf(RuleSyncSettings.realtimeSyncEnabled(context)) }
+    val syncState by LedgerSyncCoordinator.state.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { runCatching { LedgerSyncCoordinator.refreshStatus(context) } }
     var enrollment by remember { mutableStateOf<CloudBackupCoordinator.Enrollment?>(null) }
     var enrollmentLocked by remember { mutableStateOf(false) }
     var submittedSource by remember { mutableStateOf<CloudBackupApi.Source?>(null) }
@@ -254,6 +263,29 @@ internal fun CloudBackupPage(
                 ListRow(title = when { busy -> "正在处理…"; verified -> "已连接到我的服务器"; needsAuthorization -> "连接云备份"; else -> "等待验证连接" },
                     subtitle = if (config.deviceName.isNotBlank()) "当前设备：${config.deviceName}" else "账本备份到自己的服务器")
                 if (!needsAuthorization) ListRow(title = "最近成功备份", subtitle = lastBackup, dividerAbove = true)
+                if (!needsAuthorization) {
+                    val realtimeStatus = when {
+                        !realtimeEnabled -> "已暂停，仅「立即备份」时上传"
+                        syncState.pending > 0 -> "待同步 ${syncState.pending} 项（等待网络）"
+                        syncState.lastSyncAt != null -> "实时同步已开启 · 最近同步 " +
+                            SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(syncState.lastSyncAt!!))
+                        else -> "实时同步已开启 · 记账后自动上传"
+                    }
+                    ListRow(
+                        title = "新记录自动实时同步",
+                        subtitle = realtimeStatus,
+                        dividerAbove = true,
+                        trailing = {
+                            AbSwitch(realtimeEnabled) { checked ->
+                                realtimeEnabled = checked
+                                RuleSyncSettings.setRealtimeSyncEnabled(context, checked)
+                                if (checked) RealtimeSyncTrigger.flushNow(context)
+                                else RealtimeSyncTrigger.cancelTimer()
+                                scope.launch { runCatching { LedgerSyncCoordinator.refreshStatus(context) } }
+                            }
+                        },
+                    )
+                }
             }
             if (!needsAuthorization && enrollment == null) {
                 PrimaryButton(text = "立即备份", busy = busy, enabled = !busy && verified,

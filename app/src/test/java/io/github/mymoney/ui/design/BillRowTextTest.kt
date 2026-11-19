@@ -1,5 +1,6 @@
 package io.github.mymoney.ui.design
 
+import androidx.compose.ui.graphics.luminance
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -82,6 +83,29 @@ class BillRowTextTest {
         assertNotEquals(billIconTint(p, "EXPENSE", "餐饮"), billIconTint(p, "EXPENSE", "购物"))
         assertEquals(p.transfer, billIconTint(p, "TRANSFER", "餐饮"))
         assertEquals(p.refund, billIconTint(p, "REFUND", "餐饮"))
+    }
+
+    @Test fun solidBadgeBackgroundKeepsOpaqueColorsAndDarkensBrightTokensForWhiteIcons() {
+        val swatches = AbAccentSwatches + listOf(
+            SettingsIconColors.orange, SettingsIconColors.blue, SettingsIconColors.yellow,
+            SettingsIconColors.pink, SettingsIconColors.violet, SettingsIconColors.teal,
+            SettingsIconColors.green, SettingsIconColors.indigo,
+        )
+        swatches.forEach { swatch ->
+            val bg = solidBadgeBackground(swatch)
+            assertEquals(1f, bg.alpha, 0.001f)
+            assertTrue("Expected white-friendly luminance <= 0.38 for $swatch", bg.luminance() <= 0.38f)
+        }
+        listOf(
+            DarkPalette.income,
+            DarkPalette.refund,
+            DarkPalette.transfer,
+            DarkPalette.accent,
+        ).forEach { bright ->
+            val bg = solidBadgeBackground(bright)
+            assertEquals(1f, bg.alpha, 0.001f)
+            assertTrue("Expected darkened background luminance <= 0.38 for $bright", bg.luminance() <= 0.38f)
+        }
     }
 
     @Test fun semanticColorsReachWcagContrastOnTheirSurfaces() {

@@ -10,7 +10,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -20,7 +19,7 @@ import io.github.mymoney.R
  * 分类与功能徽章图标（Lucide Icons：24×24、2.0dp 圆头圆角描边）。
  *
  * 与顶部栏、底部悬浮 Dock（[TabGlyphIcon]）、通用操作（[AbIcons]）保持同一套几何语言，
- * 搭配圆形 Tonal 柔光浅底，避免实心块与线性图标混杂带来的割裂感。
+ * 搭配纯色圆形实底与白色图标，全站保持统一质感。
  */
 object CategoryIcons {
 
@@ -315,7 +314,7 @@ object CategoryIcons {
     }
 }
 
-/** 分类图标徽章：圆形 Tonal 柔光浅底 + Lucide 同色线性图标，和账单行、分类管理页共用。 */
+/** 分类图标徽章：纯色圆形实底 + 白色 Lucide 线性图标，和账单行、分类管理页共用。 */
 @Composable
 fun CategoryBadge(
     category: String?,
@@ -324,19 +323,18 @@ fun CategoryBadge(
     size: Dp = 38.dp,
     foreground: Color? = null,
 ) {
-    val dark = LocalAbPalette.current.cardBg.luminance() < 0.5f
     Box(
         modifier = modifier
             .size(size)
             .clip(CircleShape)
-            .background(tint.copy(alpha = if (dark) 0.22f else 0.14f)),
+            .background(solidBadgeBackground(tint)),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = CategoryIcons.vectorFor(CategoryIcons.keyFor(category)),
             contentDescription = null,
-            modifier = Modifier.size(size * 0.52f),
-            tint = foreground ?: tint,
+            modifier = Modifier.size(size * 0.54f),
+            tint = foreground ?: Color.White,
         )
     }
 }

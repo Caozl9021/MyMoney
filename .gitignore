@@ -170,3 +170,9 @@ venv/
 !/deploy/home-sync/README.md
 !/server/README.md
 connect-code.env
+
+# Rust 服务端与前端仪表盘构建产物
+/server-rs/target/
+/web/node_modules/
+/web/dist/
+/web/.vite/

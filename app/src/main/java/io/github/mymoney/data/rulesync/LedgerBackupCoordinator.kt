@@ -100,11 +100,15 @@ object LedgerBackupCoordinator {
                 "appVersion" to appVersion(context))).toByteArray())
         }
         require(file.exists()) { "待上传快照缺失，请检查本机私有备份" }
-        Backup.decode(file.readText())
+        val snapshot = Backup.decode(file.readText())
         val version = manifest?.get("appVersion") as? String ?: appVersion(context)
         val result = LedgerBackupApi.upload(config, token, id, file, version, transport(context))
         require(context.getSharedPreferences("ledger_backup", Context.MODE_PRIVATE).edit()
             .putString(successKey(config), "${result.id}|${java.text.DateFormat.getDateTimeInstance().format(java.util.Date(java.time.OffsetDateTime.parse(result.uploadedAt).toInstant().toEpochMilli()))} · ${result.billCount} 笔").commit()) { "上传成功，本机状态未能保存" }
+        // 这份全量快照已包含导出时刻之前的状态：清掉被覆盖的待推增量，避免重复推送。
+        runCatching {
+            io.github.mymoney.data.ledgersync.LedgerSyncRepository.clearCoveredOutbox(context, snapshot.exportedAt)
+        }
         // Keep the completed snapshot as a local recovery point; only its pending marker is disposable.
         pending.delete()
         result

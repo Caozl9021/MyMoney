@@ -31,6 +31,7 @@ class App : Application() {
         io.github.mymoney.data.update.AppUpdateStore.init(this)
         io.github.mymoney.data.LedgerPeriodStore.init(this)
         io.github.mymoney.data.AssetStore.init(this)
+        io.github.mymoney.data.ledgersync.RealtimeSyncTrigger.init(this)
         io.github.mymoney.data.LocalRuleStore.init(this)
         io.github.mymoney.data.ExternalRuleStore.init(this)
         io.github.mymoney.data.CoverageStore.init(this)
@@ -46,6 +47,16 @@ class App : Application() {
         val settings = Settings(this)
 
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        // 上一次进程被杀时 Outbox 里可能还有待推项：联网后补一次，不额外轮询。
+        scope.launch {
+            runCatching {
+                if (io.github.mymoney.data.ledgersync.RealtimeSyncTrigger.enabled(this@App) &&
+                    io.github.mymoney.data.ledgersync.LedgerSyncRepository.pendingCount(this@App) > 0
+                ) {
+                    io.github.mymoney.data.ledgersync.RealtimeSyncTrigger.flushNow(this@App)
+                }
+            }
+        }
         scope.launch { io.github.mymoney.systems.LauncherIcons.reconcile(this@App) }
         scope.launch {
             runCatching { io.github.mymoney.data.BackupStore.completePendingConfiguration(this@App) }

@@ -98,4 +98,28 @@ class LedgerPayloadCodecTest {
             // ok
         }
     }
+
+    @Test
+    fun metaConfigCarriesMonthStartAndCategoryTrees() {
+        val payload = LedgerPayloadCodec.encodeMeta(
+            monthStartDay = 12,
+            expenseGroups = listOf(
+                io.github.mymoney.data.CategoryGroup("餐饮", listOf("午餐", "咖啡茶饮")),
+                io.github.mymoney.data.CategoryGroup("交通", emptyList()),
+            ),
+            incomeGroups = listOf(io.github.mymoney.data.CategoryGroup("工资", emptyList())),
+            updatedAt = 1_730_000_500_000,
+        )
+        val decoded = MiniJson.decode(MiniJson.encode(payload)) as Map<*, *>
+        assertEquals("config", decoded["syncId"])
+        assertEquals(12L, (decoded["monthStartDay"] as Number).toLong())
+        assertEquals(1_730_000_500_000L, (decoded["updatedAt"] as Number).toLong())
+        val expense = decoded["expenseCategories"] as List<*>
+        assertEquals(2, expense.size)
+        val first = expense[0] as Map<*, *>
+        assertEquals("餐饮", first["name"])
+        assertEquals(listOf("午餐", "咖啡茶饮"), first["subs"])
+        val income = decoded["incomeCategories"] as List<*>
+        assertEquals("工资", (income[0] as Map<*, *>)["name"])
+    }
 }

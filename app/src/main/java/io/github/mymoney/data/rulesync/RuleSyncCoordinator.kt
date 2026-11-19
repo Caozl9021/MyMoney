@@ -117,7 +117,7 @@ object RuleSyncCoordinator {
                 LedgerSyncRepository.bindSpace(
                     context,
                     response.spaceId,
-                    LedgerSyncSettings.ledgerId(context),
+                    LedgerSyncSettings.effectiveLedgerId(context),
                     response.epoch,
                 )
             }

@@ -1,6 +1,8 @@
 # 更新日志
 
-> 最新（2026-11-18）：**全局视觉一致性、圆形 Tonal 徽章与 Lucide 图标体系重构已合入源码（本次不升版本号、不出包，版本保持 `1.10.3/162` 待随下版发布）**；已完成 App 961 + Billkit 239 单元测试与 Android 15 模拟器浅色/深色逐页实测。
+> 最新（2026-11-19）：**App 全局图标徽章（纯色实底 + 白色 Lucide 标志）与实时增量同步均获用户验收通过，App `1.11.0/163` 已覆盖安装小米 14**；Web 仪表盘局域网/Tailscale 双通道可访问。
+>
+> 更早（2026-11-18）：**全局视觉一致性与 Lucide 图标体系重构已合入源码（`1774fd3`）**。
 >
 > 最近发布（2026-11-14）：**1.10.3/162 用户验收通过并已发布**（GitHub Release `v1.10.3`，tag `v1.10.3` → `0d51d1f`）。汇总 11-11 已验收的首页/账单详情/统计/明细页样式重构与 11-12 已验收的资产 Tab 布局精简；`latest-app.json` → 162。
 >
@@ -8,6 +10,23 @@
 > 更早（2026-11-11）：**首页、账单详情（方案 A）、拖拽排序与统计/明细页全局样式统一**（用户验收通过）；**1.10.2/161 资产添加向导 + 报销**（已发 GitHub Release `v1.10.2`；资产向导功能验收通过；家庭服务 `cloud-backup-161`）。
 > 更早（2026-11-07）：**1.10.0/158 云备份管理台 + 扫码连接 + 历史备份恢复改进**验收通过。
 > 更早（2026-11-07）：1.9.0/157 AA历史备份与恢复改进验收通过。
+
+## 2026-11-19 App 全局图标徽章改版：纯色实底 + 白色标志（用户验收通过；1.11.0/163 已装机）
+
+- **纯色实底规则**：在 `SettingsIcons.kt` 新增 `solidBadgeBackground(tint)`，全站图标徽章由浅底深标志统一改为不透明饱和纯色圆形底 + `Color.White` 白色前景（过亮色 `luminance > 0.38f` 自动与黑色按 `0.28f` 压深，确保浅/深色模式下白色图标高对比度可读）；移除未使用的 `badgeForeground`。
+- **全站组件统一**：
+  - `CategoryBadge`、`SettingsIconBadge`（「支出分类/收入分类」固定采用饱和粉红 `#E04F5F` 与翡翠绿 `#10B981`）、`IconBadge`（中性态改用浅灰 `#8E8E93` / 深灰 `#48484A` 实底 + 白色图标）、`AccountAvatar` 文字头像（品牌 PNG 头像保持原样）。
+  - `LedgerConfigCard` 预设列表按 `swatchFor(preset.name)` 着色，右侧 `+` 按钮改为圆形纯色底 + 白色加号；`AccountDetailsCards` 账户流水行改用 `billIconTint` 分类语义底色；`ConfirmResultSheet` 完成勾改为纯绿圆形实底 + 白色对勾；`BillActionsHost` 标为可报销激活态改为纯蓝实底 + 白色发票图标。
+- **验证与装机**：`scripts/check-ui-components.sh` 通过；`:app` **966 项** + `:billkit` **239 项**共 **1,205 项** JVM 单测全绿；Android 15 模拟器 `emulator-5554` 浅/深色逐页截图核对通过；签名版 Release APK（`1.11.0 / 163`，SHA-256 `f7f1d858…0b7e`，签名 `05212beb…66c0` 连续）保数据覆盖安装小米 14 后用户明确「验收通过」（未生成 `dist/` 发布候选、未提交/推送）。
+
+## 2026-11-19 实时增量同步与基准快照 Overlay（用户验收通过；App 1.11.0/163 已装机）
+
+- **App**：配对后统一用 `deviceId` 作账本；Outbox 按 itemId 原地合并，补齐账单、资产账户、资产流水、`meta:config` 入队；`RealtimeSyncTrigger` 后台自动记账 8s 防抖、前台 15s 闲置防抖、切后台 `ON_STOP` 立即排空；断网静默转 `RealtimeSyncWorker`（联网 + 指数退避）；云备份页新增「新记录自动实时同步」开关与状态行；手动全量备份后清理已覆盖待推项。
+- **服务端（server-rs）**：`ledger_items` 幂等扩展 `meta`；单真源 Fast-Forward 与基准快照老账单墓碑删除；新快照上传后自动清理已覆盖增量（保留后于导出的墓碑）；`SnapshotCache` 键升级为 `(backup_id, sha256, overlay_revision)`，仅对设备最新快照在内存叠加 bill/account/entry/meta，历史快照与 Diff 保持原始；新增 `GET /v1/admin/dashboard/sync-head`。
+- **Web**：前台可见态每 15s 探测 `sync-head`（后台零请求、切回窗口立即检查），revision/backupId 变化无感刷新；顶栏 `overlayRevision > 0` 显示「实时同步」徽标，侧栏笔数使用合并后值。
+- **验证**：`cargo test` 14/14（含真实 2,350 笔快照 Overlay）、clippy 0；App JVM 1,204 全绿；`tsc && vite build` 通过；App `1.11.0/163` release（SHA-256 `dd2c76a1…be151`，签名连续）已安装小米14，冷启自动排空 2,348 条历史 Outbox。
+- **访问**：`http://192.168.31.155:18080` 与 `http://100.124.31.107:18080` 均可达；Windows 端首次 502 为客户端系统代理/Clash 拦截，加直连后恢复。
+- **刷新免重输密码**：管理密码换 12 小时随机会话令牌，前端仅 `sessionStorage` 保存该令牌（不保存密码），刷新自动恢复；退出/服务重启即失效。
 
 ## 2026-11-18 全局视觉一致性、圆形 Tonal 徽章与 Lucide 图标体系重构（源码已提交，本次不出包，版本保持 1.10.3/162）
 

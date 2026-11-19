@@ -18,8 +18,8 @@ android {
         targetSdk = 35
         testInstrumentationRunner = providers.gradleProperty("mymoneyTestRunner")
             .getOrElse("io.github.mymoney.HistoryInstrumentation")
-        versionCode = 162
-        versionName = "1.10.3"
+        versionCode = 163
+        versionName = "1.11.0"
     }
 
     // 签名信息放在仓库之外（~/.mymoney-keys/keystore.properties），不进版本库。
@@ -79,6 +79,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.savedstate:savedstate-ktx:1.2.1")
     implementation("androidx.core:core-ktx:1.13.1")
+    // 实时增量同步的离线兜底：联网后由系统唤醒补推（不保活、不轮询）。
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
 
     // Z4 扫码连接设备：CameraX 预览 + 本地 ZXing core 解码（不联网、不走外部二维码服务）。
     // 只在用户点「扫码」并按需授予 CAMERA 后才启动相机；识别确认前不联网、不改配置。

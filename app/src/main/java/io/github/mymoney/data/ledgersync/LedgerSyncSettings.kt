@@ -28,4 +28,14 @@ object LedgerSyncSettings {
             .putString(KEY_LEDGER_ID, id)
             .apply()
     }
+
+    /**
+     * 实时同步使用的账本 id：云备份配对后用 `config.deviceId`，与服务端
+     * `ledger_backups.device_id` 天然对齐（Overlay 无需额外映射表，换机接替也连续）。
+     * 未配对或旧配置下回退到本机随机 ledgerId。
+     */
+    fun effectiveLedgerId(context: Context): String {
+        val deviceId = io.github.mymoney.data.rulesync.RuleSyncSettings.load(context).deviceId
+        return deviceId.takeIf { it.isNotBlank() } ?: ledgerId(context)
+    }
 }

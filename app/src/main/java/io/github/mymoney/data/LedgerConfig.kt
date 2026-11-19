@@ -54,9 +54,11 @@ object LedgerConfig {
     val NOTE_TOKENS get() = NoteTemplate.TOKENS
 
     private var prefs: android.content.SharedPreferences? = null
+    private var appContext: Context? = null
 
     fun init(context: Context) {
         if (prefs == null) {
+            appContext = context.applicationContext
             prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             migrateOldFlatLists()
         }
@@ -192,6 +194,7 @@ object LedgerConfig {
             .remove(KEY_EXPENSE).remove(KEY_INCOME)
             .remove(KEY_OLD_EXPENSE).remove(KEY_OLD_INCOME)
             .apply()
+        notifyMetaChanged()
     }
 
     /** 恢复账户候选只归档多余账户、恢复默认候选；不删除余额与流水。 */
@@ -214,6 +217,14 @@ object LedgerConfig {
     private fun writeGroups(type: BillType, groups: List<CategoryGroup>) {
         val key = if (type == BillType.INCOME) KEY_INCOME else KEY_EXPENSE
         p().edit().putString(key, LedgerListCodec.encodeGroups(groups)).apply()
+        notifyMetaChanged()
+    }
+
+    /** 分类树变更实时同步：归类为一个 meta:config 条目，短时间多次修改会原地合并。 */
+    private fun notifyMetaChanged() {
+        appContext?.let {
+            runCatching { io.github.mymoney.data.ledgersync.RealtimeSyncTrigger.notifyMetaChanged(it) }
+        }
     }
 
     private fun readStrings(key: String, fallback: List<String>): List<String> =

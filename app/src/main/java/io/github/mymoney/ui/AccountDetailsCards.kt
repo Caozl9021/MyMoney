@@ -117,12 +117,13 @@ internal fun LazyListScope.accountPeriodCards(periods: List<AccountHistoryPeriod
                 val title = bill?.let { it.subCategory ?: it.category ?: "未分类" }
                     ?: when (entry?.kind) { "OPENING" -> "余额起点"; "REIMBURSE" -> "报销退回"; "REVERSAL" -> "调整撤销"; else -> "余额调整" }
                 val tint = when (bill?.type) { "EXPENSE" -> p.expense; "INCOME", "REFUND" -> p.income; else -> p.accent }
+                val badgeTint = if (bill != null) billIconTint(p, bill.type, bill.category, bill.subCategory) else p.accent
                 ListRow(title = title, subtitle = buildString {
                     append(Instant.ofEpochMilli(row.at).atZone(zone).format(DateTimeFormatter.ofPattern("HH:mm")))
                     val note = bill?.note?.takeIf { it.isNotBlank() } ?: bill?.merchant ?: entry?.note
                     if (!note.isNullOrBlank()) append(" · ").append(note)
                     if (bill != null && !bill.assetLinked) append(" · 未计入余额")
-                }, leading = { CategoryBadge(if (manual) null else bill?.category, tint, size = 34.dp) }, trailing = {
+                }, leading = { CategoryBadge(if (manual) null else bill?.category, badgeTint, size = 34.dp) }, trailing = {
                     Column(horizontalAlignment = Alignment.End, modifier = Modifier.widthIn(max = 150.dp)) {
                         val delta = bill?.let { AssetMath.delta(it.type, it.priceCents) } ?: entry!!.deltaCents
                         Text(if (hidden) "••••" else (if (delta > 0) "+" else "") + assetMoney(delta), style = AbType.amountRow, color = tint)

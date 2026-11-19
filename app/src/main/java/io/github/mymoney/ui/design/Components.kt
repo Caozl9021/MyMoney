@@ -548,7 +548,7 @@ private fun ActionButton(
 // 图标徽章
 // ---------------------------------------------------------------------------
 
-/** 图标徽章：圆形柔光底 + 同色前景。 */
+/** 图标徽章：纯色圆形实底 + 白色前景。 */
 @Composable
 fun IconBadge(
     icon: ImageVector,
@@ -559,8 +559,11 @@ fun IconBadge(
     val p = LocalAbPalette.current
     val dark = p.cardBg.luminance() < 0.5f
     val neutral = tint.alpha < 1f
-    val bg = if (neutral) p.fill else tint.copy(alpha = if (dark) 0.22f else 0.14f)
-    val fg = if (neutral) p.secondaryLabel else tint
+    val bg = if (neutral) {
+        if (dark) Color(0xFF48484A) else Color(0xFF8E8E93)
+    } else {
+        solidBadgeBackground(tint)
+    }
     Box(
         modifier = modifier
             .size(size)
@@ -568,7 +571,7 @@ fun IconBadge(
             .background(bg),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = null, Modifier.size(size * 0.54f), tint = fg)
+        Icon(icon, contentDescription = null, Modifier.size(size * 0.54f), tint = Color.White)
     }
 }
 

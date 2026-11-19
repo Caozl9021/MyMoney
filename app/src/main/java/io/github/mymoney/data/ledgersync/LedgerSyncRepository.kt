@@ -2,6 +2,8 @@ package io.github.mymoney.data.ledgersync
 
 import android.content.Context
 import io.github.mymoney.data.AppDb
+import io.github.mymoney.data.AssetAccount
+import io.github.mymoney.data.AssetEntry
 import io.github.mymoney.data.AssetStore
 import io.github.mymoney.data.BillEntity
 import io.github.mymoney.data.Reimburse
@@ -32,22 +34,68 @@ object LedgerSyncRepository {
         val syncId = bill.syncId
         if (syncId.isBlank()) return
         val operation = if (deleted) "delete" else "put"
-        val payload = if (deleted) emptyMap<String, Any?>() else LedgerPayloadCodec.encodeBill(bill)
-        val baseRevision = currentRevision(context, syncId)
+        val payload: Map<String, Any?> = if (deleted) linkedMapOf("syncId" to syncId) else LedgerPayloadCodec.encodeBill(bill)
+        enqueueItem(context, "bill:$syncId", LedgerItemKind.BILL, operation, payload, bill.updatedAt)
+    }
+
+    suspend fun enqueueAccount(context: Context, account: AssetAccount, deleted: Boolean = false) {
+        if (account.id.isBlank()) return
+        enqueueItem(
+            context, "account:${account.id}", LedgerItemKind.ACCOUNT,
+            if (deleted) "delete" else "put",
+            if (deleted) linkedMapOf("syncId" to account.id) else LedgerPayloadCodec.encodeAccount(account),
+            account.updatedAt,
+        )
+    }
+
+    suspend fun enqueueEntry(context: Context, entry: AssetEntry, deleted: Boolean = false) {
+        if (entry.id.isBlank()) return
+        enqueueItem(
+            context, "entry:${entry.id}", LedgerItemKind.ENTRY,
+            if (deleted) "delete" else "put",
+            if (deleted) linkedMapOf("syncId" to entry.id) else LedgerPayloadCodec.encodeEntry(entry),
+            entry.updatedAt,
+        )
+    }
+
+    /** 记账周期起始日 + 支出/收入分类树，整体作为一个 meta:config 条目。 */
+    suspend fun enqueueMeta(context: Context) {
+        io.github.mymoney.data.LedgerConfig.init(context)
+        val payload = LedgerPayloadCodec.encodeMeta(
+            monthStartDay = io.github.mymoney.data.LedgerPeriodStore.read(context),
+            expenseGroups = io.github.mymoney.data.LedgerConfig.expenseGroups,
+            incomeGroups = io.github.mymoney.data.LedgerConfig.incomeGroups,
+            updatedAt = System.currentTimeMillis(),
+        )
+        enqueueItem(
+            context, "meta:config", LedgerItemKind.META, "put", payload,
+            (payload["updatedAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+        )
+    }
+
+    private suspend fun enqueueItem(
+        context: Context,
+        itemId: String,
+        itemKind: String,
+        operation: String,
+        payload: Map<String, Any?>,
+        contentUpdatedAt: Long,
+    ) {
         val request = linkedMapOf<String, Any?>(
-            "itemId" to "bill:$syncId",
-            "itemKind" to LedgerItemKind.BILL,
+            "itemId" to itemId,
+            "itemKind" to itemKind,
             "operation" to operation,
             "schemaVersion" to 1,
-            "contentUpdatedAt" to bill.updatedAt,
+            "contentUpdatedAt" to contentUpdatedAt,
             "payload" to payload,
         )
-        ledgerDb(context).outbox().upsert(
+        ledgerDb(context).outbox().replaceForItem(
+            itemId,
             LedgerOutboxEntity(
                 operationId = UUID.randomUUID().toString(),
-                itemId = "bill:$syncId",
-                itemKind = LedgerItemKind.BILL,
-                baseRevision = baseRevision,
+                itemId = itemId,
+                itemKind = itemKind,
+                baseRevision = currentRevision(itemId),
                 requestJson = MiniJson.encode(request),
                 createdAt = System.currentTimeMillis(),
             ),
@@ -75,16 +123,14 @@ object LedgerSyncRepository {
     suspend fun pendingForItem(context: Context, itemId: String): Boolean =
         ledgerDb(context).outbox().byItem(itemId) != null
 
-    // ---------------- per-item revision 记录（保存在 state 表外：用 outbox base 即可，
-    // 这里用一张内存映射不合适；改为从本地 ledger_revision 推断。）
-    // 简化：每条本地写入时按已知远端 revision 递增；未知时用 0，由 snapshot 差量纠正。
+    // ---------------- per-item revision 记录（itemId 维度） ----------------
 
     private val revisionCache = HashMap<String, Long>()
 
-    private fun currentRevision(context: Context, syncId: String): Long = revisionCache[syncId] ?: 0L
+    private fun currentRevision(itemId: String): Long = revisionCache[itemId] ?: 0L
 
-    fun noteRevision(syncId: String, revision: Long) {
-        revisionCache[syncId] = revision
+    fun noteRevision(itemId: String, revision: Long) {
+        revisionCache[itemId] = revision
     }
 
     // ---------------- 冲突 ----------------
@@ -121,11 +167,14 @@ object LedgerSyncRepository {
     /** 空间/epoch 变化时重置本地同步状态与 outbox（换家庭服务/重配对场景）。 */
     suspend fun bindSpace(context: Context, spaceId: String, ledgerId: String, epoch: String) {
         val current = state(context)
-        if (current.spaceId != spaceId || current.epoch != epoch || current.ledgerId != ledgerId) {
-            // 只有「之前已经绑定过别的 space/epoch/ledger」（换家庭/换账本）才丢弃旧 outbox/conflicts。
-            // 首次绑定（spaceId 为空）不清空：配对前先记的账已在 outbox 里，正是首次要上传的内容，
-            // 清掉会导致第一笔账单在首同步时丢失（真机踩到的 bug）。
-            if (current.spaceId != null && current.spaceId.isNotBlank()) {
+        val changed = current.spaceId != spaceId || current.epoch != epoch || current.ledgerId != ledgerId
+        if (changed) {
+            // 只有「换同步空间或 epoch」才丢弃旧 outbox/conflicts；仅 ledgerId 变化
+            // （旧版随机 ledgerId → 云备份 deviceId 的升级迁移）不清空，已有待推记录
+            // 继续按新 ledgerId 推送，避免升级时丢掉尚未上传的实时增量。
+            val switchedSpace = current.spaceId != null && current.spaceId.isNotBlank() &&
+                (current.spaceId != spaceId || current.epoch != epoch)
+            if (switchedSpace) {
                 ledgerDb(context).outbox().clearAll()
                 ledgerDb(context).conflicts().clearAll()
                 revisionCache.clear()
@@ -174,16 +223,63 @@ object LedgerSyncRepository {
             val basis = if (saved.deletedAt != null) saved.copy(reimburseStatus = Reimburse.NONE) else saved
             AssetStore.syncReimbursement(appDb(context), basis)
         }
-        noteRevision(bill.syncId, remote.revision)
+        noteRevision(remote.itemId, remote.revision)
     }
 
     suspend fun localBillSyncIds(context: Context): Set<String> =
         localBills(context).map { it.syncId }.filter { it.isNotBlank() }.toSet()
 
-    /** 备份恢复/整包替换后，把本机全部账单重新入队，保证新数据能同步上去。 */
+    /** 备份恢复/整包替换后，把本机全要素（账单/账户/流水/配置）重新入队，保证新数据能同步上去。 */
     suspend fun syncAllLocal(context: Context) {
+        AssetStore.resetLedgerBaseline()
         localBills(context).forEach { bill ->
             if (bill.syncId.isNotBlank()) runCatching { enqueueBill(context, bill, deleted = false) }
         }
+        runCatching { enqueueAllAssets(context) }
+        runCatching { enqueueMeta(context) }
+    }
+
+    /** 把当前本机全部资产账户与流水入队（恢复/导入后使用；日常走增量 diff）。 */
+    suspend fun enqueueAllAssets(context: Context) {
+        val db = appDb(context)
+        db.assets().accounts().forEach { account -> runCatching { enqueueAccount(context, account) } }
+        db.assets().entries().forEach { entry -> runCatching { enqueueEntry(context, entry) } }
+    }
+
+    /**
+     * 增量 diff 入队：只推本进程观察到发生变化的账户/流水。
+     * 已删除（物理删除）的账户/流水写删除墓碑。
+     */
+    suspend fun enqueueAssetChanges(
+        context: Context,
+        changedAccounts: List<AssetAccount>,
+        removedAccountIds: Collection<String>,
+        changedEntries: List<AssetEntry>,
+        removedEntryIds: Collection<String>,
+    ): Int {
+        var count = 0
+        changedAccounts.forEach { account ->
+            runCatching { enqueueAccount(context, account) }.onSuccess { count++ }
+        }
+        removedAccountIds.forEach { id ->
+            val tomb = AssetAccount(id = id, name = "", createdAt = 0, updatedAt = System.currentTimeMillis())
+            runCatching { enqueueAccount(context, tomb, deleted = true) }.onSuccess { count++ }
+        }
+        changedEntries.forEach { entry ->
+            runCatching { enqueueEntry(context, entry) }.onSuccess { count++ }
+        }
+        removedEntryIds.forEach { id ->
+            val tomb = AssetEntry(
+                id = id, operationId = "", accountId = "", deltaCents = 0, kind = "REVERSAL",
+                note = "", createdAt = 0, updatedAt = System.currentTimeMillis(),
+            )
+            runCatching { enqueueEntry(context, tomb, deleted = true) }.onSuccess { count++ }
+        }
+        return count
+    }
+
+    /** 手动全量备份成功后：清掉已被快照覆盖的待推项。 */
+    suspend fun clearCoveredOutbox(context: Context, cutoffMillis: Long) {
+        ledgerDb(context).outbox().deleteCreatedBefore(cutoffMillis)
     }
 }

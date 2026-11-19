@@ -22,6 +22,7 @@ object LedgerPeriodStore {
         check(preferences!!.edit().putInt("month_start_day", value).commit()) { "保存记账周期失败，请重试" }
         mutableDay.value = value
         io.github.mymoney.systems.SystemIntegration.refresh(context)
+        runCatching { io.github.mymoney.data.ledgersync.RealtimeSyncTrigger.notifyMetaChanged(context) }
     }
     fun read(context: Context): Int { init(context); return day.value }
 }

@@ -1,0 +1,159 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  --bg-canvas: #F6F8F7;
+  --bg-card: #FFFFFF;
+  --bg-elevated: #F1F5F3;
+  --bg-subtle: #E8EEEC;
+  --border-hairline: rgba(17, 24, 20, 0.08);
+  --border-strong: rgba(17, 24, 20, 0.16);
+  --text-primary: #111814;
+  --text-secondary: #53605A;
+  --text-muted: #7B8882;
+  --accent-primary: #0F9E85;
+  --accent-primary-soft: rgba(15, 158, 133, 0.12);
+  --color-expense: #E55A4A;
+  --color-expense-soft: rgba(229, 90, 74, 0.12);
+  --color-income: #0E9B6E;
+  --color-income-soft: rgba(14, 155, 110, 0.12);
+  --color-refund: #0E7490;
+  --color-refund-soft: rgba(14, 116, 144, 0.12);
+  --color-transfer: #3B82F6;
+  --color-transfer-soft: rgba(59, 130, 246, 0.12);
+  --color-warn: #D97706;
+  --color-warn-soft: rgba(217, 119, 6, 0.12);
+  --heat-0: #EBEEF0;
+  --heat-1: #CBE9E1;
+  --heat-2: #7CCDBB;
+  --heat-3: #2CAE93;
+  --heat-4: #0B7A66;
+  --tooltip-bg: #111814;
+  --tooltip-text: #F5F7F6;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-canvas: #0D100F;
+  --bg-card: #151A18;
+  --bg-elevated: #1B221F;
+  --bg-subtle: #232C28;
+  --border-hairline: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --text-primary: #F1F5F3;
+  --text-secondary: #9EA9A4;
+  --text-muted: #6C7872;
+  --accent-primary: #3FD0B4;
+  --accent-primary-soft: rgba(63, 208, 180, 0.16);
+  --color-expense: #FF7B6B;
+  --color-expense-soft: rgba(255, 123, 107, 0.16);
+  --color-income: #35C694;
+  --color-income-soft: rgba(53, 198, 148, 0.16);
+  --color-refund: #38BDF8;
+  --color-refund-soft: rgba(56, 189, 248, 0.16);
+  --color-transfer: #60A5FA;
+  --color-transfer-soft: rgba(96, 165, 250, 0.16);
+  --color-warn: #FBBF24;
+  --color-warn-soft: rgba(251, 191, 36, 0.16);
+  --heat-0: #1D2522;
+  --heat-1: #16443A;
+  --heat-2: #1A6B5A;
+  --heat-3: #22987F;
+  --heat-4: #3FD0B4;
+  --tooltip-bg: #1E2522;
+  --tooltip-text: #F1F5F3;
+}
+
+@layer base {
+  html,
+  body {
+    background-color: var(--bg-canvas);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+      "Microsoft YaHei", "Noto Sans CJK SC", "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    /* clip 不会生成滚动容器，侧边栏/顶栏的 position: sticky 才能贴合视口；
+       hidden 会隐式变成 auto，让 sticky 相对一个不滚动的容器失效。 */
+    overflow-x: clip;
+  }
+
+  button:not(:disabled),
+  a[href],
+  select,
+  summary {
+    cursor: pointer;
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.mm-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-hairline);
+  border-radius: 16px;
+}
+
+.mm-card-subtle {
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-hairline);
+  border-radius: 12px;
+}
+
+.mm-divider {
+  border-color: var(--border-hairline);
+}
+
+.divide-y.mm-divider > :not(:last-child),
+.divide-y.mm-divider > :not(:first-child) {
+  border-color: var(--border-hairline);
+}
+
+.mm-input {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-hairline);
+  color: var(--text-primary);
+  border-radius: 10px;
+}
+
+.mm-input:focus {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -1px;
+}
+
+.mm-tooltip {
+  background-color: var(--tooltip-bg);
+  color: var(--tooltip-text);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+}
+
+.mm-text-primary { color: var(--text-primary); }
+.mm-text-secondary { color: var(--text-secondary); }
+.mm-text-muted { color: var(--text-muted); }
+.mm-text-accent { color: var(--accent-primary); }
+.mm-text-expense { color: var(--color-expense); }
+.mm-text-income { color: var(--color-income); }
+.mm-text-refund { color: var(--color-refund); }
+.mm-text-transfer { color: var(--color-transfer); }
+.mm-text-warn { color: var(--color-warn); }
+
+.mm-bg-canvas { background-color: var(--bg-canvas); }
+.mm-bg-card { background-color: var(--bg-card); }
+.mm-bg-elevated { background-color: var(--bg-elevated); }
+.mm-bg-accent-soft { background-color: var(--accent-primary-soft); }
+.mm-bg-expense-soft { background-color: var(--color-expense-soft); }
+.mm-bg-income-soft { background-color: var(--color-income-soft); }
+.mm-bg-refund-soft { background-color: var(--color-refund-soft); }
+.mm-bg-transfer-soft { background-color: var(--color-transfer-soft); }
+.mm-bg-warn-soft { background-color: var(--color-warn-soft); }
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

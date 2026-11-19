@@ -1,8 +1,8 @@
 # 文档索引
 
-<!-- ui-polish-20261118 -->
-> **源码最新进度（2026-11-18）**：`master` 已合入全局视觉一致性、圆形 Tonal 徽章与 **Lucide Icons** 全套图标统一重构（含悬浮 Dock 24dp 安全留白、记一笔默认分类与账户、详情页去工程化、Apple HIG / M3 语义色板；已完成 1200 项 JVM 单测与 Android 15 模拟器浅色/深色逐页实测）。本次不升版本号、不出新包，版本与发布指针保持 **1.10.3/162** 待随下版发布。详见 [UI_COMPONENTS](UI_COMPONENTS.md)、[CHANGELOG](../CHANGELOG.md)、[ACCEPTANCE](ACCEPTANCE.md)。
-<!-- /ui-polish-20261118 -->
+<!-- ui-solid-white-20261119 -->
+> **工作区最新进度（2026-11-19）**：App **1.11.0/163**（实时增量同步 `add-realtime-incremental-sync` ＋ 全站**纯色实底 + 白色 Lucide 标志**圆形图标徽章改版）已保数据安装小米 14 并均获用户**验收通过**（JVM 1,205 项全绿，Android 15 浅/深色逐页截图核对通过；工作区未提交/未发布 `dist/`）。正式发布指针仍为 **1.10.3/162**。详见 [UI_COMPONENTS](UI_COMPONENTS.md)、[CHANGELOG](../CHANGELOG.md)、[ACCEPTANCE](ACCEPTANCE.md)、[PROGRESS](PROGRESS.md)。
+<!-- /ui-solid-white-20261119 -->
 
 <!-- release-162-20261114 -->
 > **当前已发布版本 1.10.3/162**（2026-11-14 用户验收通过并已发 GitHub Release `v1.10.3`；`dist/latest-app.json` → 162，`status=accepted`）。包内汇总 2026-11-11 已验收的首页/账单详情/统计/明细页样式重构（`refine-home-and-bill-row-density`）与 2026-11-12 已验收的资产 Tab 布局精简（`refine-asset-tab-layout`）；数据层 Room 13 / JSON 12。详见[ACCEPTANCE](ACCEPTANCE.md)、[PROGRESS](PROGRESS.md)、[资产说明](ASSET_MANAGEMENT.md)。

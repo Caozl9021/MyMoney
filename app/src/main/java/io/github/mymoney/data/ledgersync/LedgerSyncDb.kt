@@ -11,6 +11,7 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.Transaction
 
 /**
  * W2 账本副本同步的独立库 ledger-sync.db。
@@ -24,6 +25,7 @@ object LedgerItemKind {
     const val BILL = "bill"
     const val ACCOUNT = "account"
     const val ENTRY = "entry"
+    const val META = "meta"
 }
 
 @Entity(tableName = "ledger_outbox")
@@ -87,6 +89,13 @@ interface LedgerOutboxDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(item: LedgerOutboxEntity)
 
+    /** 同一 itemId 只保留一条待推记录：新一次修改原地覆盖旧状态。 */
+    @Transaction
+    suspend fun replaceForItem(itemId: String, item: LedgerOutboxEntity) {
+        deleteByItem(itemId)
+        upsert(item)
+    }
+
     @Query("UPDATE ledger_outbox SET status = :status, last_error = :error WHERE operation_id = :operationId")
     suspend fun updateStatus(operationId: String, status: String, error: String? = null)
 
@@ -98,6 +107,10 @@ interface LedgerOutboxDao {
 
     @Query("DELETE FROM ledger_outbox WHERE item_id = :itemId")
     suspend fun deleteByItem(itemId: String)
+
+    /** 手动全量备份成功后，清理已被新快照覆盖的待推项。 */
+    @Query("DELETE FROM ledger_outbox WHERE created_at <= :cutoff")
+    suspend fun deleteCreatedBefore(cutoff: Long)
 
     @Query("DELETE FROM ledger_outbox")
     suspend fun clearAll()

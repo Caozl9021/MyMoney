@@ -17,7 +17,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.mymoney.R
@@ -125,11 +124,10 @@ fun AccountAvatar(name: String, modifier: Modifier = Modifier, size: Dp = 40.dp)
         return
     }
     val swatch = swatchFor(name)
-    val dark = LocalAbPalette.current.cardBg.luminance() < 0.5f
     Box(
-        modifier = modifier.size(size).clip(CircleShape).background(swatch.copy(alpha = if (dark) 0.22f else 0.14f)),
+        modifier = modifier.size(size).clip(CircleShape).background(solidBadgeBackground(swatch)),
         contentAlignment = Alignment.Center,
     ) {
-        Text(name.take(1).ifBlank { "账" }, style = AbType.headline, color = swatch, maxLines = 1)
+        Text(name.take(1).ifBlank { "账" }, style = AbType.headline, color = Color.White, maxLines = 1)
     }
 }

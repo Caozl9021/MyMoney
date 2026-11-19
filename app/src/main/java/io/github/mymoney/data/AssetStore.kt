@@ -4,12 +4,15 @@ import android.content.Context
 import androidx.room.withTransaction
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.UUID
 
 /** Room is authoritative. The synchronous candidate API is a compatibility projection only. */
 object AssetStore {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var db: AppDb
+    private lateinit var appContext: Context
     private val _accounts = MutableStateFlow<List<AssetAccount>>(emptyList())
     private val _entries = MutableStateFlow<List<AssetEntry>>(emptyList())
     private val _ready = MutableStateFlow(false)
@@ -20,10 +23,15 @@ object AssetStore {
     val error = _error.asStateFlow()
     @Volatile private var started = false
 
+    /** 实时增量 diff 的上一次已入队状态；只在进程内使用，冷启动首次只建立基线。 */
+    private var ledgerBaseline: AssetSnapshot? = null
+    private val publishLock = Mutex()
+
     @Synchronized fun init(context: Context) {
         if (started) return
         started = true
-        db = AppDb.get(context.applicationContext)
+        appContext = context.applicationContext
+        db = AppDb.get(appContext)
         val legacy = LedgerConfig.legacyAccounts
         scope.launch {
             try {
@@ -45,6 +53,49 @@ object AssetStore {
     suspend fun refresh() {
         val snapshot = db.withTransaction { AssetSnapshot(db.assets().accounts(), db.assets().entries()) }
         _accounts.value = snapshot.accounts; _entries.value = snapshot.entries
+        publishSnapshotDiff(snapshot)
+    }
+
+    /**
+     * 实时增量：把本次操作前后账户/流水的差异入 Outbox（按 itemId 原地合并）。
+     * 所有写路径最终都会经过 [refresh]；账单联动流水由 BillWriter 在事务提交后显式调用无参版本。
+     */
+    suspend fun publishAssetChanges() {
+        if (!::db.isInitialized || !::appContext.isInitialized) return
+        val snapshot = withContext(Dispatchers.IO) {
+            db.withTransaction { AssetSnapshot(db.assets().accounts(), db.assets().entries()) }
+        }
+        publishSnapshotDiff(snapshot)
+    }
+
+    private suspend fun publishSnapshotDiff(snapshot: AssetSnapshot) {
+        publishLock.withLock {
+            val base = ledgerBaseline
+            ledgerBaseline = snapshot
+            if (base == null) return  // 冷启动首次只建立基线，历史数据由全量快照覆盖
+            val beforeAccounts = base.accounts.associateBy { it.id }
+            val beforeEntries = base.entries.associateBy { it.id }
+            val nowAccounts = snapshot.accounts.associateBy { it.id }
+            val nowEntries = snapshot.entries.associateBy { it.id }
+            val changedAccounts = snapshot.accounts.filter { beforeAccounts[it.id] != it }
+            val removedAccounts = beforeAccounts.keys - nowAccounts.keys
+            val changedEntries = snapshot.entries.filter { beforeEntries[it.id] != it }
+            val removedEntries = beforeEntries.keys - nowEntries.keys
+            if (changedAccounts.isEmpty() && removedAccounts.isEmpty() &&
+                changedEntries.isEmpty() && removedEntries.isEmpty()
+            ) return
+            val count = runCatching {
+                io.github.mymoney.data.ledgersync.LedgerSyncRepository.enqueueAssetChanges(
+                    appContext, changedAccounts, removedAccounts, changedEntries, removedEntries,
+                )
+            }.getOrDefault(0)
+            if (count > 0) io.github.mymoney.data.ledgersync.RealtimeSyncTrigger.notifyChanged(appContext)
+        }
+    }
+
+    /** 备份恢复/整包替换后调用：清掉基线，避免把旧数据误判为变化。 */
+    fun resetLedgerBaseline() {
+        ledgerBaseline = null
     }
     fun candidateNames(): List<String>? = if (ready.value) _accounts.value.filterNot { it.archived }.map { it.name } else null
 

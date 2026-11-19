@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.billkit.BillType
@@ -55,6 +57,7 @@ import io.github.mymoney.ui.design.ListRow
 import io.github.mymoney.ui.design.LocalAbPalette
 import io.github.mymoney.ui.design.SubPageScaffold
 import io.github.mymoney.ui.design.rememberAbHaptic
+import io.github.mymoney.ui.design.solidBadgeBackground
 import io.github.mymoney.ui.design.swatchFor
 
 /**
@@ -346,7 +349,7 @@ private fun PresetRow(
         ) {
             CategoryBadge(
                 category = preset.name,
-                tint = p.accent,
+                tint = swatchFor(preset.name),
                 size = AbCardDensity.settingsIcon,
             )
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -364,15 +367,15 @@ private fun PresetRow(
             Box(
                 Modifier
                     .size(30.dp)
-                    .clip(RoundedCornerShape(AbRadius.capsule))
-                    .background(p.accent.copy(alpha = 0.10f)),
+                    .clip(CircleShape)
+                    .background(solidBadgeBackground(p.accent)),
                 contentAlignment = Alignment.Center,
             ) {
                 androidx.compose.material3.Icon(
                     imageVector = AbIcons.Plus,
                     contentDescription = "添加",
                     modifier = Modifier.size(18.dp),
-                    tint = p.accent,
+                    tint = Color.White,
                 )
             }
         }
