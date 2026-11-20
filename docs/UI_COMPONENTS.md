@@ -116,3 +116,14 @@
 | 跨页细节与对比度 | `AssetNetWorthCard` 圆角统一为 `AbRadius.group (20.dp)`；`BillRow` 账户标签、`AssetGroupTitle` 组小计、`StatsScreen` / `StatisticsCharts` 次级标签统一提升至 `p.secondaryLabel`；`LedgerConfigCard` 头部采用 `Column` 竖排标题与「长按拖动排序」避免文本重叠 |
 
 - **验证与验收（2026-11-19 纯色底 + 白标志改版后）**：`scripts/check-ui-components.sh` 输出 `UI component check passed.`；`:app:testDebugUnitTest`（124 文件 **966 项**）+ `:billkit:testDebugUnitTest`（30 文件 **239 项**）共 **1,205 项** 全部通过（0 失败/错误/跳过）；`emulator-5554`（AVD `mymoney_api35`，Android 15）在浅色与深色模式下分别完成首页、账单详情、统计、设置与支出分类页截图检查；签名 Release APK `1.11.0/163`（SHA-256 `f7f1d858…0b7e`，证书 `05212beb…66c0` 连续）保数据安装小米 14（`100.107.134.40:38253`）后用户确认「验收通过」。
+
+## 2026-11-20 悬浮底栏液态玻璃滑块（1.11.1/164，用户验收通过）
+
+| 组件 / 文件 | 当前约束与实现 |
+| --- | --- |
+| `LiquidGlassTabBar` / `dockStage` | `CapsuleShadowView`、`LiquidGlassView` 与全 bleed `ComposeView` 统一收进居中 `dockStage`（`roundToInt()` 高度 + `Gravity.CENTER`）；`LiquidGlassView` 模糊半径 `(4.5f * density).coerceAtMost(18f)`、玻璃 `tintAlpha` 浅色 `0.42f` / 深色 `0.22f`；API 33+ 同级挂载 `LiquidPillLensView`；`pointerInput` 仅挂在内层 `Row`，`18.dp` bleed 透传页面触摸 |
+| `LiquidPillLensView`（AGSL） | 仅在 `lensMix > 0.005f` 时录制 `contentSource` + `dockStage`（静止零开销）；各向异性折射保持左右 `15dp / 19dp` 折射、`0.145f` 放大与 `0.24f` 色散，垂直方向收窄带宽（`0.36`）与弱化 `verticalRefraction = 0.08f`、`verticalMagnify = 0.55f` 消除上下图标倒影拉伸；`rimWidth = 1.55dp`，浅色内部微提亮 `0.06`、外影 `0.026`、外缘暗廓 `0.22`、倒角高光 `0.25`（深色外影 `0.045`、暗廓 `0.20`、高光 `0.28`） |
+| `LiquidTabCells`（`Chrome.kt` / `Tokens.kt`） | 静止灰囊 `inset = 5.dp`、`extraPad = 0.dp` 且去白描边，浅色 `tabIndicator = 0x1C767680`（`pageBg = #F7F7F7`）；起飞/滑行按 `scaleX = 1f + 0.34f * l + 0.14f * flow`、`scaleY = 1f + 0.36f * l - 0.04f * flow` 漫出底栏；点击切换采用「快位移 → 飞行保持清澈 → 到位后缓收并 0%→100% 回灰」两段节奏；支持 1:1 跟手横滑、边缘橡皮筋回弹与速度接力 |
+| 空间实时着色与无障碍 | 使用 `ClipOp.Difference`（外层未选中态 `inactiveColor = p.label.copy(alpha = if (isDark) 0.72f else 0.78f)`）与 `ClipOp.Intersect`（水滴内层 `p.accent`）双层裁剪；叠加层 `clearAndSetSemantics {}` 保持单节点与静默复点语义；`TabCell` 采用 `11.sp / 12.sp lineHeight`（`includeFontPadding = false`）与 `23.dp` 图标盒垂直光学居中 |
+
+- **当前状态**：底栏效果已在 `1.11.0/163` 候选包获用户验收通过，随后升版至 `1.11.1/164` 并打 tag `v1.11.1` 发布。

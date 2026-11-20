@@ -2,19 +2,30 @@ package io.github.mymoney.ui.design
 
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.keyframes
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.animation.core.snap
-import androidx.compose.animation.animateColorAsState
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.roundToInt
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.semantics.Role
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,13 +45,21 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.structuralEqualityPolicy
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,15 +67,21 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.ClipOp
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -196,12 +221,135 @@ fun LiquidTabBar(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = dockHeight())
-            .clip(RoundedCornerShape(AbRadius.capsule))
-            .background(p.cardBg.copy(alpha = if (reduce) 1f else 0.72f)),
+            .heightIn(min = dockHeight()),
     ) {
+        Box(
+            Modifier
+                .matchParentSize()
+                .clip(RoundedCornerShape(AbRadius.capsule))
+                .background(p.cardBg.copy(alpha = if (reduce) 1f else 0.72f)),
+        )
         LiquidTabCells(items = items, selected = selected, onSelect = onSelect)
     }
+}
+
+internal fun tabIndexForX(x: Float, rowWidth: Float, tabCount: Int): Int {
+    if (tabCount <= 1 || rowWidth <= 0f) return 0
+    return (x / (rowWidth / tabCount)).toInt().coerceIn(0, tabCount - 1)
+}
+
+internal fun rubberBandTabPosition(rawPos: Float, lastIndex: Int): Float {
+    val maxIdx = lastIndex.coerceAtLeast(0).toFloat()
+    return when {
+        rawPos < 0f -> -((-rawPos) * 0.16f).coerceAtMost(0.10f)
+        rawPos > maxIdx -> maxIdx + ((rawPos - maxIdx) * 0.16f).coerceAtMost(0.10f)
+        else -> rawPos
+    }
+}
+
+internal fun resolveScrubTargetTab(currentPos: Float, velocityTabsPerSec: Float, tabCount: Int): Int {
+    if (tabCount <= 1) return 0
+    val projection = if (abs(velocityTabsPerSec) >= 0.8f) {
+        (velocityTabsPerSec * 0.045f).coerceIn(-0.45f, 0.45f)
+    } else 0f
+    return (currentPos + projection).roundToInt().coerceIn(0, tabCount - 1)
+}
+
+internal fun smoothstep01(x: Float): Float {
+    val c = x.coerceIn(0f, 1f)
+    return c * c * (3f - 2f * c)
+}
+
+internal data class TabIndicatorFrame(
+    val left: Float,
+    val top: Float,
+    val width: Float,
+    val height: Float,
+    val fillAlpha: Float,
+    val highlightAlpha: Float,
+    val rimAlpha: Float,
+    val shadowAlpha: Float,
+    val lensMix: Float,
+)
+
+/**
+ * Pure geometry and visual state for the floating dock tab indicator pill.
+ *
+ * Uses continuous velocity-coupled squash & stretch plus lifted glass sheen.
+ * When [bleedPx] > 0, the indicator expands symmetrically into the surrounding
+ * transparent shadow-bleed ring so edge tabs and vertical lift are unclipped.
+ */
+private data class LensTick(
+    val pos: Float,
+    val lift: Float,
+    val lens: Float,
+    val selected: Int,
+)
+
+internal fun computeTabIndicatorFrame(
+    canvasWidth: Float,
+    canvasHeight: Float,
+    bleedPx: Float,
+    insetPx: Float,
+    extraPadPx: Float,
+    tabCount: Int,
+    position: Float,
+    velocityTabsPerSec: Float,
+    lift: Float,
+    baseFillAlpha: Float,
+    isDark: Boolean,
+    lens: Float? = null,
+): TabIndicatorFrame {
+    val dockLeft = bleedPx
+    val dockTop = bleedPx
+    val dockW = (canvasWidth - bleedPx * 2f).coerceAtLeast(1f)
+    val dockH = (canvasHeight - bleedPx * 2f).coerceAtLeast(1f)
+    val cellW = ((dockW - insetPx * 2f) / tabCount.coerceAtLeast(1)).coerceAtLeast(1f)
+    val cellH = (dockH - insetPx * 2f).coerceAtLeast(1f)
+    val baseW = cellW + extraPadPx
+    val baseH = cellH + extraPadPx
+    val speed = abs(velocityTabsPerSec)
+    val flow = speed / (speed + 7f)
+    val l = lift.coerceIn(-0.03f, 1.15f)
+    val posLift = lift.coerceIn(0f, 1.15f)
+    val scaleX = 1f + 0.34f * l + 0.14f * flow
+    val scaleY = 1f + 0.36f * l - 0.04f * flow
+    val maxOverhangX = if (bleedPx > 0f) bleedPx * 0.92f else -1f
+    val maxOverhangY = if (bleedPx > 0f) bleedPx * 0.92f else -1f
+    val maxW = (dockW + maxOverhangX * 2f).coerceAtLeast(1f)
+    val maxH = (dockH + maxOverhangY * 2f).coerceAtLeast(1f)
+    val width = (baseW * scaleX).coerceIn(1f, maxW)
+    val height = (baseH * scaleY).coerceIn(1f, maxH)
+    val centerX = dockLeft + insetPx + cellW * (position + 0.5f)
+    val centerY = dockTop + dockH * 0.5f
+    val minX = dockLeft - maxOverhangX
+    val maxX = (dockLeft + dockW + maxOverhangX - width).coerceAtLeast(minX)
+    val left = (centerX - width * 0.5f).coerceIn(minX, maxX)
+    val top = centerY - height * 0.5f
+    val energy = (posLift * 0.75f + flow * 0.35f).coerceIn(0f, 1f)
+    val lensMix = (lens ?: max(posLift, flow * 0.85f)).coerceIn(0f, 1f)
+    val fillAlpha = (baseFillAlpha + (if (isDark) 0.12f else 0.07f) * energy)
+        .coerceIn(0f, if (isDark) 0.40f else 0.26f)
+    val highlightAlpha = ((if (isDark) 0.22f else 0.48f) * energy).coerceIn(0f, 1f)
+    val rimAlpha = ((if (isDark) 0.40f else 0.72f) * energy).coerceIn(0f, 1f)
+    val shadowAlpha = ((if (isDark) 0.12f else 0.05f) * posLift).coerceIn(0f, 1f)
+    return TabIndicatorFrame(
+        left = left,
+        top = top,
+        width = width,
+        height = height,
+        fillAlpha = fillAlpha,
+        highlightAlpha = highlightAlpha,
+        rimAlpha = rimAlpha,
+        shadowAlpha = shadowAlpha,
+        lensMix = lensMix,
+    )
+}
+
+private class DockGestureState {
+    var isDragging: Boolean = false
+    var committedFromDrag: Boolean = false
+    var releaseVelocityTabsPerSec: Float? = null
 }
 
 /**
@@ -218,76 +366,541 @@ fun LiquidTabCells(
     selected: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    bleed: Dp = 0.dp,
+) {
+    LiquidTabCells(
+        items = items,
+        selected = selected,
+        onSelect = onSelect,
+        modifier = modifier,
+        bleed = bleed,
+        lensBridge = null,
+    )
+}
+
+@Composable
+internal fun LiquidTabCells(
+    items: List<TabItem>,
+    selected: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier,
+    bleed: Dp,
+    lensBridge: LiquidPillLensBridge?,
 ) {
     val p = LocalAbPalette.current
     if (items.isEmpty()) return
     val haptic = rememberAbHaptic()
 
     val reduceMotion = LocalReduceMotion.current
-    // Keep the animation state unread until drawing: the dock grid never needs
-    // a new composition/measurement for an indicator animation frame.
-    val position = animateFloatAsState(
-        targetValue = selected.toFloat(),
-        animationSpec = if (reduceMotion) snap() else spring(dampingRatio = 0.82f, stiffness = 450f),
-        label = "tabIndicatorPosition",
-    )
-    val pulse = remember { Animatable(1f) }
+    val isDark = p.pageBg == DarkPalette.pageBg
+    // 物理连续：position 负责横移与释放速度延续，lift 负责按压蓄力/单次冲击弹性浮起与落位；
+    // 动画状态仅在 drawBehind 中读取，不触发逐帧重组或重排。
+    val position = remember { Animatable(selected.toFloat()) }
+    val lift = remember { Animatable(0f) }
+    val lens = remember { Animatable(0f) }
     val previousSelection = remember { intArrayOf(selected) }
-    LaunchedEffect(selected, reduceMotion) {
-        val changed = selected != previousSelection[0]
-        previousSelection[0] = selected
-        if (reduceMotion) pulse.snapTo(1f)
-        else if (changed) pulse.animateTo(1f, keyframes {
-            durationMillis = 330
-            pulse.value at 0 using androidx.compose.animation.core.FastOutSlowInEasing
-            1.04f at 110 using androidx.compose.animation.core.FastOutSlowInEasing
-            1f at 330 using androidx.compose.animation.core.FastOutSlowInEasing
-        })
+    var scrubbingTab by remember { mutableIntStateOf(-1) }
+    val visualActive = if (scrubbingTab >= 0) scrubbingTab else selected
+    val scope = rememberCoroutineScope()
+    val gestureState = remember { DockGestureState() }
+    val currentSelected by rememberUpdatedState(selected)
+    val currentOnSelect by rememberUpdatedState(onSelect)
+    val currentReduceMotion by rememberUpdatedState(reduceMotion)
+    val inset = 5.dp
+    val extraPad = 0.dp
+    val density = LocalDensity.current
+    val currentItemsCount by rememberUpdatedState(items.size)
+    val currentBaseFillAlpha by rememberUpdatedState(p.tabIndicator.alpha)
+    val currentIsDark by rememberUpdatedState(isDark)
+    val currentBleed by rememberUpdatedState(bleed)
+    val currentDensity by rememberUpdatedState(density)
+
+    DisposableEffect(lensBridge) {
+        if (lensBridge != null) {
+            lensBridge.isDarkProvider = { currentIsDark }
+            lensBridge.frameProvider = { canvasW, canvasH ->
+                with(currentDensity) {
+                    computeTabIndicatorFrame(
+                        canvasWidth = canvasW,
+                        canvasHeight = canvasH,
+                        bleedPx = currentBleed.toPx(),
+                        insetPx = inset.toPx(),
+                        extraPadPx = extraPad.toPx(),
+                        tabCount = currentItemsCount,
+                        position = if (currentReduceMotion) currentSelected.toFloat() else position.value,
+                        velocityTabsPerSec = if (currentReduceMotion) 0f else position.velocity,
+                        lift = if (currentReduceMotion) 0f else lift.value,
+                        baseFillAlpha = currentBaseFillAlpha,
+                        isDark = currentIsDark,
+                        lens = if (currentReduceMotion) 0f else lens.value,
+                    )
+                }
+            }
+            lensBridge.notifyFrameChanged()
+        }
+        onDispose {
+            if (lensBridge != null) {
+                lensBridge.frameProvider = null
+                lensBridge.isDarkProvider = null
+            }
+        }
     }
-    val inset = 6.dp
-    Box(modifier.fillMaxSize().selectableGroup().drawBehind {
-        val stroke = 0.65.dp.toPx()
-        drawRoundRect(
-            brush = Brush.verticalGradient(listOf(
-                Color.White.copy(alpha = 0.34f),
-                Color.White.copy(alpha = 0.04f),
-                Color.Black.copy(alpha = 0.07f),
-            )),
-            topLeft = Offset(stroke / 2, stroke / 2),
-            size = Size(size.width - stroke, size.height - stroke),
-            cornerRadius = CornerRadius(size.height / 2),
-            style = Stroke(stroke),
-        )
-        val cellW = ((size.width - inset.toPx() * 2) / items.size).coerceAtLeast(1.dp.toPx())
-        val cellH = (size.height - inset.toPx() * 2).coerceAtLeast(1.dp.toPx())
-        val pos = if (reduceMotion) selected.toFloat() else position.value
-        // Pulse scales only the selection surface, never the hit grid, icons or layout.
-        val scale = if (reduceMotion) 1f else pulse.value
-        val indicatorW = ((cellW + 6.dp.toPx()) * scale).coerceAtMost(size.width - 2.dp.toPx())
-        val indicatorH = ((cellH + 6.dp.toPx()) * scale).coerceAtMost(size.height - 2.dp.toPx())
-        val indicatorX = (inset.toPx() + cellW * (pos + 0.5f) - indicatorW / 2)
-            .coerceIn(1.dp.toPx(), (size.width - 1.dp.toPx() - indicatorW).coerceAtLeast(1.dp.toPx()))
-        drawRoundRect(
-            color = p.tabIndicator,
-            topLeft = Offset(indicatorX, (size.height - indicatorH) / 2),
-            size = Size(indicatorW, indicatorH),
-            cornerRadius = CornerRadius(indicatorH / 2),
-        )
-    }) {
-        Row(Modifier.fillMaxSize().padding(horizontal = inset)) {
-            items.forEachIndexed { index, item ->
-                TabCell(
-                    item = item,
-                    active = index == selected,
-                    inactive = p.secondaryLabel,
-                    selectedColor = p.label,
-                    modifier = Modifier.weight(1f).fillMaxHeight(),
-                    onSelect = {
-                        if (index != selected) haptic.tick()
-                        // The owner decides reselect semantics (settings returns to its root).
-                        onSelect(index)
-                    },
+
+    LaunchedEffect(lensBridge, reduceMotion) {
+        if (lensBridge == null) return@LaunchedEffect
+        snapshotFlow { LensTick(position.value, lift.value, lens.value, currentSelected) }
+            .collect {
+                lensBridge.notifyFrameChanged()
+            }
+    }
+
+    LaunchedEffect(selected, reduceMotion) {
+        val changed = previousSelection[0] != selected
+        previousSelection[0] = selected
+        val fromDrag = gestureState.committedFromDrag
+        val releaseVel = gestureState.releaseVelocityTabsPerSec
+        gestureState.committedFromDrag = false
+        gestureState.releaseVelocityTabsPerSec = null
+
+        if (reduceMotion) {
+            position.snapTo(selected.toFloat())
+            lift.snapTo(0f)
+            lens.snapTo(0f)
+        } else if (fromDrag || changed) {
+            val targetPos = selected.toFloat()
+            coroutineScope {
+                launch {
+                    position.animateTo(
+                        targetValue = targetPos,
+                        animationSpec = spring(
+                            dampingRatio = 0.82f,
+                            stiffness = if (fromDrag) 520f else 620f,
+                        ),
+                        initialVelocity = if (fromDrag) (releaseVel ?: position.velocity) else position.velocity,
+                    )
+                }
+                launch {
+                    lift.animateTo(1f, spring(dampingRatio = 0.84f, stiffness = 540f))
+                }
+                launch {
+                    lens.animateTo(1f, spring(dampingRatio = 0.94f, stiffness = 480f))
+                }
+                launch {
+                    delay(110)
+                    withTimeoutOrNull(120) {
+                        snapshotFlow { abs(position.value - targetPos) to abs(position.velocity) }
+                            .first { (dist, vel) -> dist <= 0.12f && vel <= 2.2f }
+                    }
+                    launch {
+                        lift.animateTo(0f, spring(dampingRatio = 0.86f, stiffness = 200f))
+                    }
+                    launch {
+                        lens.animateTo(0f, spring(dampingRatio = 0.98f, stiffness = 135f))
+                    }
+                }
+            }
+        } else if (!gestureState.isDragging) {
+            launch {
+                lift.animateTo(0f, spring(dampingRatio = 0.86f, stiffness = 220f))
+            }
+            launch {
+                lens.animateTo(0f, spring(dampingRatio = 0.98f, stiffness = 145f))
+            }
+        }
+    }
+    Box(
+        modifier
+            .fillMaxSize()
+            .drawBehind {
+                val bleedPx = bleed.toPx()
+                val insetPx = inset.toPx()
+                val extraPadPx = extraPad.toPx()
+                val dockLeft = bleedPx
+                val dockTop = bleedPx
+                val dockW = (size.width - bleedPx * 2f).coerceAtLeast(1f)
+                val dockH = (size.height - bleedPx * 2f).coerceAtLeast(1f)
+                val stroke = 0.65.dp.toPx()
+                drawRoundRect(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.34f),
+                            Color.White.copy(alpha = 0.04f),
+                            Color.Black.copy(alpha = 0.07f),
+                        ),
+                        startY = dockTop,
+                        endY = dockTop + dockH,
+                    ),
+                    topLeft = Offset(dockLeft + stroke / 2f, dockTop + stroke / 2f),
+                    size = Size((dockW - stroke).coerceAtLeast(1f), (dockH - stroke).coerceAtLeast(1f)),
+                    cornerRadius = CornerRadius(dockH / 2f),
+                    style = Stroke(stroke),
                 )
+
+                val frame = computeTabIndicatorFrame(
+                    canvasWidth = size.width,
+                    canvasHeight = size.height,
+                    bleedPx = bleedPx,
+                    insetPx = insetPx,
+                    extraPadPx = extraPadPx,
+                    tabCount = items.size,
+                    position = if (reduceMotion) selected.toFloat() else position.value,
+                    velocityTabsPerSec = if (reduceMotion) 0f else position.velocity,
+                    lift = if (reduceMotion) 0f else lift.value,
+                    baseFillAlpha = p.tabIndicator.alpha,
+                    isDark = isDark,
+                    lens = if (reduceMotion) 0f else lens.value,
+                )
+                val corner = CornerRadius(frame.height / 2f)
+                val pillTopLeft = Offset(frame.left, frame.top)
+                val pillSize = Size(frame.width, frame.height)
+                val hasRealLens = lensBridge?.shaderReady == true && !reduceMotion
+                if (hasRealLens) {
+                    val t = smoothstep01(frame.lensMix)
+                    val restingAlpha = p.tabIndicator.alpha * (1f - t)
+                    if (restingAlpha > 0.004f) {
+                        drawRoundRect(
+                            color = p.tabIndicator.copy(alpha = restingAlpha),
+                            topLeft = pillTopLeft,
+                            size = pillSize,
+                            cornerRadius = corner,
+                        )
+                    }
+                } else {
+                    if (frame.shadowAlpha > 0.005f) {
+                        drawRoundRect(
+                            color = Color.Black.copy(alpha = frame.shadowAlpha),
+                            topLeft = Offset(frame.left, frame.top + 0.5.dp.toPx()),
+                            size = pillSize,
+                            cornerRadius = corner,
+                        )
+                    }
+                    drawRoundRect(
+                        color = p.tabIndicator.copy(alpha = frame.fillAlpha),
+                        topLeft = pillTopLeft,
+                        size = pillSize,
+                        cornerRadius = corner,
+                    )
+                    if (frame.highlightAlpha > 0.005f) {
+                        drawRoundRect(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = frame.highlightAlpha),
+                                    Color.Transparent,
+                                ),
+                                startY = frame.top,
+                                endY = frame.top + frame.height,
+                            ),
+                            topLeft = pillTopLeft,
+                            size = pillSize,
+                            cornerRadius = corner,
+                        )
+                    }
+                    if (frame.rimAlpha > 0.005f) {
+                        val rimStroke = 0.9.dp.toPx()
+                        drawRoundRect(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = frame.rimAlpha),
+                                    Color.White.copy(alpha = frame.rimAlpha * 0.25f),
+                                ),
+                                startY = frame.top,
+                                endY = frame.top + frame.height,
+                            ),
+                            topLeft = Offset(frame.left + rimStroke / 2f, frame.top + rimStroke / 2f),
+                            size = Size((frame.width - rimStroke).coerceAtLeast(1f), (frame.height - rimStroke).coerceAtLeast(1f)),
+                            cornerRadius = CornerRadius(((frame.height - rimStroke) / 2f).coerceAtLeast(1f)),
+                            style = Stroke(rimStroke),
+                        )
+                    }
+                }
+            },
+    ) {
+        val outsideClipPath = remember { Path() }
+        val insideClipPath = remember { Path() }
+
+        Box(
+            Modifier
+                .fillMaxSize()
+                .drawWithContent {
+                    val frame = computeTabIndicatorFrame(
+                        canvasWidth = size.width,
+                        canvasHeight = size.height,
+                        bleedPx = bleed.toPx(),
+                        insetPx = inset.toPx(),
+                        extraPadPx = extraPad.toPx(),
+                        tabCount = items.size,
+                        position = if (reduceMotion) selected.toFloat() else position.value,
+                        velocityTabsPerSec = if (reduceMotion) 0f else position.velocity,
+                        lift = if (reduceMotion) 0f else lift.value,
+                        baseFillAlpha = p.tabIndicator.alpha,
+                        isDark = isDark,
+                        lens = if (reduceMotion) 0f else lens.value,
+                    )
+                    outsideClipPath.rewind()
+                    outsideClipPath.addRoundRect(
+                        RoundRect(
+                            left = frame.left,
+                            top = frame.top,
+                            right = frame.left + frame.width,
+                            bottom = frame.top + frame.height,
+                            cornerRadius = CornerRadius(frame.height / 2f),
+                        ),
+                    )
+                    clipPath(outsideClipPath, clipOp = ClipOp.Difference) {
+                        this@drawWithContent.drawContent()
+                    }
+                },
+        ) {
+            Row(
+                Modifier
+                    .fillMaxSize()
+                    .padding(bleed)
+                    .padding(horizontal = inset)
+                    .selectableGroup()
+                    .pointerInput(items.size) {
+                        val count = items.size
+                        val lastIndex = (count - 1).coerceAtLeast(0)
+                        awaitEachGesture {
+                            val rowW = size.width.toFloat()
+                            val rowH = size.height.toFloat()
+                            val cellW = (rowW / count.coerceAtLeast(1)).coerceAtLeast(1f)
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            val downPos = down.position
+                            val startTab = tabIndexForX(downPos.x, rowW, count)
+                            val velocityTracker = VelocityTracker().apply {
+                                addPosition(down.uptimeMillis, downPos)
+                            }
+                            var dragging = false
+                            var cancelled = false
+                            var lastHovered = startTab
+                            var lastPointerPos = downPos
+                            val dragSlop = viewConfiguration.touchSlop * 0.65f
+
+                            if (!currentReduceMotion) {
+                                scope.launch {
+                                    lift.animateTo(1f, spring(dampingRatio = 0.84f, stiffness = 480f))
+                                }
+                                scope.launch {
+                                    lens.animateTo(1f, spring(dampingRatio = 0.95f, stiffness = 420f))
+                                }
+                            }
+
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: event.changes.firstOrNull()
+                                if (change == null) {
+                                    cancelled = true
+                                    break
+                                }
+                                velocityTracker.addPosition(change.uptimeMillis, change.position)
+                                lastPointerPos = change.position
+                                if (!change.pressed) {
+                                    if (dragging) change.consume()
+                                    break
+                                }
+                                if (change.isConsumed) {
+                                    cancelled = true
+                                    break
+                                }
+                                val dx = change.position.x - downPos.x
+                                val dy = change.position.y - downPos.y
+                                if (!dragging && abs(dx) > dragSlop && abs(dx) >= abs(dy) * 0.8f) {
+                                    dragging = true
+                                    gestureState.isDragging = true
+                                    scrubbingTab = lastHovered
+                                    if (!currentReduceMotion) {
+                                        scope.launch {
+                                            lift.animateTo(1f, spring(dampingRatio = 0.84f, stiffness = 480f))
+                                        }
+                                        scope.launch {
+                                            lens.animateTo(1f, spring(dampingRatio = 0.95f, stiffness = 420f))
+                                        }
+                                    }
+                                }
+                                if (dragging) {
+                                    change.consume()
+                                    val rawPos = (change.position.x / cellW) - 0.5f
+                                    val targetPos = rubberBandTabPosition(rawPos, lastIndex)
+                                    val hovered = targetPos.roundToInt().coerceIn(0, lastIndex)
+                                    if (hovered != lastHovered) {
+                                        lastHovered = hovered
+                                        scrubbingTab = hovered
+                                        haptic.tick()
+                                    }
+                                    if (currentReduceMotion) {
+                                        scope.launch { position.snapTo(hovered.toFloat()) }
+                                    } else {
+                                        scope.launch {
+                                            position.animateTo(
+                                                targetValue = targetPos,
+                                                animationSpec = spring(dampingRatio = 0.92f, stiffness = 1600f),
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            scrubbingTab = -1
+                            gestureState.isDragging = false
+                            if (cancelled) {
+                                if (currentReduceMotion) {
+                                    scope.launch {
+                                        position.snapTo(currentSelected.toFloat())
+                                        lift.snapTo(0f)
+                                        lens.snapTo(0f)
+                                    }
+                                } else {
+                                    scope.launch {
+                                        position.animateTo(
+                                            currentSelected.toFloat(),
+                                            spring(dampingRatio = 0.82f, stiffness = 520f),
+                                        )
+                                    }
+                                    scope.launch {
+                                        lift.animateTo(0f, spring(dampingRatio = 0.86f, stiffness = 220f))
+                                    }
+                                    scope.launch {
+                                        lens.animateTo(0f, spring(dampingRatio = 0.98f, stiffness = 145f))
+                                    }
+                                }
+                            } else if (dragging) {
+                                val velTabsPerSec = (velocityTracker.calculateVelocity().x / cellW).coerceIn(-18f, 18f)
+                                val targetTab = resolveScrubTargetTab(position.value, velTabsPerSec, count)
+                                if (targetTab != currentSelected) {
+                                    if (lastHovered != targetTab) haptic.tick()
+                                    gestureState.committedFromDrag = true
+                                    gestureState.releaseVelocityTabsPerSec = velTabsPerSec
+                                    currentOnSelect(targetTab)
+                                } else if (currentReduceMotion) {
+                                    scope.launch {
+                                        position.snapTo(targetTab.toFloat())
+                                        lift.snapTo(0f)
+                                        lens.snapTo(0f)
+                                    }
+                                } else {
+                                    scope.launch {
+                                        position.animateTo(
+                                            targetValue = targetTab.toFloat(),
+                                            animationSpec = spring(dampingRatio = 0.82f, stiffness = 520f),
+                                            initialVelocity = velTabsPerSec,
+                                        )
+                                    }
+                                    scope.launch {
+                                        lift.animateTo(0f, spring(dampingRatio = 0.86f, stiffness = 220f))
+                                    }
+                                    scope.launch {
+                                        lens.animateTo(0f, spring(dampingRatio = 0.98f, stiffness = 145f))
+                                    }
+                                }
+                            } else {
+                                val inBounds = lastPointerPos.y in (-rowH * 0.6f)..(rowH * 1.6f) &&
+                                    lastPointerPos.x in (-cellW * 0.25f)..(rowW + cellW * 0.25f)
+                                if (inBounds) {
+                                    val tappedTab = tabIndexForX(lastPointerPos.x, rowW, count)
+                                    if (tappedTab != currentSelected) {
+                                        haptic.tick()
+                                        currentOnSelect(tappedTab)
+                                    } else {
+                                        currentOnSelect(tappedTab)
+                                        if (currentReduceMotion) {
+                                            scope.launch {
+                                                lift.snapTo(0f)
+                                                lens.snapTo(0f)
+                                            }
+                                        } else {
+                                            scope.launch {
+                                                lift.animateTo(0f, spring(dampingRatio = 0.86f, stiffness = 220f))
+                                            }
+                                            scope.launch {
+                                                lens.animateTo(0f, spring(dampingRatio = 0.98f, stiffness = 145f))
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    if (currentReduceMotion) {
+                                        scope.launch {
+                                            lift.snapTo(0f)
+                                            lens.snapTo(0f)
+                                        }
+                                    } else {
+                                        scope.launch {
+                                            lift.animateTo(0f, spring(dampingRatio = 0.86f, stiffness = 220f))
+                                        }
+                                        scope.launch {
+                                            lens.animateTo(0f, spring(dampingRatio = 0.98f, stiffness = 145f))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+            ) {
+                val inactiveColor = p.label.copy(alpha = if (isDark) 0.72f else 0.78f)
+                items.forEachIndexed { index, item ->
+                    TabCell(
+                        item = item,
+                        active = index == visualActive,
+                        color = inactiveColor,
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                        onSelect = {
+                            if (index != currentSelected) haptic.tick()
+                            // The owner decides reselect semantics (settings returns to its root).
+                            currentOnSelect(index)
+                        },
+                    )
+                }
+            }
+        }
+
+        Box(
+            Modifier
+                .fillMaxSize()
+                .drawWithContent {
+                    val frame = computeTabIndicatorFrame(
+                        canvasWidth = size.width,
+                        canvasHeight = size.height,
+                        bleedPx = bleed.toPx(),
+                        insetPx = inset.toPx(),
+                        extraPadPx = extraPad.toPx(),
+                        tabCount = items.size,
+                        position = if (reduceMotion) selected.toFloat() else position.value,
+                        velocityTabsPerSec = if (reduceMotion) 0f else position.velocity,
+                        lift = if (reduceMotion) 0f else lift.value,
+                        baseFillAlpha = p.tabIndicator.alpha,
+                        isDark = isDark,
+                        lens = if (reduceMotion) 0f else lens.value,
+                    )
+                    insideClipPath.rewind()
+                    insideClipPath.addRoundRect(
+                        RoundRect(
+                            left = frame.left,
+                            top = frame.top,
+                            right = frame.left + frame.width,
+                            bottom = frame.top + frame.height,
+                            cornerRadius = CornerRadius(frame.height / 2f),
+                        ),
+                    )
+                    clipPath(insideClipPath, clipOp = ClipOp.Intersect) {
+                        this@drawWithContent.drawContent()
+                    }
+                },
+        ) {
+            Row(
+                Modifier
+                    .fillMaxSize()
+                    .padding(bleed)
+                    .padding(horizontal = inset)
+                    .clearAndSetSemantics {},
+            ) {
+                items.forEachIndexed { index, item ->
+                    TabCell(
+                        item = item,
+                        active = index == visualActive,
+                        color = p.accent,
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                        onSelect = {},
+                    )
+                }
             }
         }
     }
@@ -297,33 +910,29 @@ fun LiquidTabCells(
 private fun TabCell(
     item: TabItem,
     active: Boolean,
-    inactive: Color,
-    selectedColor: Color,
+    color: Color,
     modifier: Modifier = Modifier,
     onSelect: () -> Unit,
 ) {
-    // 轻微放大，不改变格子和标签的布局。
+    // 选中图标轻微放大带一点回弹，和液态滑块同频。
     val reduceMotion = LocalReduceMotion.current
-    val targetScale = if (active) 1f else 21f / 23f
+    val targetScale = if (active) 1f else 0.92f
     val iconScale = animateFloatAsState(
         targetValue = targetScale,
-        animationSpec = if (reduceMotion) snap() else spring(dampingRatio = 1f, stiffness = 500f),
+        animationSpec = if (reduceMotion) snap() else spring(dampingRatio = 0.72f, stiffness = 480f),
         label = "tabIconSize",
-    )
-    val fg by animateColorAsState(
-        targetValue = if (active) selectedColor else inactive,
-        animationSpec = tween(if (LocalReduceMotion.current) 0 else AbMotion.fast),
-        label = "tabFg",
     )
     Column(
         modifier = modifier
-            .selectable(
-                selected = active,
-                role = Role.Tab,
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onSelect,
-            ),
+            .fillMaxHeight()
+            .semantics(mergeDescendants = true) {
+                role = Role.Tab
+                this.selected = active
+                onClick {
+                    onSelect()
+                    true
+                }
+            },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -332,25 +941,29 @@ private fun TabCell(
             scaleX = scale
             scaleY = scale
         }
-        Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(23.dp), contentAlignment = Alignment.Center) {
             val glyph = item.glyph
             if (glyph != null) {
                 // 动态图标自己管动效（内部也读 减少动效），外面只负责选中缩放。
-                TabGlyphIcon(glyph = glyph, active = active, tint = fg, modifier = glyphModifier)
+                TabGlyphIcon(glyph = glyph, active = active, tint = color, modifier = glyphModifier)
             } else {
                 Icon(
                     imageVector = item.icon,
                     contentDescription = null,
                     modifier = glyphModifier,
-                    tint = fg,
+                    tint = color,
                 )
             }
         }
         Spacer(Modifier.height(2.dp))
         Text(
             text = item.label,
-            style = AbType.caption1.copy(fontSize = 11.sp),
-            color = fg,
+            style = AbType.caption2.copy(
+                fontSize = 11.sp,
+                lineHeight = 12.sp,
+                platformStyle = PlatformTextStyle(includeFontPadding = false),
+            ),
+            color = color,
             maxLines = 1,
         )
     }

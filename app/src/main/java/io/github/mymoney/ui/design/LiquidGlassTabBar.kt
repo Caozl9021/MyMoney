@@ -27,6 +27,7 @@ import androidx.core.view.WindowInsetsCompat
 import io.github.mymoney.R
 import io.github.mymoney.ui.MyMoneyTheme
 import com.qmdeve.liquidglass.widget.LiquidGlassView
+import kotlin.math.roundToInt
 
 /**
  * 真·液体玻璃（liquid glass）Tab 栏，Android 13 / API 33+ 才有。
@@ -61,17 +62,23 @@ class LiquidGlassTabBar(
     private var appliedTintAlpha: Float? = null
 
     private val overlay = ComposeView(activity).apply { id = R.id.dock_tabs }
+    private val lensBridge = LiquidPillLensBridge()
+    private val dockStage = FrameLayout(activity).apply {
+        clipChildren = false
+        clipToPadding = false
+        setBackgroundColor(Color.TRANSPARENT)
+    }
 
     private val density = resources.displayMetrics.density
 
     /** 侧边留白与 Compose 兜底共用尺寸。 */
-    private val sidePx = (AbSize.tabBarSideMargin.value * density).toInt()
+    private val sidePx = (AbSize.tabBarSideMargin.value * density).roundToInt()
 
     /** 距屏幕底边 16dp，导航条 inset 在运行时再叠加 */
-    private val baseBottomPx = (16f * density).toInt()
+    private val baseBottomPx = (16f * density).roundToInt()
 
     // 双层模糊和下移尾部保留透明绘制空间，胶囊本身尺寸不变。
-    private val shadowBleedPx = (18f * density).toInt()
+    private val shadowBleedPx = (18f * density).roundToInt()
 
     private val barHeightPx = AbSize.tabBarHeight.value * density
 
@@ -90,7 +97,7 @@ class LiquidGlassTabBar(
         glass.setDispersion(0.16f)
         // The AAR accepts physical pixels. Bound the density-adapted radius;
         // set once, without adding per-frame sampling or bitmap work.
-        glass.setBlurRadius((8f * density).coerceAtMost(32f))
+        glass.setBlurRadius((4.5f * density).coerceAtMost(18f))
         glass.setTintColorRed(1f)
         glass.setTintColorGreen(1f)
         glass.setTintColorBlue(1f)
@@ -102,11 +109,14 @@ class LiquidGlassTabBar(
         // 阴影只在自己的软件位图内模糊、挖空，再作为独立兄弟层合成。
         // CLEAR 不接触屏幕画布，硬件 Canvas 也无需支持 BlurMaskFilter。
         val shadowView = CapsuleShadowView(activity, shadowBleedPx)
-        addView(shadowView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
-        addView(
+        dockStage.addView(
+            shadowView,
+            LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT, Gravity.CENTER),
+        )
+        dockStage.addView(
             glass,
             1,
-            LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT).apply {
+            LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT, Gravity.CENTER).apply {
                 leftMargin = shadowBleedPx
                 rightMargin = shadowBleedPx
                 topMargin = shadowBleedPx
@@ -123,11 +133,13 @@ class LiquidGlassTabBar(
                 val dark = LocalAbPalette.current == DarkPalette || LocalAbPalette.current.pageBg == DarkPalette.pageBg
                 val tint = LocalAbPalette.current.cardBg
                 val fontScale = androidx.compose.ui.platform.LocalDensity.current.fontScale
+                val bleed = with(androidx.compose.ui.platform.LocalDensity.current) { shadowBleedPx.toDp() }
                 SideEffect {
                     val height = dockHeightForFontScale(fontScale).value * density
+                    val targetHeight = height.roundToInt() + shadowBleedPx * 2
                     val params = layoutParams
-                    if (params != null && params.height != height.toInt() + shadowBleedPx * 2) {
-                        params.height = height.toInt() + shadowBleedPx * 2
+                    if (params != null && params.height != targetHeight) {
+                        params.height = targetHeight
                         layoutParams = params
                         glass.setCornerRadius(height / 2f)
                     }
@@ -136,7 +148,7 @@ class LiquidGlassTabBar(
                     if (previousTint?.green != tint.green) glass.setTintColorGreen(tint.green)
                     if (previousTint?.blue != tint.blue) glass.setTintColorBlue(tint.blue)
                     appliedTint = tint
-                    val alpha = if (dark) 0.28f else 0.10f
+                    val alpha = if (dark) 0.22f else 0.42f
                     if (appliedTintAlpha != alpha) {
                         glass.setTintAlpha(alpha)
                         appliedTintAlpha = alpha
@@ -147,24 +159,32 @@ class LiquidGlassTabBar(
                     selected = tabState.intValue,
                     onSelect = onSelect,
                     modifier = Modifier.fillMaxSize(),
+                    bleed = bleed,
+                    lensBridge = lensBridge,
                 )
             }
         }
-        addView(
+        dockStage.addView(
             overlay,
-            LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT).apply {
-                leftMargin = shadowBleedPx
-                rightMargin = shadowBleedPx
-                topMargin = shadowBleedPx
-                bottomMargin = shadowBleedPx
-            },
+            LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT, Gravity.CENTER),
         )
+        addView(
+            dockStage,
+            LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT, Gravity.CENTER),
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val lensView = LiquidPillLensView(activity, source, dockStage, lensBridge)
+            addView(
+                lensView,
+                LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT, Gravity.CENTER),
+            )
+        }
 
         // 容器 = 胶囊 + 四周 bleed。玻璃与图标再用 bleed 的 margin 缩回到胶囊原位，
         // 所以**视觉上胶囊尺寸完全不变**，多出来的只是给阴影用的透明边距。
         layoutParams = LayoutParams(
             LayoutParams.MATCH_PARENT,
-            barHeightPx.toInt() + shadowBleedPx * 2,
+            barHeightPx.roundToInt() + shadowBleedPx * 2,
             Gravity.BOTTOM,
         ).apply {
             leftMargin = sidePx - shadowBleedPx

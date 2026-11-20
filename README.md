@@ -1,8 +1,8 @@
 # 麦米 My Money
 
-> 当前已发布版本 **1.10.3/162**（2026-11-14 用户验收通过，已发 [GitHub Release `v1.10.3`](https://github.com/Caozl9021/MyMoney/releases/tag/v1.10.3)）：含 11-11 验收的首页/账单详情/统计/明细页样式重构与 11-12 验收的资产 Tab 布局精简，产物见 `dist/app/1.10.3-162/`。说明见 [资产](docs/ASSET_MANAGEMENT.md)，验收见 [验收记录](docs/ACCEPTANCE.md)。
+> 当前已发布版本 **1.11.1/164**（2026-11-20 用户验收通过，已发 [GitHub Release `v1.11.1`](https://github.com/Caozl9021/MyMoney/releases/tag/v1.11.1)）：包含底栏悬浮 Dock 液态玻璃滑块重构、设置页极简重构（仅保留交易详情无障碍识别）、实时增量同步与全局纯色圆形 Lucide 图标。说明见 [UI 组件说明](docs/UI_COMPONENTS.md) 与 [更新日志](CHANGELOG.md)，验收见 [验收记录](docs/ACCEPTANCE.md)。
 >
-> **工作区最新进度（2026-11-19）**：App **1.11.0/163**（含实时增量同步 `add-realtime-incremental-sync` 与在 `1774fd3` Lucide 图标重构基础上升级的全站**纯色实底 + 白色标志**圆形图标徽章）已安装小米 14 并获用户验收通过，详见 [UI 组件说明](docs/UI_COMPONENTS.md) 与 [更新日志](CHANGELOG.md)（尚未提交源码或发布新 Release）。
+> 更早版本 **1.10.3/162**（2026-11-14 已发 [GitHub Release `v1.10.3`](https://github.com/Caozl9021/MyMoney/releases/tag/v1.10.3)）。
 
 ## 版本说明（1.10.3/162 及近期基线）
 

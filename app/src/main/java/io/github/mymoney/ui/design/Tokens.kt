@@ -81,7 +81,7 @@ val LightPalette = AbPalette(
     glassStrokeTop = Color(0xE6FFFFFF),
     glassStrokeBottom = Color(0x33FFFFFF),
     glassShadow = Color(0x14000000),
-    tabIndicator = Color(0x1F767680),
+    tabIndicator = Color(0x1C767680),
     // 品牌薄荷绿压暗到能过白底对比度
     accent = Color(0xFF0F9E85),
     onAccent = Color(0xFFFFFFFF),
