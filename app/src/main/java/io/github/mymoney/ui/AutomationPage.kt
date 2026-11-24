@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -71,9 +70,7 @@ internal fun AutomationPage(
                                 dividerAbove = true,
                                 titleStyle = AbType.footnote,
                                 trailing = {
-                                    TextButton(onClick = { onAction(action) }) {
-                                        Text(action.label, color = p.accent)
-                                    }
+                                    AbTextButton(action.label, onClick = { onAction(action) })
                                 },
                             )
                         }

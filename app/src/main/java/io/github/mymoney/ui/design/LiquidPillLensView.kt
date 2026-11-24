@@ -16,8 +16,10 @@ import androidx.annotation.RequiresApi
  * [LiquidPillLensView] sibling overlay.
  */
 internal class LiquidPillLensBridge {
+    var enabled: Boolean = true
     var frameProvider: ((canvasW: Float, canvasH: Float) -> TabIndicatorFrame?)? = null
     var isDarkProvider: (() -> Boolean)? = null
+    var onDockTransform: ((scaleX: Float, scaleY: Float, translationX: Float) -> Unit)? = null
     var onInvalidate: (() -> Unit)? = null
     var shaderReady: Boolean = false
 
@@ -208,10 +210,11 @@ internal class LiquidPillLensView(
 
     private fun updateLensNode() {
         val activeShader = shader ?: return
-        if (isRecording || !isLaidOut || !dockStage.isLaidOut || width <= 0 || height <= 0) {
+        if (!bridge.enabled || isRecording || !isLaidOut || !dockStage.isLaidOut || width <= 0 || height <= 0) {
             if (hasActiveLens) {
                 hasActiveLens = false
                 lensNode.discardDisplayList()
+                invalidate()
             }
             return
         }
@@ -250,6 +253,7 @@ internal class LiquidPillLensView(
                         dockStage.left + dockStage.translationX,
                         dockStage.top + dockStage.translationY,
                     )
+                    canvas.scale(dockStage.scaleX, dockStage.scaleY, dockStage.pivotX, dockStage.pivotY)
                     dockStage.draw(canvas)
                 } finally {
                     canvas.restoreToCount(savedStage)
@@ -258,15 +262,22 @@ internal class LiquidPillLensView(
                 lensNode.endRecording()
             }
 
+            val sx = dockStage.scaleX
+            val sy = dockStage.scaleY
+            val px = dockStage.pivotX
+            val py = dockStage.pivotY
+            val rawCx = frame.left + frame.width * 0.5f
+            val rawCy = frame.top + frame.height * 0.5f
+            val mappedCx = dockStage.left + px + (rawCx - px) * sx + dockStage.translationX
+            val mappedCy = dockStage.top + py + (rawCy - py) * sy + dockStage.translationY
+            val mappedW = frame.width * sx
+            val mappedH = frame.height * sy
+
             val dark = if (bridge.isDarkProvider?.invoke() == true) 1f else 0f
             activeShader.setFloatUniform("canvasSize", width.toFloat(), height.toFloat())
-            activeShader.setFloatUniform(
-                "pillCenter",
-                frame.left + frame.width * 0.5f,
-                frame.top + frame.height * 0.5f,
-            )
-            activeShader.setFloatUniform("pillHalfSize", frame.width * 0.5f, frame.height * 0.5f)
-            activeShader.setFloatUniform("pillRadius", frame.height * 0.5f)
+            activeShader.setFloatUniform("pillCenter", mappedCx, mappedCy)
+            activeShader.setFloatUniform("pillHalfSize", mappedW * 0.5f, mappedH * 0.5f)
+            activeShader.setFloatUniform("pillRadius", mappedH * 0.5f)
             activeShader.setFloatUniform("lensMix", frame.lensMix)
             activeShader.setFloatUniform("refractionBand", 15f * density)
             activeShader.setFloatUniform("refractionAmount", 19f * density)

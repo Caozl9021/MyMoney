@@ -1,5 +1,6 @@
 package io.github.mymoney.ui.design
 
+import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -7,8 +8,8 @@ import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.sp
 
 /**
- * iOS 的字号阶梯。系统字体在 Android 上就是 Roboto/思源黑体，
- * 只对齐「字号 + 字重 + 行高」，不强行塞 Inter/SF。
+ * iOS 的字号阶梯。系统字体在 Android 上就是 Roboto/思源黑体/MiSans，
+ * 只对齐「字号 + 字重 + 行高」，不强行塞外部西文字体。
  *
  * [tnum] 打开等宽数字：金额滚动/变化时不抖动，这是 iOS 记账类 App 的硬要求。
  */
@@ -102,8 +103,13 @@ object AbType {
     /** 统计卡里的中等金额 22 Bold */
     val amountTitle = title2.tabular()
 
-    /** 列表行金额 15 Regular */
-    val amountRow = subhead.tabular()
+    /** 列表行金额 16 SemiBold */
+    val amountRow = TextStyle(
+        fontSize = 16.sp,
+        lineHeight = 21.sp,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = (-0.2).sp,
+    ).tabular()
 
     /** 确认页可编辑金额 44 Bold */
     val amountEntry = TextStyle(
@@ -120,6 +126,22 @@ object AbType {
         fontFamily = FontFamily.Monospace,
     )
 }
+
+/** 为 MaterialTheme 提供一致的默认字体族，避免未显式指定 AbType 的组件回退为系统默认西文字体。 */
+val AbMaterialTypography = Typography(
+    displayLarge = AbType.largeTitle,
+    headlineLarge = AbType.largeTitle,
+    headlineMedium = AbType.title2,
+    titleLarge = AbType.title2,
+    titleMedium = AbType.navTitle,
+    titleSmall = AbType.headline,
+    bodyLarge = AbType.body,
+    bodyMedium = AbType.subhead,
+    bodySmall = AbType.footnote,
+    labelLarge = AbType.headline,
+    labelMedium = AbType.caption1,
+    labelSmall = AbType.caption2,
+)
 
 /** 分组标题用的小号全大写风格标题 */
 val AbType.sectionHeader: TextStyle

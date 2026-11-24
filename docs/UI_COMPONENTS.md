@@ -127,3 +127,26 @@
 | 空间实时着色与无障碍 | 使用 `ClipOp.Difference`（外层未选中态 `inactiveColor = p.label.copy(alpha = if (isDark) 0.72f else 0.78f)`）与 `ClipOp.Intersect`（水滴内层 `p.accent`）双层裁剪；叠加层 `clearAndSetSemantics {}` 保持单节点与静默复点语义；`TabCell` 采用 `11.sp / 12.sp lineHeight`（`includeFontPadding = false`）与 `23.dp` 图标盒垂直光学居中 |
 
 - **当前状态**：底栏效果已在 `1.11.0/163` 候选包获用户验收通过，随后升版至 `1.11.1/164` 并打 tag `v1.11.1` 发布。
+
+## 2026-11-24 悬浮底栏 Dock 物理动效与光学细节定稿（1.11.1/164，用户验收通过）
+
+| 组件 / 机制 | 当前定稿约束与实现 |
+| --- | --- |
+| 大胶囊呼吸与矩阵同步（`LiquidGlassTabBar` / `LiquidPillLensView`） | `LiquidPillLensBridge.onDockTransform` 驱动 `dockStage` 切页/松手微膨（`+3.6%` 宽 / `+5.2%` 高，`dampingRatio = 0.48f, stiffness = 230f`）与横滑限幅随动（`±3.5.dp`）；`LiquidPillLensView.updateLensNode()` 同步对录制画布与水滴坐标做缩放平移映射，关闭 `LocalLiquidGlassEnabled` 或 `LocalReduceTransparency` 时立即复位 |
+| 速率挤窄与果冻回弹（`Chrome.kt`） | 按住静止保持饱满胶囊（`scaleX = 1f + 0.26f * lx`、`scaleY = 1f + 0.28f * ly`）；横滑由实时速率 `activeSpeed / (activeSpeed + 3.2f)` 驱动 `dragSqueeze`（`0.46f, 340f`）对称挤窄至最低 `0.76f` 并纵向微鼓，停顿 `45ms` 或松手以 `0.42f–0.44f` 低阻尼舒张回弹；`position` 拖动追踪采用 `spring(0.68f, 900f)` |
+| X/Y 错相与起滑防跳（`Chrome.kt`） | 拆出横向 `lift`（`0.60f, 220f`）与纵向 `liftY`（`0.74f, 270f`）错相弹性收束；选中 Tab 边缘按下起滑使用 `dragAnchorX` + `dragStartPos` 相对增量推进消除瞬跳；各手势退出分支收口于 `settleVisualsToRest()` |
+| 内壁跟随柔光（`Chrome.kt`） | 开启液态玻璃且 `frame.lensMix > 0.005f` 时，在严格裁剪于母胶囊轮廓的 `dockGlowClipPath` 内叠加随水滴中心移动的 `BlendMode.Plus` 径向柔光（浅色中心 `0.22f` / 深色 `0.14f`） |
+
+- **验证与验收**：`scripts/check-ui-components.sh` 通过，`:app:testDebugUnitTest --offline`（106 文件 **800 项**，含 `LiquidTabIndicatorTest` **12/12**）全绿，Release `1.11.1/164`（SHA-256 `d6db9d25…1d4e`）安装小米 14 后用户确认「dock完美了」，并已将 Dock 方案与模板同步整理至个人 AI 知识库。
+
+## 2026-11-24 局内组件、物理动效与分区域液态玻璃规范定稿（1.11.1/164，用户验收通过）
+
+| 能力域 | 核心实现 / 规范 | 位置 |
+| --- | --- | --- |
+| 统一弹簧动效 | `AbSpring`（`navigation` / `sheet` / `modal` / `morph` / `bouncy`）与 `-22%` 视差 `liquidNavigationTransition` | `LiquidMotion.kt` / `Chrome.kt` / `SettingsScreen.kt` |
+| 轻透表面与高光 | 修复 `glassSurfaceAlpha` 放大公式、新增 `glassBlurRadiusDp` 与斜向高光 `liquidSpecularRimBrush`；移除确认卡与芯片深色/红黑边框；`badgeLiquidGlaze` 收敛为极细斜向边光 | `Tokens.kt` / `SettingsIcons.kt` / `Components.kt` |
+| 分区域通透度控制 | `Appearance.LIQUID_GLASS_PER_ZONE_CLARITY` + 四通道 `dock` / `header` / `sheet` / `dialog`（`LocalLiquidGlassClaritySpec` / `resolveClaritySpec`），入口收口至「外观 → 液态玻璃」极简三级页 | `Appearance.kt` / `Theme.kt` / `SettingsScreen.kt` |
+| 悬浮胶囊与二级分类 | `HeaderGlassApi33Holder` 升级为 `11.5dp` 环带、`5.5dp` 边缘位移、`0.12` 色散与 `4.5dp` 浅层模糊（含 `PageScaffold` 大标题兜底）；`CategoryPicker` 升级为 `20.dp` 底层模糊与无框主题色选中胶囊 + 锚点缩放 | `FloatingHeader.kt` / `Chrome.kt` / `CategoryPicker.kt` |
+| 滚轮时间与窗内浮卡 | `LiquidWheelTimePicker` 双列惯性滚轮 + `AppDialog` 动态高度适配 + `LocalDialogDismiss` 对称退场；`AssetBalanceSheet` 迁入窗内 `GlassBottomSheetBox`；`ConfirmSheet` ↔ `ConfirmResultSheet` 原生变形 | `LedgerDateTimeDialog.kt` / `AppDialog.kt` / `AssetsScreen.kt` / `ConfirmSheet.kt` |
+
+- **验证与验收**：`scripts/check-ui-components.sh` 通过；`:app:testDebugUnitTest :billkit:testDebugUnitTest --offline` 共 **836 项**全绿（`:app` 107 文件 808 项 + `:billkit` 4 文件 28 项）；签名 Release `1.11.1/164`（SHA-256 `7d5204d9…49b9`）安装小米 14 后获用户验收通过。

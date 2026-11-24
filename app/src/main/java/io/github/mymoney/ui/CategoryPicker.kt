@@ -1,10 +1,14 @@
 package io.github.mymoney.ui
 
+import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -19,10 +23,21 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlurEffect
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.layer.GraphicsLayer
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
@@ -168,6 +183,7 @@ internal fun Modifier.categorySlide(
 internal fun BoxScope.CategoryPicker(
     state: CategoryPickerState,
     hostOrigin: Offset,
+    backdrop: GraphicsLayer? = null,
     onSelect: (String, String) -> Unit,
 ) {
     val request = state.request ?: return
@@ -207,23 +223,76 @@ internal fun BoxScope.CategoryPicker(
             .coerceIn(margin, (maxW - margin - bubbleWidth).coerceAtLeast(margin))
         val anchorMid = anchor.center.y - hostOrigin.y
         val y = (anchorMid - alignCenter).coerceIn(safeTop, (maxH - margin - bubbleHeight).coerceAtLeast(safeTop))
+        val pivotX = (((anchor.center.x - hostOrigin.x) - x) / bubbleWidth.coerceAtLeast(1f)).coerceIn(0.15f, 0.85f)
+        val pivotY = ((anchorMid - y) / bubbleHeight.coerceAtLeast(1f)).coerceIn(0.15f, 0.85f)
+        val origin = TransformOrigin(pivotX, pivotY)
         AnimatedVisibility(visible = state.open,
-            enter = fadeIn(tween(duration)), exit = fadeOut(tween(duration)),
+            enter = if (reduce) fadeIn(tween(0)) else scaleIn(AbSpring.modalFloat(false), initialScale = 0.84f, transformOrigin = origin) + fadeIn(tween(110)),
+            exit = if (reduce) fadeOut(tween(0)) else scaleOut(AbSpring.morphFloat(false), targetScale = 0.86f, transformOrigin = origin) + fadeOut(tween(100)),
             modifier = Modifier.offset { IntOffset(x.roundToInt(), y.roundToInt()) }.onSizeChanged {
                 bubbleWidth = it.width.toFloat()
                 bubbleHeight = it.height.toFloat()
             }) {
             key(state.generation) {
             val outerShape = ClusterShape()
+            val dark = p.pageBg.luminance() < 0.1f
+            val dialogClarity = LocalLiquidGlassClaritySpec.current.dialog
+            val glassBubble = backdrop != null && !reduce && Build.VERSION.SDK_INT >= 31 &&
+                LocalLiquidGlassEnabled.current && !LocalReduceTransparency.current
             Box(
                 modifier = Modifier.size(bubbleW, bubbleH)
-                    .shadow(if (reduce) 0.dp else 8.dp, outerShape)
-                    .clip(outerShape).background(p.elevatedBg)
-                    .border(0.5.dp, p.separator.copy(alpha = .22f), outerShape)
+                    .shadow(if (reduce) 0.dp else if (glassBubble) 12.dp else 8.dp, outerShape,
+                        ambientColor = if (glassBubble) Color.Black.copy(alpha = if (dark) 0.40f else 0.11f) else Color.Black,
+                        spotColor = if (glassBubble) Color.Black.copy(alpha = if (dark) 0.48f else 0.14f) else Color.Black)
+                    .clip(outerShape)
+                    .then(
+                        if (glassBubble) {
+                            Modifier.border(
+                                0.75.dp,
+                                io.github.mymoney.ui.design.liquidSpecularRimBrush(dark),
+                                outerShape,
+                            )
+                        } else {
+                            Modifier.background(p.elevatedBg)
+                                .border(0.5.dp, p.separator.copy(alpha = .22f), outerShape)
+                        },
+                    )
                     .onGloballyPositioned { state.viewport = it.boundsInRoot() }
                     .semantics { paneTitle = "二级分类"; isTraversalGroup = true }
                     .testTag("category-inline-bubble"),
             ) {
+                if (glassBubble) {
+                    val blurDp = glassBlurRadiusDp(dialogClarity, baseDp = 20f, minDp = 12f, maxDp = 26f)
+                    val bubbleAlpha = glassSurfaceAlpha(0.88f, 0.86f, dark, dialogClarity)
+                    Box(
+                        Modifier
+                            .matchParentSize()
+                            .graphicsLayer {
+                                val blurPx = blurDp * density.density
+                                renderEffect = BlurEffect(blurPx, blurPx, TileMode.Clamp)
+                            }
+                            .drawWithContent {
+                                translate(-x, -y) { drawLayer(backdrop!!) }
+                            },
+                    )
+                    Box(
+                        Modifier
+                            .matchParentSize()
+                            .drawBehind {
+                                drawRect((if (dark) p.elevatedBg else Color.White).copy(alpha = bubbleAlpha))
+                                drawRect(
+                                    Brush.verticalGradient(
+                                        listOf(
+                                            Color.White.copy(alpha = if (dark) 0.08f else 0.18f),
+                                            Color.Transparent,
+                                        ),
+                                        startY = 0f,
+                                        endY = size.height * 0.40f,
+                                    ),
+                                )
+                            },
+                    )
+                }
                 val activeName = if (request.sliding) state.hovered else request.original
                 val grid = Size(with(density) { bubbleW.toPx() }, bubbleHpx)
                 val gap = clusterGap(grid)
@@ -231,7 +300,10 @@ internal fun BoxScope.CategoryPicker(
                     val activeIndex = request.subs.indexOf(activeName)
                     if (activeIndex < 0 || size.minDimension <= 0f) return@Canvas
                     val cellGap = clusterGap(size)
-                    drawPath(clusterCell(request.subs.size, activeIndex, size, cellGap), p.accent.copy(alpha = 0.36f))
+                    drawPath(
+                        clusterCell(request.subs.size, activeIndex, size, cellGap),
+                        p.accent.copy(alpha = if (dark) 0.34f else 0.16f),
+                    )
                 }
                 request.subs.forEachIndexed { index, name -> key(name) {
                     val active = activeName == name
@@ -247,7 +319,14 @@ internal fun BoxScope.CategoryPicker(
                             .semantics { selected = active; role = Role.Button; contentDescription = "二级分类：$name" },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(name, style = AbType.footnote, color = foreground, maxLines = 1)
+                        Text(
+                            name,
+                            style = AbType.footnote.copy(
+                                fontWeight = if (active) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Medium,
+                            ),
+                            color = foreground,
+                            maxLines = 1,
+                        )
                     }
                 } }
             }
@@ -268,8 +347,8 @@ internal fun EmptyLedgerPickerActions(label: String, enabled: Boolean, onAdd: (S
     Column(Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xl)) {
         Text("还没有$label，可新增或恢复默认清单", style = AbType.footnote, color = p.secondaryLabel)
         Row(horizontalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-            androidx.compose.material3.TextButton(enabled = enabled, onClick = { addError = null; adding = true }) { Text("新增$label") }
-            androidx.compose.material3.TextButton(enabled = enabled, onClick = { restoreError = null; restoring = true }) { Text("恢复默认清单") }
+            AbTextButton("新增$label", enabled = enabled, onClick = { addError = null; adding = true })
+            AbTextButton("恢复默认清单", enabled = enabled, onClick = { restoreError = null; restoring = true })
         }
     }
     if (adding) AppDialog(title = "新增$label", onDismiss = { adding = false }) {

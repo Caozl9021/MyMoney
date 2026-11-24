@@ -1,6 +1,15 @@
 package io.github.mymoney.ui.design
 
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.graphics.layer.GraphicsLayer
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.layout.SubcomposeLayout
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.animation.core.Animatable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.animation.core.snap
@@ -68,11 +77,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
@@ -81,9 +92,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.BoxScope
 
 /**
  * 大标题栏，iOS large title 的行为：
@@ -109,7 +122,9 @@ fun LargeTitleBar(
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     val p = LocalAbPalette.current
-    val reduce = LocalReduceTransparency.current
+    val reduce = !LocalLiquidGlassEnabled.current || LocalReduceTransparency.current
+    val dark = p.pageBg.luminance() < 0.1f
+    val clarity = LocalLiquidGlassClaritySpec.current.header
     val progress = if (compact) 1f else if (collapseAt <= 0f) 1f else (scrollOffset / collapseAt).coerceIn(0f, 1f)
 
     // 标题在中间区间完成交叉淡入淡出，避免两行字同时清晰
@@ -119,20 +134,32 @@ fun LargeTitleBar(
 
     Box(modifier.fillMaxWidth()) {
         if (barAlpha > 0f) {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .background(
-                        if (reduce) p.cardBg.copy(alpha = barAlpha)
-                        else p.glassTint.copy(alpha = barAlpha),
-                    ),
-            ) {
+            if (reduce) {
                 Box(
                     Modifier
-                        .fillMaxWidth()
-                        .height(0.5.dp)
-                        .align(Alignment.BottomCenter)
-                        .background(p.separator.copy(alpha = barAlpha)),
+                        .matchParentSize()
+                        .background(p.cardBg.copy(alpha = barAlpha)),
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(0.5.dp)
+                            .align(Alignment.BottomCenter)
+                            .background(p.separator.copy(alpha = barAlpha)),
+                    )
+                }
+            } else {
+                val veilAlpha = glassSurfaceAlpha(0.88f, 0.84f, dark, clarity) * barAlpha
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .background(
+                            Brush.verticalGradient(
+                                0f to p.pageBg.copy(alpha = veilAlpha),
+                                0.72f to p.pageBg.copy(alpha = veilAlpha * 0.72f),
+                                1f to Color.Transparent,
+                            ),
+                        ),
                 )
             }
         }
@@ -146,17 +173,56 @@ fun LargeTitleBar(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                    Column(Modifier.alpha(compactAlpha)) {
-                        Text(title, style = AbType.navTitle, color = p.label)
-                        if (compact && subtitle != null) Text(subtitle, style = AbType.caption1, color = p.secondaryLabel)
+                    if (!reduce && LocalHeaderBackdrop.current != null) {
+                        HeaderGlassCapsule(Modifier.alpha(compactAlpha).heightIn(min = 38.dp)) {
+                            Column(Modifier.padding(horizontal = 14.dp, vertical = 5.dp)) {
+                                Text(title, style = AbType.navTitle, color = p.label)
+                                if (compact && subtitle != null) Text(subtitle, style = AbType.caption1, color = p.secondaryLabel)
+                            }
+                        }
+                    } else {
+                        Column(Modifier.alpha(compactAlpha)) {
+                            Text(title, style = AbType.navTitle, color = p.label)
+                            if (compact && subtitle != null) Text(subtitle, style = AbType.caption1, color = p.secondaryLabel)
+                        }
                     }
                 }
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.alpha(compactAlpha),
-                    content = actions,
-                )
+                if (!reduce && LocalHeaderBackdrop.current != null) {
+                    SubcomposeLayout(Modifier.alpha(compactAlpha)) { constraints ->
+                        val raw = subcompose("measure") {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
+                                verticalAlignment = Alignment.CenterVertically,
+                                content = actions,
+                            )
+                        }.map { it.measure(constraints.copy(minWidth = 0, minHeight = 0)) }
+                        val hasContent = raw.any { it.width > 0 }
+                        if (!hasContent) {
+                            layout(0, 0) {}
+                        } else {
+                            val pill = subcompose("capsule") {
+                                HeaderGlassCapsule(Modifier.heightIn(min = 38.dp)) {
+                                    Row(
+                                        Modifier.padding(horizontal = AbSpacing.xs),
+                                        horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        content = actions,
+                                    )
+                                }
+                            }.map { it.measure(constraints.copy(minWidth = 0, minHeight = 0)) }
+                            val w = pill.maxOfOrNull { it.width } ?: 0
+                            val h = pill.maxOfOrNull { it.height } ?: 0
+                            layout(w, h) { pill.forEach { it.placeRelative(0, 0) } }
+                        }
+                    }
+                } else {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.alpha(compactAlpha),
+                        content = actions,
+                    )
+                }
             }
 
             // 大标题块的高度跟着进度一起收到 0，避免收起后留一大块空白
@@ -217,7 +283,7 @@ fun LiquidTabBar(
     if (items.isEmpty()) return
 
     val p = LocalAbPalette.current
-    val reduce = LocalReduceTransparency.current
+    val reduce = !LocalLiquidGlassEnabled.current || LocalReduceTransparency.current
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -281,8 +347,12 @@ internal data class TabIndicatorFrame(
  */
 private data class LensTick(
     val pos: Float,
-    val lift: Float,
+    val liftX: Float,
+    val liftY: Float,
     val lens: Float,
+    val squeeze: Float,
+    val dockBounce: Float,
+    val dockShift: Float,
     val selected: Int,
 )
 
@@ -299,6 +369,8 @@ internal fun computeTabIndicatorFrame(
     baseFillAlpha: Float,
     isDark: Boolean,
     lens: Float? = null,
+    dragSqueeze: Float = 0f,
+    liftY: Float? = null,
 ): TabIndicatorFrame {
     val dockLeft = bleedPx
     val dockTop = bleedPx
@@ -309,11 +381,14 @@ internal fun computeTabIndicatorFrame(
     val baseW = cellW + extraPadPx
     val baseH = cellH + extraPadPx
     val speed = abs(velocityTabsPerSec)
-    val flow = speed / (speed + 7f)
-    val l = lift.coerceIn(-0.03f, 1.15f)
-    val posLift = lift.coerceIn(0f, 1.15f)
-    val scaleX = 1f + 0.34f * l + 0.14f * flow
-    val scaleY = 1f + 0.36f * l - 0.04f * flow
+    val flow = speed / (speed + 5f)
+    val lx = lift.coerceIn(-0.18f, 1.20f)
+    val ly = (liftY ?: lift).coerceIn(-0.14f, 1.20f)
+    val posLift = max(lift, liftY ?: lift).coerceIn(0f, 1.15f)
+    val squeeze = dragSqueeze.coerceIn(-0.30f, 1.15f)
+    val posSqueeze = dragSqueeze.coerceIn(0f, 1.15f)
+    val scaleX = (1f + 0.26f * lx - 0.30f * squeeze - 0.10f * flow).coerceAtLeast(0.76f)
+    val scaleY = (1f + 0.28f * ly + 0.10f * posSqueeze + 0.05f * flow).coerceAtLeast(0.92f)
     val maxOverhangX = if (bleedPx > 0f) bleedPx * 0.92f else -1f
     val maxOverhangY = if (bleedPx > 0f) bleedPx * 0.92f else -1f
     val maxW = (dockW + maxOverhangX * 2f).coerceAtLeast(1f)
@@ -326,8 +401,8 @@ internal fun computeTabIndicatorFrame(
     val maxX = (dockLeft + dockW + maxOverhangX - width).coerceAtLeast(minX)
     val left = (centerX - width * 0.5f).coerceIn(minX, maxX)
     val top = centerY - height * 0.5f
-    val energy = (posLift * 0.75f + flow * 0.35f).coerceIn(0f, 1f)
-    val lensMix = (lens ?: max(posLift, flow * 0.85f)).coerceIn(0f, 1f)
+    val energy = (posLift * 0.75f + flow * 0.35f + posSqueeze * 0.25f).coerceIn(0f, 1f)
+    val lensMix = (lens ?: max(posLift, max(flow * 0.85f, posSqueeze))).coerceIn(0f, 1f)
     val fillAlpha = (baseFillAlpha + (if (isDark) 0.12f else 0.07f) * energy)
         .coerceIn(0f, if (isDark) 0.40f else 0.26f)
     val highlightAlpha = ((if (isDark) 0.22f else 0.48f) * energy).coerceIn(0f, 1f)
@@ -392,12 +467,18 @@ internal fun LiquidTabCells(
     val haptic = rememberAbHaptic()
 
     val reduceMotion = LocalReduceMotion.current
+    val effectiveGlass = LocalLiquidGlassEnabled.current && !LocalReduceTransparency.current
     val isDark = p.pageBg == DarkPalette.pageBg
     // 物理连续：position 负责横移与释放速度延续，lift 负责按压蓄力/单次冲击弹性浮起与落位；
     // 动画状态仅在 drawBehind 中读取，不触发逐帧重组或重排。
     val position = remember { Animatable(selected.toFloat()) }
     val lift = remember { Animatable(0f) }
+    val liftY = remember { Animatable(0f) }
     val lens = remember { Animatable(0f) }
+    val dragSqueeze = remember { Animatable(0f) }
+    val dockBounce = remember { Animatable(0f) }
+    val dockShiftPx = remember { Animatable(0f) }
+    val dockGlowClipPath = remember { Path() }
     val previousSelection = remember { intArrayOf(selected) }
     var scrubbingTab by remember { mutableIntStateOf(-1) }
     val visualActive = if (scrubbingTab >= 0) scrubbingTab else selected
@@ -406,6 +487,7 @@ internal fun LiquidTabCells(
     val currentSelected by rememberUpdatedState(selected)
     val currentOnSelect by rememberUpdatedState(onSelect)
     val currentReduceMotion by rememberUpdatedState(reduceMotion)
+    val currentEffectiveGlass by rememberUpdatedState(effectiveGlass)
     val inset = 5.dp
     val extraPad = 0.dp
     val density = LocalDensity.current
@@ -419,7 +501,7 @@ internal fun LiquidTabCells(
         if (lensBridge != null) {
             lensBridge.isDarkProvider = { currentIsDark }
             lensBridge.frameProvider = { canvasW, canvasH ->
-                with(currentDensity) {
+                if (!currentEffectiveGlass) null else with(currentDensity) {
                     computeTabIndicatorFrame(
                         canvasWidth = canvasW,
                         canvasHeight = canvasH,
@@ -433,6 +515,8 @@ internal fun LiquidTabCells(
                         baseFillAlpha = currentBaseFillAlpha,
                         isDark = currentIsDark,
                         lens = if (currentReduceMotion) 0f else lens.value,
+                        dragSqueeze = if (currentReduceMotion) 0f else dragSqueeze.value,
+                        liftY = if (currentReduceMotion) 0f else liftY.value,
                     )
                 }
             }
@@ -440,16 +524,34 @@ internal fun LiquidTabCells(
         }
         onDispose {
             if (lensBridge != null) {
+                lensBridge.onDockTransform?.invoke(1f, 1f, 0f)
                 lensBridge.frameProvider = null
                 lensBridge.isDarkProvider = null
             }
         }
     }
 
-    LaunchedEffect(lensBridge, reduceMotion) {
+    LaunchedEffect(lensBridge, reduceMotion, effectiveGlass) {
         if (lensBridge == null) return@LaunchedEffect
-        snapshotFlow { LensTick(position.value, lift.value, lens.value, currentSelected) }
+        snapshotFlow {
+            LensTick(
+                pos = position.value,
+                liftX = lift.value,
+                liftY = liftY.value,
+                lens = lens.value,
+                squeeze = dragSqueeze.value,
+                dockBounce = dockBounce.value,
+                dockShift = dockShiftPx.value,
+                selected = currentSelected,
+            )
+        }
             .collect {
+                if (effectiveGlass && !reduceMotion) {
+                    val b = dockBounce.value.coerceIn(-0.20f, 1.15f)
+                    lensBridge.onDockTransform?.invoke(1f + 0.036f * b, 1f + 0.052f * b, dockShiftPx.value)
+                } else {
+                    lensBridge.onDockTransform?.invoke(1f, 1f, 0f)
+                }
                 lensBridge.notifyFrameChanged()
             }
     }
@@ -465,7 +567,11 @@ internal fun LiquidTabCells(
         if (reduceMotion) {
             position.snapTo(selected.toFloat())
             lift.snapTo(0f)
+            liftY.snapTo(0f)
             lens.snapTo(0f)
+            dragSqueeze.snapTo(0f)
+            dockBounce.snapTo(0f)
+            dockShiftPx.snapTo(0f)
         } else if (fromDrag || changed) {
             val targetPos = selected.toFloat()
             coroutineScope {
@@ -480,10 +586,32 @@ internal fun LiquidTabCells(
                     )
                 }
                 launch {
-                    lift.animateTo(1f, spring(dampingRatio = 0.84f, stiffness = 540f))
+                    lift.animateTo(1f, spring(dampingRatio = 0.64f, stiffness = 460f))
+                }
+                launch {
+                    liftY.animateTo(1f, spring(dampingRatio = 0.76f, stiffness = 520f))
                 }
                 launch {
                     lens.animateTo(1f, spring(dampingRatio = 0.94f, stiffness = 480f))
+                }
+                launch {
+                    dragSqueeze.animateTo(0f, spring(dampingRatio = 0.44f, stiffness = 220f))
+                }
+                launch {
+                    dockShiftPx.animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 260f))
+                }
+                if (currentEffectiveGlass) {
+                    launch {
+                        val bounceImpulse = ((1f - dockBounce.value).coerceAtLeast(0f) * 24f + 6f)
+                            .coerceAtLeast(dockBounce.velocity)
+                        dockBounce.animateTo(
+                            targetValue = 0f,
+                            animationSpec = spring(dampingRatio = 0.48f, stiffness = 230f),
+                            initialVelocity = bounceImpulse,
+                        )
+                    }
+                } else {
+                    launch { dockBounce.snapTo(0f) }
                 }
                 launch {
                     delay(110)
@@ -492,7 +620,10 @@ internal fun LiquidTabCells(
                             .first { (dist, vel) -> dist <= 0.12f && vel <= 2.2f }
                     }
                     launch {
-                        lift.animateTo(0f, spring(dampingRatio = 0.86f, stiffness = 200f))
+                        lift.animateTo(0f, spring(dampingRatio = 0.60f, stiffness = 210f))
+                    }
+                    launch {
+                        liftY.animateTo(0f, spring(dampingRatio = 0.74f, stiffness = 260f))
                     }
                     launch {
                         lens.animateTo(0f, spring(dampingRatio = 0.98f, stiffness = 135f))
@@ -501,10 +632,22 @@ internal fun LiquidTabCells(
             }
         } else if (!gestureState.isDragging) {
             launch {
-                lift.animateTo(0f, spring(dampingRatio = 0.86f, stiffness = 220f))
+                lift.animateTo(0f, spring(dampingRatio = 0.60f, stiffness = 220f))
+            }
+            launch {
+                liftY.animateTo(0f, spring(dampingRatio = 0.74f, stiffness = 270f))
             }
             launch {
                 lens.animateTo(0f, spring(dampingRatio = 0.98f, stiffness = 145f))
+            }
+            launch {
+                dragSqueeze.animateTo(0f, spring(dampingRatio = 0.44f, stiffness = 220f))
+            }
+            launch {
+                dockBounce.animateTo(0f, spring(dampingRatio = 0.48f, stiffness = 230f))
+            }
+            launch {
+                dockShiftPx.animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 260f))
             }
         }
     }
@@ -520,21 +663,37 @@ internal fun LiquidTabCells(
                 val dockW = (size.width - bleedPx * 2f).coerceAtLeast(1f)
                 val dockH = (size.height - bleedPx * 2f).coerceAtLeast(1f)
                 val stroke = 0.65.dp.toPx()
-                drawRoundRect(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.34f),
-                            Color.White.copy(alpha = 0.04f),
-                            Color.Black.copy(alpha = 0.07f),
+                if (!effectiveGlass && bleedPx > 0f) {
+                    drawRoundRect(
+                        color = p.cardBg,
+                        topLeft = Offset(dockLeft, dockTop),
+                        size = Size(dockW, dockH),
+                        cornerRadius = CornerRadius(dockH / 2f),
+                    )
+                    drawRoundRect(
+                        color = p.separator,
+                        topLeft = Offset(dockLeft + stroke / 2f, dockTop + stroke / 2f),
+                        size = Size((dockW - stroke).coerceAtLeast(1f), (dockH - stroke).coerceAtLeast(1f)),
+                        cornerRadius = CornerRadius(dockH / 2f),
+                        style = Stroke(stroke),
+                    )
+                } else {
+                    drawRoundRect(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.34f),
+                                Color.White.copy(alpha = 0.04f),
+                                Color.Black.copy(alpha = 0.07f),
+                            ),
+                            startY = dockTop,
+                            endY = dockTop + dockH,
                         ),
-                        startY = dockTop,
-                        endY = dockTop + dockH,
-                    ),
-                    topLeft = Offset(dockLeft + stroke / 2f, dockTop + stroke / 2f),
-                    size = Size((dockW - stroke).coerceAtLeast(1f), (dockH - stroke).coerceAtLeast(1f)),
-                    cornerRadius = CornerRadius(dockH / 2f),
-                    style = Stroke(stroke),
-                )
+                        topLeft = Offset(dockLeft + stroke / 2f, dockTop + stroke / 2f),
+                        size = Size((dockW - stroke).coerceAtLeast(1f), (dockH - stroke).coerceAtLeast(1f)),
+                        cornerRadius = CornerRadius(dockH / 2f),
+                        style = Stroke(stroke),
+                    )
+                }
 
                 val frame = computeTabIndicatorFrame(
                     canvasWidth = size.width,
@@ -544,16 +703,51 @@ internal fun LiquidTabCells(
                     extraPadPx = extraPadPx,
                     tabCount = items.size,
                     position = if (reduceMotion) selected.toFloat() else position.value,
-                    velocityTabsPerSec = if (reduceMotion) 0f else position.velocity,
-                    lift = if (reduceMotion) 0f else lift.value,
+                    velocityTabsPerSec = if (reduceMotion || !effectiveGlass) 0f else position.velocity,
+                    lift = if (reduceMotion || !effectiveGlass) 0f else lift.value,
                     baseFillAlpha = p.tabIndicator.alpha,
                     isDark = isDark,
-                    lens = if (reduceMotion) 0f else lens.value,
+                    lens = if (reduceMotion || !effectiveGlass) 0f else lens.value,
+                    dragSqueeze = if (reduceMotion || !effectiveGlass) 0f else dragSqueeze.value,
+                    liftY = if (reduceMotion || !effectiveGlass) 0f else liftY.value,
                 )
+                if (effectiveGlass && !reduceMotion && frame.lensMix > 0.005f) {
+                    val glowStrength = smoothstep01(frame.lensMix)
+                    val glowCenter = Offset(frame.left + frame.width * 0.5f, dockTop + dockH * 0.5f)
+                    val glowRadius = (dockH * 1.45f).coerceAtLeast(1f)
+                    val coreAlpha = (if (isDark) 0.14f else 0.22f) * glowStrength
+                    val midAlpha = (if (isDark) 0.045f else 0.07f) * glowStrength
+                    dockGlowClipPath.rewind()
+                    dockGlowClipPath.addRoundRect(
+                        RoundRect(
+                            left = dockLeft,
+                            top = dockTop,
+                            right = dockLeft + dockW,
+                            bottom = dockTop + dockH,
+                            cornerRadius = CornerRadius(dockH / 2f),
+                        ),
+                    )
+                    clipPath(dockGlowClipPath) {
+                        drawRect(
+                            brush = Brush.radialGradient(
+                                colorStops = arrayOf(
+                                    0f to Color.White.copy(alpha = coreAlpha),
+                                    0.45f to Color.White.copy(alpha = midAlpha),
+                                    1f to Color.Transparent,
+                                ),
+                                center = glowCenter,
+                                radius = glowRadius,
+                            ),
+                            topLeft = Offset(dockLeft, dockTop),
+                            size = Size(dockW, dockH),
+                            blendMode = BlendMode.Plus,
+                        )
+                    }
+                }
                 val corner = CornerRadius(frame.height / 2f)
                 val pillTopLeft = Offset(frame.left, frame.top)
                 val pillSize = Size(frame.width, frame.height)
-                val hasRealLens = lensBridge?.shaderReady == true && !reduceMotion
+                val hasRealLens = effectiveGlass && lensBridge?.shaderReady == true && !reduceMotion
                 if (hasRealLens) {
                     val t = smoothstep01(frame.lensMix)
                     val restingAlpha = p.tabIndicator.alpha * (1f - t)
@@ -630,11 +824,13 @@ internal fun LiquidTabCells(
                         extraPadPx = extraPad.toPx(),
                         tabCount = items.size,
                         position = if (reduceMotion) selected.toFloat() else position.value,
-                        velocityTabsPerSec = if (reduceMotion) 0f else position.velocity,
-                        lift = if (reduceMotion) 0f else lift.value,
+                        velocityTabsPerSec = if (reduceMotion || !effectiveGlass) 0f else position.velocity,
+                        lift = if (reduceMotion || !effectiveGlass) 0f else lift.value,
                         baseFillAlpha = p.tabIndicator.alpha,
                         isDark = isDark,
-                        lens = if (reduceMotion) 0f else lens.value,
+                        lens = if (reduceMotion || !effectiveGlass) 0f else lens.value,
+                        dragSqueeze = if (reduceMotion || !effectiveGlass) 0f else dragSqueeze.value,
+                        liftY = if (reduceMotion || !effectiveGlass) 0f else liftY.value,
                     )
                     outsideClipPath.rewind()
                     outsideClipPath.addRoundRect(
@@ -674,14 +870,59 @@ internal fun LiquidTabCells(
                             var cancelled = false
                             var lastHovered = startTab
                             var lastPointerPos = downPos
+                            var prevPointerPos = downPos
+                            var prevTimeMillis = down.uptimeMillis
+                            var dragStartPos = currentSelected.toFloat()
+                            var dragAnchorX = downPos.x
+                            var squeezeDecayJob: kotlinx.coroutines.Job? = null
                             val dragSlop = viewConfiguration.touchSlop * 0.65f
+
+                            fun settleVisualsToRest() {
+                                if (currentReduceMotion) {
+                                    scope.launch {
+                                        lift.snapTo(0f)
+                                        liftY.snapTo(0f)
+                                        lens.snapTo(0f)
+                                        dragSqueeze.snapTo(0f)
+                                        dockBounce.snapTo(0f)
+                                        dockShiftPx.snapTo(0f)
+                                    }
+                                } else {
+                                    scope.launch {
+                                        lift.animateTo(0f, spring(dampingRatio = 0.60f, stiffness = 220f))
+                                    }
+                                    scope.launch {
+                                        liftY.animateTo(0f, spring(dampingRatio = 0.74f, stiffness = 270f))
+                                    }
+                                    scope.launch {
+                                        lens.animateTo(0f, spring(dampingRatio = 0.98f, stiffness = 145f))
+                                    }
+                                    scope.launch {
+                                        dragSqueeze.animateTo(0f, spring(dampingRatio = 0.44f, stiffness = 220f))
+                                    }
+                                    scope.launch {
+                                        dockBounce.animateTo(0f, spring(dampingRatio = 0.48f, stiffness = 230f))
+                                    }
+                                    scope.launch {
+                                        dockShiftPx.animateTo(0f, spring(dampingRatio = 0.62f, stiffness = 260f))
+                                    }
+                                }
+                            }
 
                             if (!currentReduceMotion) {
                                 scope.launch {
-                                    lift.animateTo(1f, spring(dampingRatio = 0.84f, stiffness = 480f))
+                                    lift.animateTo(1f, spring(dampingRatio = 0.64f, stiffness = 440f))
                                 }
                                 scope.launch {
-                                    lens.animateTo(1f, spring(dampingRatio = 0.95f, stiffness = 420f))
+                                    liftY.animateTo(1f, spring(dampingRatio = 0.76f, stiffness = 500f))
+                                }
+                                scope.launch {
+                                    lens.animateTo(1f, spring(dampingRatio = 0.92f, stiffness = 420f))
+                                }
+                                if (currentEffectiveGlass) {
+                                    scope.launch {
+                                        dockBounce.animateTo(0.42f, spring(dampingRatio = 0.72f, stiffness = 420f))
+                                    }
                                 }
                             }
 
@@ -707,19 +948,37 @@ internal fun LiquidTabCells(
                                 if (!dragging && abs(dx) > dragSlop && abs(dx) >= abs(dy) * 0.8f) {
                                     dragging = true
                                     gestureState.isDragging = true
-                                    scrubbingTab = lastHovered
+                                    if (startTab == currentSelected) {
+                                        dragAnchorX = downPos.x
+                                        dragStartPos = position.value
+                                    } else {
+                                        dragAnchorX = change.position.x
+                                        dragStartPos = ((change.position.x / cellW) - 0.5f).coerceIn(0f, lastIndex.toFloat())
+                                    }
+                                    scrubbingTab = dragStartPos.roundToInt().coerceIn(0, lastIndex)
+                                    lastHovered = scrubbingTab
+                                    prevPointerPos = downPos
+                                    prevTimeMillis = down.uptimeMillis
                                     if (!currentReduceMotion) {
                                         scope.launch {
-                                            lift.animateTo(1f, spring(dampingRatio = 0.84f, stiffness = 480f))
+                                            lift.animateTo(1f, spring(dampingRatio = 0.64f, stiffness = 440f))
                                         }
                                         scope.launch {
-                                            lens.animateTo(1f, spring(dampingRatio = 0.95f, stiffness = 420f))
+                                            liftY.animateTo(1f, spring(dampingRatio = 0.76f, stiffness = 500f))
+                                        }
+                                        scope.launch {
+                                            lens.animateTo(1f, spring(dampingRatio = 0.92f, stiffness = 420f))
+                                        }
+                                        if (currentEffectiveGlass) {
+                                            scope.launch {
+                                                dockBounce.animateTo(0.75f, spring(dampingRatio = 0.68f, stiffness = 360f))
+                                            }
                                         }
                                     }
                                 }
                                 if (dragging) {
                                     change.consume()
-                                    val rawPos = (change.position.x / cellW) - 0.5f
+                                    val rawPos = dragStartPos + (change.position.x - dragAnchorX) / cellW
                                     val targetPos = rubberBandTabPosition(rawPos, lastIndex)
                                     val hovered = targetPos.roundToInt().coerceIn(0, lastIndex)
                                     if (hovered != lastHovered) {
@@ -733,36 +992,61 @@ internal fun LiquidTabCells(
                                         scope.launch {
                                             position.animateTo(
                                                 targetValue = targetPos,
-                                                animationSpec = spring(dampingRatio = 0.92f, stiffness = 1600f),
+                                                animationSpec = spring(dampingRatio = 0.68f, stiffness = 900f),
                                             )
                                         }
+                                        if (currentEffectiveGlass) {
+                                            val dtSec = ((change.uptimeMillis - prevTimeMillis).coerceAtLeast(4L)) / 1000f
+                                            val instVelTabs = abs((change.position.x - prevPointerPos.x) / cellW) / dtSec
+                                            val trackerVelTabs = abs(velocityTracker.calculateVelocity().x / cellW)
+                                            val activeSpeed = max(trackerVelTabs, instVelTabs * 0.65f)
+                                            val targetSqueeze = (activeSpeed / (activeSpeed + 3.2f)).coerceIn(0f, 1f)
+                                            scope.launch {
+                                                dragSqueeze.animateTo(
+                                                    targetValue = targetSqueeze,
+                                                    animationSpec = spring(dampingRatio = 0.46f, stiffness = 340f),
+                                                )
+                                            }
+                                            squeezeDecayJob?.cancel()
+                                            squeezeDecayJob = scope.launch {
+                                                delay(45)
+                                                dragSqueeze.animateTo(
+                                                    targetValue = 0f,
+                                                    animationSpec = spring(dampingRatio = 0.42f, stiffness = 240f),
+                                                )
+                                            }
+
+                                            val maxShiftPx = with(currentDensity) { 3.5.dp.toPx() }
+                                            val norm = dx / (rowW * 0.32f).coerceAtLeast(1f)
+                                            val targetShift = maxShiftPx * (norm / (1f + abs(norm)))
+                                            scope.launch {
+                                                dockShiftPx.animateTo(
+                                                    targetValue = targetShift,
+                                                    animationSpec = spring(dampingRatio = 0.80f, stiffness = 620f),
+                                                )
+                                            }
+                                        }
                                     }
+                                    prevPointerPos = change.position
+                                    prevTimeMillis = change.uptimeMillis
                                 }
                             }
 
+                            squeezeDecayJob?.cancel()
                             scrubbingTab = -1
                             gestureState.isDragging = false
                             if (cancelled) {
                                 if (currentReduceMotion) {
-                                    scope.launch {
-                                        position.snapTo(currentSelected.toFloat())
-                                        lift.snapTo(0f)
-                                        lens.snapTo(0f)
-                                    }
+                                    scope.launch { position.snapTo(currentSelected.toFloat()) }
                                 } else {
                                     scope.launch {
                                         position.animateTo(
                                             currentSelected.toFloat(),
-                                            spring(dampingRatio = 0.82f, stiffness = 520f),
+                                            spring(dampingRatio = 0.76f, stiffness = 500f),
                                         )
                                     }
-                                    scope.launch {
-                                        lift.animateTo(0f, spring(dampingRatio = 0.86f, stiffness = 220f))
-                                    }
-                                    scope.launch {
-                                        lens.animateTo(0f, spring(dampingRatio = 0.98f, stiffness = 145f))
-                                    }
                                 }
+                                settleVisualsToRest()
                             } else if (dragging) {
                                 val velTabsPerSec = (velocityTracker.calculateVelocity().x / cellW).coerceIn(-18f, 18f)
                                 val targetTab = resolveScrubTargetTab(position.value, velTabsPerSec, count)
@@ -771,26 +1055,19 @@ internal fun LiquidTabCells(
                                     gestureState.committedFromDrag = true
                                     gestureState.releaseVelocityTabsPerSec = velTabsPerSec
                                     currentOnSelect(targetTab)
-                                } else if (currentReduceMotion) {
-                                    scope.launch {
-                                        position.snapTo(targetTab.toFloat())
-                                        lift.snapTo(0f)
-                                        lens.snapTo(0f)
-                                    }
                                 } else {
-                                    scope.launch {
-                                        position.animateTo(
-                                            targetValue = targetTab.toFloat(),
-                                            animationSpec = spring(dampingRatio = 0.82f, stiffness = 520f),
-                                            initialVelocity = velTabsPerSec,
-                                        )
+                                    if (currentReduceMotion) {
+                                        scope.launch { position.snapTo(targetTab.toFloat()) }
+                                    } else {
+                                        scope.launch {
+                                            position.animateTo(
+                                                targetValue = targetTab.toFloat(),
+                                                animationSpec = spring(dampingRatio = 0.74f, stiffness = 480f),
+                                                initialVelocity = velTabsPerSec,
+                                            )
+                                        }
                                     }
-                                    scope.launch {
-                                        lift.animateTo(0f, spring(dampingRatio = 0.86f, stiffness = 220f))
-                                    }
-                                    scope.launch {
-                                        lens.animateTo(0f, spring(dampingRatio = 0.98f, stiffness = 145f))
-                                    }
+                                    settleVisualsToRest()
                                 }
                             } else {
                                 val inBounds = lastPointerPos.y in (-rowH * 0.6f)..(rowH * 1.6f) &&
@@ -802,34 +1079,10 @@ internal fun LiquidTabCells(
                                         currentOnSelect(tappedTab)
                                     } else {
                                         currentOnSelect(tappedTab)
-                                        if (currentReduceMotion) {
-                                            scope.launch {
-                                                lift.snapTo(0f)
-                                                lens.snapTo(0f)
-                                            }
-                                        } else {
-                                            scope.launch {
-                                                lift.animateTo(0f, spring(dampingRatio = 0.86f, stiffness = 220f))
-                                            }
-                                            scope.launch {
-                                                lens.animateTo(0f, spring(dampingRatio = 0.98f, stiffness = 145f))
-                                            }
-                                        }
+                                        settleVisualsToRest()
                                     }
                                 } else {
-                                    if (currentReduceMotion) {
-                                        scope.launch {
-                                            lift.snapTo(0f)
-                                            lens.snapTo(0f)
-                                        }
-                                    } else {
-                                        scope.launch {
-                                            lift.animateTo(0f, spring(dampingRatio = 0.86f, stiffness = 220f))
-                                        }
-                                        scope.launch {
-                                            lens.animateTo(0f, spring(dampingRatio = 0.98f, stiffness = 145f))
-                                        }
-                                    }
+                                    settleVisualsToRest()
                                 }
                             }
                         }
@@ -864,11 +1117,13 @@ internal fun LiquidTabCells(
                         extraPadPx = extraPad.toPx(),
                         tabCount = items.size,
                         position = if (reduceMotion) selected.toFloat() else position.value,
-                        velocityTabsPerSec = if (reduceMotion) 0f else position.velocity,
-                        lift = if (reduceMotion) 0f else lift.value,
+                        velocityTabsPerSec = if (reduceMotion || !effectiveGlass) 0f else position.velocity,
+                        lift = if (reduceMotion || !effectiveGlass) 0f else lift.value,
                         baseFillAlpha = p.tabIndicator.alpha,
                         isDark = isDark,
-                        lens = if (reduceMotion) 0f else lens.value,
+                        lens = if (reduceMotion || !effectiveGlass) 0f else lens.value,
+                        dragSqueeze = if (reduceMotion || !effectiveGlass) 0f else dragSqueeze.value,
+                        liftY = if (reduceMotion || !effectiveGlass) 0f else liftY.value,
                     )
                     insideClipPath.rewind()
                     insideClipPath.addRoundRect(
@@ -1007,18 +1262,31 @@ fun PageScaffold(
     // 内容底部再额外留一档，滚到最后一行不会被胶囊压住。
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
-    if (floatingHeader && onBack == null) {
+    if (onBack != null) {
+        SubPageScaffold(
+            title = title,
+            onBack = onBack,
+            modifier = modifier,
+            reserveDock = true,
+            actions = actions,
+            content = content,
+        )
+        return
+    }
+
+    if (floatingHeader) {
         FloatingPageScaffold(title = title, bottomPadding = dockHeight() + navBottom + AbLayout.pageBottom + dockClearance,
             modifier = modifier,
             onTitleClick = onTitleClick, actions = actions, content = content)
         return
     }
 
-    Box(modifier.fillMaxSize()) {
-        Column(Modifier.widthIn(max = 560.dp).fillMaxSize().align(Alignment.TopCenter)) {
-            if (onBack != null) {
-                SubPageBar(title = title, onBack = onBack, actions = actions)
-            } else {
+    val bottomPadding = dockHeight() + navBottom + AbLayout.pageBottom + dockClearance
+    val sample = android.os.Build.VERSION.SDK_INT >= 31 && LocalLiquidGlassEnabled.current && !LocalReduceTransparency.current
+    val p = LocalAbPalette.current
+    if (!sample) {
+        Box(modifier.fillMaxSize()) {
+            Column(Modifier.widthIn(max = 560.dp).fillMaxSize().align(Alignment.TopCenter)) {
                 ScrollingTitleBar(
                     title = title,
                     listState = listState,
@@ -1026,14 +1294,56 @@ fun PageScaffold(
                     compact = compact,
                     actions = actions,
                 )
+                content(
+                    androidx.compose.foundation.layout.PaddingValues(
+                        top = 0.dp,
+                        bottom = bottomPadding,
+                    ),
+                )
             }
-            content(
-                androidx.compose.foundation.layout.PaddingValues(
-                    // 明细页把胶囊 Tab 栏留在原位（可以在明细里直接切页），所以照样留白。
-                    top = if (onBack != null) AbLayout.pageTop else 0.dp,
-                    bottom = dockHeight() + navBottom + AbLayout.pageBottom + dockClearance,
-                ),
-            )
+        }
+        return
+    }
+    val backdrop = rememberGraphicsLayer()
+    val backdropHolder = remember(backdrop) { HeaderBackdrop(backdrop) }
+    Box(modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        androidx.compose.runtime.CompositionLocalProvider(LocalHeaderBackdrop provides backdropHolder) {
+            SubcomposeLayout(
+                Modifier
+                    .widthIn(max = 560.dp)
+                    .fillMaxSize()
+                    .onGloballyPositioned { backdropHolder.coordinates = it },
+            ) { constraints ->
+                val barMeasurables = subcompose("bar") {
+                    ScrollingTitleBar(
+                        title = title,
+                        listState = listState,
+                        subtitle = subtitle,
+                        compact = compact,
+                        actions = actions,
+                    )
+                }
+                val barPlaceables = barMeasurables.map { it.measure(constraints.copy(minHeight = 0)) }
+                val barHeightDp = (barPlaceables.maxOfOrNull { it.height } ?: 0).toDp()
+                val bodyMeasurables = subcompose("body") {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .drawWithContent {
+                                backdrop.record { this@drawWithContent.drawContent() }
+                                drawLayer(backdrop)
+                            }
+                            .background(p.pageBg),
+                    ) {
+                        content(PaddingValues(top = barHeightDp, bottom = bottomPadding))
+                    }
+                }
+                val bodyPlaceables = bodyMeasurables.map { it.measure(constraints) }
+                layout(constraints.maxWidth, constraints.maxHeight) {
+                    bodyPlaceables.forEach { it.placeRelative(0, 0) }
+                    barPlaceables.forEach { it.placeRelative(0, 0) }
+                }
+            }
         }
     }
 }
@@ -1068,45 +1378,105 @@ fun SubPageBar(
     modifier: Modifier = Modifier,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
+    SubPageBarInternal(title = title, onBack = onBack, modifier = modifier, actions = actions)
+}
+
+@Composable
+private fun SubPageBarInternal(
+    title: String,
+    @Suppress("UNUSED_PARAMETER") onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    actions: @Composable RowScope.() -> Unit = {},
+) {
     val p = LocalAbPalette.current
-    val reduce = LocalReduceTransparency.current
-    val separatorColor = p.separator
-    // The title owns the geometric centre, independently of trailing actions.
-    androidx.compose.ui.layout.SubcomposeLayout(
-        modifier
-            .fillMaxWidth()
-            .background(if (reduce) p.cardBg else p.glassTint)
-            .drawBehind {
-                val stroke = 0.5.dp.toPx()
-                drawLine(
-                    color = separatorColor,
-                    start = Offset(0f, size.height - stroke / 2f),
-                    end = Offset(size.width, size.height - stroke / 2f),
-                    strokeWidth = stroke,
+    val reduce = !LocalLiquidGlassEnabled.current || LocalReduceTransparency.current
+    val dark = p.pageBg.luminance() < 0.1f
+    val clarity = LocalLiquidGlassClaritySpec.current.header
+
+    Box(modifier.fillMaxWidth()) {
+        if (!reduce) {
+            val veilAlpha = glassSurfaceAlpha(0.86f, 0.84f, dark, clarity)
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.verticalGradient(
+                            0f to p.pageBg,
+                            0.55f to p.pageBg.copy(alpha = veilAlpha),
+                            1f to Color.Transparent,
+                        ),
+                    ),
+            )
+        }
+        // The title owns the geometric centre, independently of trailing actions (strictly no top-left back button).
+        SubcomposeLayout(
+            Modifier
+                .fillMaxWidth()
+                .then(
+                    if (reduce) {
+                        Modifier
+                            .background(p.cardBg)
+                            .drawBehind {
+                                val stroke = 0.5.dp.toPx()
+                                drawLine(
+                                    color = p.separator,
+                                    start = Offset(0f, size.height - stroke / 2f),
+                                    end = Offset(size.width, size.height - stroke / 2f),
+                                    strokeWidth = stroke,
+                                )
+                            }
+                    } else {
+                        Modifier.padding(bottom = 8.dp)
+                    },
                 )
+                .statusBarsPadding(),
+        ) { constraints ->
+            val inset = AbSpacing.page.roundToPx()
+            val available = (constraints.maxWidth - inset * 2).coerceAtLeast(0)
+            val action = subcompose("actions") {
+                Row(horizontalArrangement = Arrangement.spacedBy(AbSpacing.s), verticalAlignment = Alignment.CenterVertically, content = actions)
+            }.first().measure(constraints.copy(minWidth = 0, minHeight = 0, maxWidth = available / 3))
+            val titleWidth = (available - action.width * 2).coerceAtLeast(0)
+            val heading = subcompose("title") {
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    if (!reduce) {
+                        HeaderGlassCapsule(Modifier.heightIn(min = 38.dp)) {
+                            Text(
+                                title,
+                                style = AbType.navTitle,
+                                color = p.label,
+                                textAlign = TextAlign.Center,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier
+                                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                                    .semantics { heading() },
+                            )
+                        }
+                    } else {
+                        Text(
+                            title,
+                            style = AbType.navTitle,
+                            color = p.label,
+                            textAlign = TextAlign.Center,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth().semantics { heading() },
+                        )
+                    }
+                }
+            }.first().measure(constraints.copy(minWidth = titleWidth, maxWidth = titleWidth, minHeight = 0))
+            val height = maxOf(AbSize.navBarHeight.roundToPx(), heading.height + 8.dp.roundToPx(), action.height)
+            layout(constraints.maxWidth, height) {
+                heading.placeRelative((constraints.maxWidth - heading.width) / 2, (height - heading.height) / 2)
+                action.placeRelative(constraints.maxWidth - inset - action.width, (height - action.height) / 2)
             }
-            .statusBarsPadding()
-    ) { constraints ->
-        val inset = AbSpacing.page.roundToPx()
-        val available = (constraints.maxWidth - inset * 2).coerceAtLeast(0)
-        val action = subcompose("actions") {
-            Row(horizontalArrangement = Arrangement.spacedBy(AbSpacing.s), verticalAlignment = Alignment.CenterVertically, content = actions)
-        }.first().measure(constraints.copy(minWidth = 0, minHeight = 0, maxWidth = available / 3))
-        val titleWidth = (available - action.width * 2).coerceAtLeast(0)
-        val heading = subcompose("title") {
-            Text(title, style = AbType.navTitle, color = p.label, textAlign = TextAlign.Center,
-                maxLines = 2, modifier = Modifier.fillMaxWidth().semantics { heading() })
-        }.first().measure(constraints.copy(minWidth = titleWidth, maxWidth = titleWidth, minHeight = 0))
-        val height = maxOf(AbSize.navBarHeight.roundToPx(), heading.height + 8.dp.roundToPx(), action.height)
-        layout(constraints.maxWidth, height) {
-            heading.placeRelative((constraints.maxWidth - heading.width) / 2, (height - heading.height) / 2)
-            action.placeRelative(constraints.maxWidth - inset - action.width, (height - action.height) / 2)
         }
     }
 }
 
 /**
- * 子页骨架：固定导航栏 + 可滚动内容。
+ * 子页骨架：悬浮无分割线导航栏 + 可滚动内容。
  *
  * 底部留白和 [PageScaffold] 保持一致：子页上胶囊 Tab 栏照样浮在最上层
  * （由 MainActivity 统一绘制），内容必须给它让出导航条 inset + 胶囊高度。
@@ -1124,23 +1494,75 @@ fun SubPageScaffold(
      */
     reserveDock: Boolean = true,
     actions: @Composable RowScope.() -> Unit = {},
+    floatingBottomBar: (@Composable BoxScope.() -> Unit)? = null,
     content: @Composable (androidx.compose.foundation.layout.PaddingValues) -> Unit,
 ) {
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    Box(modifier.fillMaxSize().background(LocalAbPalette.current.pageBg), contentAlignment = Alignment.TopCenter) {
-    Column(Modifier.widthIn(max = 560.dp).fillMaxSize()) {
-        SubPageBar(title = title, onBack = onBack, actions = actions)
-        content(
-            androidx.compose.foundation.layout.PaddingValues(
-                top = AbLayout.pageTop,
-                bottom = if (reserveDock) dockHeight() + navBottom + AbLayout.pageBottom + dockClearance else navBottom + AbLayout.pageBottom,
-            ),
-        )
+    val bottomPadding = if (reserveDock) dockHeight() + navBottom + AbLayout.pageBottom + dockClearance else navBottom + AbLayout.pageBottom
+    val sample = android.os.Build.VERSION.SDK_INT >= 31 && LocalLiquidGlassEnabled.current && !LocalReduceTransparency.current
+    val p = LocalAbPalette.current
+    if (!sample) {
+        Box(modifier.fillMaxSize().background(p.pageBg), contentAlignment = Alignment.TopCenter) {
+            Box(Modifier.widthIn(max = 560.dp).fillMaxSize()) {
+                Column(Modifier.fillMaxSize()) {
+                    SubPageBar(title = title, onBack = onBack, actions = actions)
+                    content(PaddingValues(top = AbLayout.pageTop, bottom = bottomPadding))
+                }
+                floatingBottomBar?.invoke(this)
+            }
+        }
+        return
     }
+    val backdrop = rememberGraphicsLayer()
+    val backdropHolder = remember(backdrop) { HeaderBackdrop(backdrop) }
+    Box(modifier.fillMaxSize().background(p.pageBg), contentAlignment = Alignment.TopCenter) {
+        androidx.compose.runtime.CompositionLocalProvider(LocalHeaderBackdrop provides backdropHolder) {
+            SubcomposeLayout(
+                Modifier
+                    .widthIn(max = 560.dp)
+                    .fillMaxSize()
+                    .onGloballyPositioned { backdropHolder.coordinates = it },
+            ) { constraints ->
+                val barMeasurables = subcompose("bar") {
+                    SubPageBarInternal(title = title, onBack = onBack, actions = actions)
+                }
+                val barPlaceables = barMeasurables.map {
+                    it.measure(constraints.copy(minHeight = 0))
+                }
+                val barHeightPx = barPlaceables.maxOfOrNull { it.height } ?: 0
+                val barHeightDp = barHeightPx.toDp()
+                val bodyMeasurables = subcompose("body") {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .drawWithContent {
+                                backdrop.record { this@drawWithContent.drawContent() }
+                                drawLayer(backdrop)
+                            }
+                            .background(p.pageBg),
+                    ) {
+                        content(PaddingValues(top = barHeightDp + AbLayout.pageTop, bottom = bottomPadding))
+                    }
+                }
+                val bodyPlaceables = bodyMeasurables.map { it.measure(constraints) }
+                val bottomPlaceables = if (floatingBottomBar != null) {
+                    subcompose("bottomBar") {
+                        Box(Modifier.fillMaxSize()) {
+                            floatingBottomBar()
+                        }
+                    }.map { it.measure(constraints) }
+                } else emptyList()
+                layout(constraints.maxWidth, constraints.maxHeight) {
+                    bodyPlaceables.forEach { it.placeRelative(0, 0) }
+                    barPlaceables.forEach { it.placeRelative(0, 0) }
+                    bottomPlaceables.forEach { it.placeRelative(0, 0) }
+                }
+            }
+        }
     }
 }
 
-/** 统一子页推入/推出动画（与设置页一致：220ms 左右横滑）。 */
+/** 统一子页推入/推出动画（对标 iOS 临界物理弹簧）。 */
 @Composable
 fun SlideSubPage(
     visible: Boolean,
@@ -1148,12 +1570,14 @@ fun SlideSubPage(
     content: @Composable () -> Unit,
 ) {
     val reduceMotion = LocalReduceMotion.current
-    val duration = if (reduceMotion) 0 else AbMotion.normal
+    val spec = AbSpring.navigationOffset(reduceMotion)
     androidx.compose.animation.AnimatedVisibility(
         visible = visible,
         modifier = modifier,
-        enter = androidx.compose.animation.slideInHorizontally(tween(duration)) { it },
-        exit = androidx.compose.animation.slideOutHorizontally(tween(duration)) { it },
+        enter = androidx.compose.animation.slideInHorizontally(spec) { it } +
+            if (reduceMotion) androidx.compose.animation.fadeIn(snap()) else androidx.compose.animation.fadeIn(tween(80)),
+        exit = androidx.compose.animation.slideOutHorizontally(spec) { it } +
+            if (reduceMotion) androidx.compose.animation.fadeOut(snap()) else androidx.compose.animation.fadeOut(tween(150)),
     ) {
         content()
     }

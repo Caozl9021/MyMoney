@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -37,6 +36,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import io.github.mymoney.ui.design.AbTextButton
 import io.github.mymoney.ui.design.AppAlertDialog
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -84,7 +84,7 @@ internal fun QrScannerScreen(
             Box(
                 Modifier.background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(12.dp)).padding(12.dp),
             ) { Text("把服务器管理页的二维码对准取景框", color = Color.White, textAlign = TextAlign.Center) }
-            TextButton(onClick = onCancel) { Text("取消", color = Color.White) }
+            AbTextButton("取消", onClick = onCancel, color = Color.White)
         }
     }
 }

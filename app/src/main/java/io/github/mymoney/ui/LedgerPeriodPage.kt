@@ -63,7 +63,7 @@ internal fun LedgerPeriodPage(onBack: () -> Unit) {
             scope.launch {
                 runCatching { withContext(Dispatchers.IO) { LedgerPeriodStore.save(context, selected) } }
                     .onSuccess {
-                        android.widget.Toast.makeText(context, "已按每月${selected}日统计", android.widget.Toast.LENGTH_SHORT).show()
+                        ReimburseFeedback.show("已按每月${selected}日统计")
                         onBack()
                     }.onFailure { message = it.message ?: "保存失败，请重试" }
                 busy = false
@@ -94,12 +94,11 @@ private fun MonthStartDayPage(initial: Int, clock: LedgerClock, onBack: () -> Un
                                 val chosen = draft == day
                                 val shape = RoundedCornerShape(AbRadius.chip)
                                 Box(Modifier.weight(1f).heightIn(min = 48.dp).clip(shape)
-                                    .background(if (chosen) palette.fill else Color.Transparent)
-                                    .border(if (chosen) 1.5.dp else 0.5.dp, if (chosen) palette.label else palette.separator, shape)
+                                    .background(if (chosen) palette.accent else palette.fill)
                                     .selectable(selected = chosen, role = Role.RadioButton, onClick = { draft = day })
                                     .semantics { contentDescription = "每月${day}日" }
                                     .padding(vertical = AbSpacing.s, horizontal = 2.dp), contentAlignment = Alignment.Center) {
-                                    Text(day.toString(), style = AbType.body.copy(fontWeight = if (chosen) FontWeight.SemiBold else FontWeight.Normal), color = palette.label)
+                                    Text(day.toString(), style = AbType.body.copy(fontWeight = if (chosen) FontWeight.SemiBold else FontWeight.Normal), color = if (chosen) palette.onAccent else palette.label)
                                 }
                             }
                             repeat(columns - line.size) { Spacer(Modifier.weight(1f)) }

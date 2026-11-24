@@ -79,6 +79,10 @@ fun MyMoneyTheme(
         onDispose { }
     }
     val reduce = reduceTransparency ?: false
+    val liquidGlassEnabled = prefs.getBoolean(Appearance.LIQUID_GLASS, Appearance.DEFAULT_LIQUID_GLASS)
+    val liquidGlassClarity = prefs.getFloat(Appearance.LIQUID_GLASS_CLARITY, Appearance.DEFAULT_LIQUID_GLASS_CLARITY)
+        .coerceIn(0f, 1f)
+    val claritySpec = Appearance.readClaritySpec(prefs)
     val scaledDensity = remember(density.density, density.fontScale, textScale) {
         Density(density.density, density.fontScale * textScale)
     }
@@ -92,11 +96,15 @@ fun MyMoneyTheme(
             handleColor = roles.primary, backgroundColor = roles.primary.copy(alpha = .25f)),
         LocalReduceMotion provides reduceMotion,
         LocalPredictiveBackEnabled provides prefs.getBoolean(Appearance.PREDICTIVE_BACK, Appearance.DEFAULT_PREDICTIVE_BACK),
+        LocalLiquidGlassEnabled provides liquidGlassEnabled,
+        LocalLiquidGlassClarity provides liquidGlassClarity,
+        LocalLiquidGlassClaritySpec provides claritySpec,
         LocalDensity provides scaledDensity,
         LocalReduceTransparency provides reduce,
     ) {
         MaterialTheme(
             colorScheme = colorScheme,
+            typography = AbMaterialTypography,
         ) {
             CompositionLocalProvider(
                 LocalIndication provides NoIndication,

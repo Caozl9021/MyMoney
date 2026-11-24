@@ -10,12 +10,12 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import io.github.mymoney.capture.CaptureModeManager
 import io.github.mymoney.ui.design.AbSpacing
+import io.github.mymoney.ui.design.AbTextButton
 import io.github.mymoney.ui.design.AbType
 import io.github.mymoney.ui.design.LocalAbPalette
 import io.github.mymoney.ui.design.PrimaryButton
@@ -44,12 +44,12 @@ fun CaptureModeScreen(onOrdinarySetup: () -> Unit) {
                 },
                 Modifier.fillMaxWidth(),
             )
-            TextButton(
+            AbTextButton(
+                text = "稍后",
                 onClick = { CaptureModeManager.prepareOrdinarySetup(context) },
                 modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("稍后", color = p.secondaryLabel)
-            }
+                color = p.secondaryLabel,
+            )
         }
     }
 }

@@ -83,7 +83,7 @@ class ConfirmActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        configureConfirmationWindow()
+        configureConfirmationWindow(blurBehind = true)
         super.onCreate(savedInstanceState)
         if (!automaticPresentationAllowed(intent)) { finish(); return }
         savedInstanceState?.getString(EXTRA_HISTORY_ID)?.let { intent.putExtra(EXTRA_HISTORY_ID, it) }
@@ -111,6 +111,8 @@ class ConfirmActivity : ComponentActivity() {
                         if ((operation.feedback != null || operation.result?.let(ConfirmFeedback::closeAfterSave) == true) && boundDraft?.historyId == draft.historyId) finish()
                     }
                     val result = operation.result
+                    var sawConfirmForm by remember(draft.historyId) { mutableStateOf(false) }
+                    SideEffect { if (result == null) sawConfirmForm = true }
                     if (result != null && ConfirmFeedback.closeAfterSave(result)) {
                         // Real write completed: close without a success result surface.
                     } else if (result != null) {
@@ -121,6 +123,7 @@ class ConfirmActivity : ComponentActivity() {
                             canView = result.bill != null,
                             onDismiss = { finish() },
                             onView = { result.bill?.let { BillResultActivity.open(this@ConfirmActivity, it.id) } },
+                            animateEntranceFromBottom = !sawConfirmForm,
                         )
                     } else ConfirmSheet(
                         draft = operation.edited ?: draft,

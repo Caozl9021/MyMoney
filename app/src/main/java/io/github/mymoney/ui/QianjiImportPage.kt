@@ -1,7 +1,6 @@
 package io.github.mymoney.ui
 
 import android.provider.OpenableColumns
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -218,7 +217,7 @@ internal fun QianjiImportPage(onBack: () -> Unit) {
                     .onSuccess {
                         showReport(it); finished = true
                         io.github.mymoney.systems.SystemIntegration.refresh(context)
-                        Toast.makeText(context, "已新增 ${it.count(QianjiImport.State.READY)} 条账单", Toast.LENGTH_LONG).show()
+                        ReimburseFeedback.show("已新增 ${it.count(QianjiImport.State.READY)} 条账单")
                     }.onFailure { error = "导入失败，本次未写入：${it.message}" }
                 busy = false; confirm = false
             }

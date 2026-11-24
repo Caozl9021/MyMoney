@@ -11,30 +11,44 @@ import android.provider.Settings as AndroidSettings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,9 +59,20 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -109,6 +134,7 @@ private enum class SettingsPage(val title: String) {
     CLOUD_BACKUP_MANAGE("连接管理"),
     BACKUP("本地备份文件"),
     APPEARANCE("外观"),
+    LIQUID_GLASS("液态玻璃"),
     ABOUT("关于"),
     PAGE_DEBUG("页面诊断"),
 }
@@ -281,9 +307,11 @@ fun SettingsScreen(
         pageTransition.AnimatedContent(
             modifier = Modifier.fillMaxSize().clipToBounds(),
             transitionSpec = {
-                val duration = if (reduceMotion || predictiveCommit) 0 else 220
-                slideInHorizontally(tween(duration)) { if (targetState.size < initialState.size) -it else it } togetherWith
-                    slideOutHorizontally(tween(duration)) { if (targetState.size < initialState.size) it else -it }
+                liquidNavigationTransition(
+                    goingBack = targetState.size < initialState.size,
+                    reduceMotion = reduceMotion,
+                    predictiveCommit = predictiveCommit,
+                )
             },
         ) { shownPath ->
             val shown = shownPath.last()
@@ -467,7 +495,11 @@ fun SettingsScreen(
                             },
                         )
 
-                        SettingsPage.APPEARANCE -> AppearancePage(onBack = back)
+                        SettingsPage.APPEARANCE -> AppearancePage(
+                            onBack = back,
+                            onOpenLiquidGlass = { navigate(SettingsPage.LIQUID_GLASS) },
+                        )
+                        SettingsPage.LIQUID_GLASS -> LiquidGlassSettingsPage(onBack = back)
                         SettingsPage.ABOUT -> AppUpdatePage(back, onOpenDebug = { navigate(SettingsPage.PAGE_DEBUG) })
                         SettingsPage.PAGE_DEBUG -> PageDebugPage(onBack = back)
                     }
@@ -703,7 +735,10 @@ private fun ExportPage(onBack: () -> Unit, onOpenHelp: () -> Unit) {
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun AppearancePage(onBack: () -> Unit) {
+private fun AppearancePage(
+    onBack: () -> Unit,
+    onOpenLiquidGlass: () -> Unit,
+) {
     SubPageScaffold(title = "外观", onBack = onBack) { padding ->
         SectionColumn(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(padding).padding(horizontal = AbSpacing.page),
@@ -711,6 +746,7 @@ private fun AppearancePage(onBack: () -> Unit) {
             val context = LocalContext.current
             val revision = appearanceRevision()
             val prefs = remember(revision) { Appearance.prefs(context) }
+            val p = LocalAbPalette.current
             AppIconPicker()
             GroupHeader("明暗模式")
             Segmented(
@@ -724,6 +760,8 @@ private fun AppearancePage(onBack: () -> Unit) {
                 listOf("STANDARD", "LARGE", "EXTRA_LARGE").indexOf(prefs.getString("text_size", "STANDARD")).coerceAtLeast(0),
                 { index -> prefs.edit().putString("text_size", listOf("STANDARD", "LARGE", "EXTRA_LARGE")[index]).apply() },
             )
+            val liquidGlass = prefs.getBoolean(Appearance.LIQUID_GLASS, Appearance.DEFAULT_LIQUID_GLASS)
+            val reduceTransparency = LocalReduceTransparency.current
             InsetGroup {
                 ListRow(
                     title = "降低动效",
@@ -742,7 +780,370 @@ private fun AppearancePage(onBack: () -> Unit) {
                         }
                     },
                 )
+                ListRow(
+                    title = "液态玻璃",
+                    dividerAbove = true,
+                    chevron = true,
+                    trailing = {
+                        Text(
+                            text = when {
+                                reduceTransparency -> "系统关闭"
+                                liquidGlass -> "已开启"
+                                else -> "已关闭"
+                            },
+                            style = AbType.footnote,
+                            color = p.secondaryLabel,
+                        )
+                    },
+                    onClick = onOpenLiquidGlass,
+                )
             }
+        }
+    }
+}
+
+@Composable
+private fun LiquidGlassSettingsPage(onBack: () -> Unit) {
+    SubPageScaffold(title = "液态玻璃", onBack = onBack) { padding ->
+        SectionColumn(
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(padding).padding(horizontal = AbSpacing.page),
+        ) {
+            val context = LocalContext.current
+            val revision = appearanceRevision()
+            val prefs = remember(revision) { Appearance.prefs(context) }
+            val p = LocalAbPalette.current
+            val liquidGlass = prefs.getBoolean(Appearance.LIQUID_GLASS, Appearance.DEFAULT_LIQUID_GLASS)
+            val clarityPref = prefs.getFloat(Appearance.LIQUID_GLASS_CLARITY, Appearance.DEFAULT_LIQUID_GLASS_CLARITY).coerceIn(0f, 1f)
+            val perZonePref = prefs.getBoolean(Appearance.LIQUID_GLASS_PER_ZONE_CLARITY, false)
+            val dockPref = prefs.getFloat(Appearance.CLARITY_DOCK, clarityPref).coerceIn(0f, 1f)
+            val headerPref = prefs.getFloat(Appearance.CLARITY_HEADER, clarityPref).coerceIn(0f, 1f)
+            val sheetPref = prefs.getFloat(Appearance.CLARITY_SHEET, clarityPref).coerceIn(0f, 1f)
+            val dialogPref = prefs.getFloat(Appearance.CLARITY_DIALOG, clarityPref).coerceIn(0f, 1f)
+            var clarity by remember(clarityPref) { mutableFloatStateOf(clarityPref) }
+            var dockClarity by remember(dockPref) { mutableFloatStateOf(dockPref) }
+            var headerClarity by remember(headerPref) { mutableFloatStateOf(headerPref) }
+            var sheetClarity by remember(sheetPref) { mutableFloatStateOf(sheetPref) }
+            var dialogClarity by remember(dialogPref) { mutableFloatStateOf(dialogPref) }
+            var previewText by remember { mutableStateOf("液态玻璃通透效果") }
+            var previewZoneClarity by remember(clarityPref, perZonePref, headerPref) {
+                mutableFloatStateOf(if (perZonePref) headerPref else clarityPref)
+            }
+            var previewBaseLight by remember { mutableFloatStateOf(0.32f) }
+            var previewBaseDark by remember { mutableFloatStateOf(0.44f) }
+            var previewBaseBlurDp by remember { mutableFloatStateOf(4.5f) }
+            val reduceTransparency = LocalReduceTransparency.current
+
+            InsetGroup {
+                ListRow(
+                    title = "液态玻璃",
+                    trailing = {
+                        AbSwitch(liquidGlass) {
+                            prefs.edit().putBoolean(Appearance.LIQUID_GLASS, it).apply()
+                        }
+                    },
+                )
+            }
+
+            AnimatedVisibility(
+                visible = liquidGlass && !reduceTransparency,
+                enter = expandVertically(AbSpring.morphSize(LocalReduceMotion.current)) + fadeIn(tween(if (LocalReduceMotion.current) 0 else AbMotion.fast)),
+                exit = shrinkVertically(AbSpring.morphSize(LocalReduceMotion.current)) + fadeOut(tween(if (LocalReduceMotion.current) 0 else AbMotion.fast)),
+            ) {
+                Column(
+                    Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(AbCardDensity.gap),
+                ) {
+                    InsetGroup {
+                        ClaritySliderRow(
+                            label = if (perZonePref) "全局基准" else "通透度",
+                            value = clarity,
+                            contentDescription = "液态玻璃通透度",
+                            onValueChange = { next ->
+                                clarity = next
+                                previewText = "液态玻璃通透效果"
+                                previewZoneClarity = next
+                                previewBaseLight = 0.32f
+                                previewBaseDark = 0.44f
+                                previewBaseBlurDp = 4.5f
+                                val editor = prefs.edit().putFloat(Appearance.LIQUID_GLASS_CLARITY, next)
+                                if (perZonePref) {
+                                    dockClarity = next
+                                    headerClarity = next
+                                    sheetClarity = next
+                                    dialogClarity = next
+                                    editor.putFloat(Appearance.CLARITY_DOCK, next)
+                                        .putFloat(Appearance.CLARITY_HEADER, next)
+                                        .putFloat(Appearance.CLARITY_SHEET, next)
+                                        .putFloat(Appearance.CLARITY_DIALOG, next)
+                                }
+                                editor.apply()
+                            },
+                        )
+                        ClarityLivePreviewStrip(
+                            clarity = if (perZonePref) previewZoneClarity else clarity,
+                            label = previewText,
+                            baseLight = previewBaseLight,
+                            baseDark = previewBaseDark,
+                            baseBlurDp = previewBaseBlurDp,
+                        )
+                        InsetDivider()
+                        ListRow(
+                            title = "分区域单独调节",
+                            trailing = {
+                                AbSwitch(perZonePref) { enabled ->
+                                    val editor = prefs.edit().putBoolean(Appearance.LIQUID_GLASS_PER_ZONE_CLARITY, enabled)
+                                    if (enabled && !prefs.contains(Appearance.CLARITY_DOCK)) {
+                                        dockClarity = clarity
+                                        headerClarity = clarity
+                                        sheetClarity = clarity
+                                        dialogClarity = clarity
+                                        editor.putFloat(Appearance.CLARITY_DOCK, clarity)
+                                            .putFloat(Appearance.CLARITY_HEADER, clarity)
+                                            .putFloat(Appearance.CLARITY_SHEET, clarity)
+                                            .putFloat(Appearance.CLARITY_DIALOG, clarity)
+                                    }
+                                    editor.apply()
+                                }
+                            },
+                        )
+                    }
+
+                    AnimatedVisibility(
+                        visible = perZonePref,
+                        enter = expandVertically(AbSpring.morphSize(LocalReduceMotion.current)) + fadeIn(tween(if (LocalReduceMotion.current) 0 else AbMotion.fast)),
+                        exit = shrinkVertically(AbSpring.morphSize(LocalReduceMotion.current)) + fadeOut(tween(if (LocalReduceMotion.current) 0 else AbMotion.fast)),
+                    ) {
+                        InsetGroup {
+                            ClaritySliderRow(
+                                label = "底部导航栏",
+                                value = dockClarity,
+                                contentDescription = "底部导航栏通透度",
+                                onValueChange = { next ->
+                                    dockClarity = next
+                                    previewText = "底部导航栏"
+                                    previewZoneClarity = next
+                                    previewBaseLight = 0.42f
+                                    previewBaseDark = 0.22f
+                                    previewBaseBlurDp = 4.5f
+                                    prefs.edit().putFloat(Appearance.CLARITY_DOCK, next).apply()
+                                },
+                            )
+                            InsetDivider()
+                            ClaritySliderRow(
+                                label = "页面悬浮元素",
+                                value = headerClarity,
+                                contentDescription = "页面悬浮元素通透度",
+                                onValueChange = { next ->
+                                    headerClarity = next
+                                    previewText = "页面悬浮元素"
+                                    previewZoneClarity = next
+                                    previewBaseLight = 0.32f
+                                    previewBaseDark = 0.44f
+                                    previewBaseBlurDp = 4.5f
+                                    prefs.edit().putFloat(Appearance.CLARITY_HEADER, next).apply()
+                                },
+                            )
+                            InsetDivider()
+                            ClaritySliderRow(
+                                label = "底部弹出卡",
+                                value = sheetClarity,
+                                contentDescription = "底部弹出卡通透度",
+                                onValueChange = { next ->
+                                    sheetClarity = next
+                                    previewText = "底部弹出卡"
+                                    previewZoneClarity = next
+                                    previewBaseLight = 0.72f
+                                    previewBaseDark = 0.70f
+                                    previewBaseBlurDp = 16f
+                                    prefs.edit().putFloat(Appearance.CLARITY_SHEET, next).apply()
+                                },
+                            )
+                            InsetDivider()
+                            ClaritySliderRow(
+                                label = "弹窗与浮出菜单",
+                                value = dialogClarity,
+                                contentDescription = "弹窗与菜单通透度",
+                                onValueChange = { next ->
+                                    dialogClarity = next
+                                    previewText = "弹窗与浮出菜单"
+                                    previewZoneClarity = next
+                                    previewBaseLight = 0.86f
+                                    previewBaseDark = 0.84f
+                                    previewBaseBlurDp = 18f
+                                    prefs.edit().putFloat(Appearance.CLARITY_DIALOG, next).apply()
+                                },
+                            )
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = AbSpacing.l, vertical = AbSpacing.xs),
+                                horizontalArrangement = Arrangement.End,
+                            ) {
+                                AbTextButton(
+                                    text = "全部恢复默认",
+                                    color = p.accent,
+                                    onClick = {
+                                        val def = Appearance.DEFAULT_LIQUID_GLASS_CLARITY
+                                        clarity = def
+                                        dockClarity = def
+                                        headerClarity = def
+                                        sheetClarity = def
+                                        dialogClarity = def
+                                        previewText = "液态玻璃通透效果"
+                                        previewZoneClarity = def
+                                        previewBaseLight = 0.32f
+                                        previewBaseDark = 0.44f
+                                        previewBaseBlurDp = 4.5f
+                                        prefs.edit()
+                                            .putFloat(Appearance.LIQUID_GLASS_CLARITY, def)
+                                            .putFloat(Appearance.CLARITY_DOCK, def)
+                                            .putFloat(Appearance.CLARITY_HEADER, def)
+                                            .putFloat(Appearance.CLARITY_SHEET, def)
+                                            .putFloat(Appearance.CLARITY_DIALOG, def)
+                                            .apply()
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ClaritySliderRow(
+    label: String,
+    value: Float,
+    contentDescription: String,
+    onValueChange: (Float) -> Unit,
+) {
+    val p = LocalAbPalette.current
+    val clarityLabel = when {
+        value <= 0.25f -> "雾面"
+        value >= 0.80f -> "清透"
+        else -> "${kotlin.math.round(value * 100).toInt()}%"
+    }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = AbSpacing.l, vertical = AbSpacing.xs),
+    ) {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(label, style = AbType.body, color = p.label, modifier = Modifier.weight(1f))
+            Text(
+                clarityLabel,
+                style = AbType.footnote,
+                color = p.secondaryLabel,
+                modifier = Modifier.width(38.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            )
+        }
+        AbLiquidSlider(
+            value = value,
+            contentDescription = contentDescription,
+            onValueChange = onValueChange,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+/** 实时通透度预览条：以彩色图形与账单文字作衬底，拖动全局或任意分区滑杆时直接展示对应区域的雾面与清透反差。 */
+@Composable
+private fun ClarityLivePreviewStrip(
+    clarity: Float,
+    label: String,
+    baseLight: Float,
+    baseDark: Float,
+    baseBlurDp: Float,
+) {
+    val p = LocalAbPalette.current
+    val isDark = p.pageBg.luminance() < 0.1f
+    val density = androidx.compose.ui.platform.LocalDensity.current.density
+    val layer = rememberGraphicsLayer()
+    val useBlur = android.os.Build.VERSION.SDK_INT >= 31
+    val shape = RoundedCornerShape(AbRadius.row)
+    val glassShape = RoundedCornerShape(AbRadius.capsule)
+    var cardOffset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    var hostOrigin by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = AbSpacing.l, end = AbSpacing.l, bottom = AbSpacing.m)
+            .height(60.dp)
+            .clip(shape)
+            .background(if (isDark) Color(0xFF15171C) else Color(0xFFF0F4F3))
+            .onGloballyPositioned { coords ->
+                if (coords.isAttached) hostOrigin = coords.boundsInRoot().topLeft
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            Modifier
+                .fillMaxSize()
+                .then(
+                    if (useBlur) Modifier.drawWithContent {
+                        layer.record { this@drawWithContent.drawContent() }
+                        drawLayer(layer)
+                    } else Modifier,
+                )
+                .padding(horizontal = AbSpacing.m),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
+        ) {
+            Box(Modifier.size(28.dp).clip(CircleShape).background(Color(0xFFE67E22)))
+            Box(Modifier.size(24.dp).clip(CircleShape).background(p.accent))
+            Column(Modifier.weight(1f)) {
+                Text("餐饮 · 咖啡馆", style = AbType.caption1.copy(fontWeight = FontWeight.SemiBold), color = p.label)
+                Text("支出 ¥38.00", style = AbType.caption2, color = p.expense)
+            }
+            Box(Modifier.size(26.dp).clip(CircleShape).background(Color(0xFF3B82F6)))
+            Box(Modifier.size(20.dp).clip(CircleShape).background(Color(0xFFE04F5F)))
+        }
+        val paneAlpha = glassSurfaceAlpha(baseLight, baseDark, isDark, clarity)
+        val previewBlurDp = glassBlurRadiusDp(clarity, baseDp = baseBlurDp, minDp = 1.8f, maxDp = maxOf(11f, baseBlurDp + 6f))
+        val glassTintColor = if (isDark) p.cardBg else Color.White
+        Box(
+            Modifier
+                .padding(horizontal = AbSpacing.l)
+                .height(38.dp)
+                .fillMaxWidth()
+                .onGloballyPositioned { coords ->
+                    if (coords.isAttached) cardOffset = coords.boundsInRoot().topLeft - hostOrigin
+                }
+                .shadow(8.dp, glassShape, clip = false, ambientColor = p.glassShadow, spotColor = p.glassShadow)
+                .clip(glassShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (useBlur) {
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .graphicsLayer {
+                            val blurPx = previewBlurDp * density
+                            renderEffect = androidx.compose.ui.graphics.BlurEffect(blurPx, blurPx, androidx.compose.ui.graphics.TileMode.Clamp)
+                        }
+                        .drawWithContent {
+                            translate(-cardOffset.x, -cardOffset.y) {
+                                drawLayer(layer)
+                            }
+                        },
+                )
+            }
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .background(glassTintColor.copy(alpha = paneAlpha))
+                    .border(0.9.dp, io.github.mymoney.ui.design.liquidSpecularRimBrush(isDark), glassShape),
+            )
+            Text(
+                label,
+                style = AbType.footnote.copy(fontWeight = FontWeight.Medium),
+                color = p.label,
+            )
         }
     }
 }

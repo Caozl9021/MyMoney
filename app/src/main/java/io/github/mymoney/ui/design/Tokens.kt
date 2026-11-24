@@ -166,11 +166,14 @@ object AbCardDensity {
 }
 
 object AbRadius {
-    val chip = 10.dp
-    val row = 12.dp
-    val group = 20.dp
-    val card = 22.dp
+    val chip = 12.dp
+    val row = 14.dp
+    val group = 24.dp
+    val card = 24.dp
+    val popover = 24.dp
     val sheet = 28.dp
+    val dialog = 32.dp
+    val sheetFloating = 32.dp
     val capsule = 100.dp
 }
 
@@ -239,6 +242,71 @@ fun swatchFor(name: String, fallbackIndex: Int = 0): Color {
 val LocalAbPalette = compositionLocalOf { LightPalette }
 
 val LocalReduceTransparency = compositionLocalOf { false }
+
+val LocalInModalSurface = compositionLocalOf { false }
+
+/**
+ * 连续通透度映射到实时模糊半径（`0f` 厚雾磨砂 → `0.65f` 默认平衡 → `1f` 清亮透光），
+ * 让高通透度在降低遮罩同时微收模糊厚度，避免前景把下方文字完全糊白。
+ */
+internal fun glassBlurRadiusDp(
+    clarity: Float,
+    baseDp: Float,
+    minDp: Float,
+    maxDp: Float,
+): Float {
+    val c = clarity.coerceIn(0f, 1f)
+    return if (c <= 0.65f) {
+        val t = c / 0.65f
+        maxDp + (baseDp - maxDp) * t
+    } else {
+        val t = (c - 0.65f) / 0.35f
+        baseDp + (minDp - baseDp) * t
+    }
+}
+
+/**
+ * 连续通透度映射到表面不透明度（`0f` 雾面高对比 → `1f` 清透），
+ * 覆盖无模糊兜底与有背景模糊采样两类基线，保证任意调节下平滑单调且不反转。
+ */
+internal fun glassSurfaceAlpha(
+    baseLight: Float,
+    baseDark: Float,
+    isDark: Boolean,
+    clarity: Float,
+): Float {
+    val c = clarity.coerceIn(0f, 1f)
+    val base = if (isDark) baseDark else baseLight
+    val tinted = if (isDark) 0.94f else 0.96f
+    val clear = if (base <= 0.65f) {
+        (base * 0.45f).coerceAtLeast(if (isDark) 0.24f else 0.20f)
+    } else {
+        (base - 0.28f).coerceAtLeast(if (isDark) 0.46f else 0.50f)
+    }.coerceAtMost(base)
+    return if (c <= 0.65f) {
+        val t = c / 0.65f
+        tinted + (base - tinted) * t
+    } else {
+        val t = (c - 0.65f) / 0.35f
+        base + (clear - base) * t
+    }
+}
+
+/**
+ * iOS 26/27 对角线镜面边缘高光画刷：左上角与右下角亮边微闪、中段清透过渡，
+ * 避免使用深灰/黑实线边框造成的“色块包黑框”廉价感。
+ */
+internal fun liquidSpecularRimBrush(
+    isDark: Boolean,
+    alphaScale: Float = 1f,
+): androidx.compose.ui.graphics.Brush {
+    val s = alphaScale.coerceIn(0f, 1.5f)
+    return androidx.compose.ui.graphics.Brush.linearGradient(
+        0.0f to androidx.compose.ui.graphics.Color.White.copy(alpha = ((if (isDark) 0.36f else 0.88f) * s).coerceIn(0f, 1f)),
+        0.48f to androidx.compose.ui.graphics.Color.White.copy(alpha = ((if (isDark) 0.06f else 0.18f) * s).coerceIn(0f, 1f)),
+        1.0f to androidx.compose.ui.graphics.Color.White.copy(alpha = ((if (isDark) 0.20f else 0.54f) * s).coerceIn(0f, 1f)),
+    )
+}
 
 /** Preserve the normal dock size while making room for enlarged labels. */
 fun dockHeightForFontScale(fontScale: Float) =

@@ -29,7 +29,7 @@ internal fun DeleteBillDialog(billId: Long, origin: String, onDismiss: () -> Uni
         catch (cancelled: CancellationException) { throw cancelled }
         catch (failure: Exception) { error = failure.message ?: "无法读取账单，请重试" }
     }
-    AppDialog("删除这笔账单？", onDismiss = { if (!busy) dismissed() }) {
+    AppDialog("删除这笔账单？", onDismiss = { if (!busy) dismissed() }, dismissible = !busy) {
         val group = rows
         val bill = group?.firstOrNull()
         when {
@@ -65,8 +65,9 @@ internal fun DeleteBillDialog(billId: Long, origin: String, onDismiss: () -> Uni
         }
         error?.let { InlineMessage(it, isError = true, announce = true) }
         if (error != null) SecondaryButton("重新核对", enabled = !busy, onClick = { retry++ }, modifier = Modifier.fillMaxWidth())
+        val animatedDismiss = LocalDialogDismiss.current
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AbSpacing.m)) {
-            SecondaryButton("取消", enabled = !busy, onClick = { dismissed() }, modifier = Modifier.weight(1f))
+            SecondaryButton("取消", enabled = !busy, onClick = { animatedDismiss?.invoke() ?: dismissed() }, modifier = Modifier.weight(1f))
             DestructiveButton("确认删除", enabled = bill != null && error == null, busy = busy, busyLabel = "正在删除…", modifier = Modifier.weight(1f), onClick = {
                 if (!busy && !group.isNullOrEmpty()) {
                     busy = true

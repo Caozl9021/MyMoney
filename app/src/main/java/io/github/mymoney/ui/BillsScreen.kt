@@ -2,25 +2,41 @@ package io.github.mymoney.ui
 
 import kotlinx.coroutines.launch
 
-import android.widget.Toast
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.Text
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -62,7 +78,7 @@ fun BillsScreen(requestAdd: Int = 0, applyPendingFilter: Boolean = false, onPend
     var category by rememberSaveable { mutableStateOf<String?>(null) }
     var type by rememberSaveable { mutableStateOf<String?>(null) }
     var reimburse by rememberSaveable { mutableStateOf<String?>(null) }
-    var reimburseBill by remember { mutableStateOf<BillEntity?>(null) }
+    var reimburseTarget by remember { mutableStateOf<Pair<BillEntity, Rect?>?>(null) }
     var limit by rememberSaveable { mutableStateOf(100) }
     var resetPosition by rememberSaveable { mutableStateOf(false) }
     var retry by remember { mutableStateOf(0) }
@@ -155,24 +171,38 @@ fun BillsScreen(requestAdd: Int = 0, applyPendingFilter: Boolean = false, onPend
         }
     }
     val p = LocalAbPalette.current
+    val editorBackdrop = rememberGraphicsLayer()
+    var editorHostOrigin by remember { mutableStateOf(Offset.Zero) }
+    val sampleEditorBackdrop = android.os.Build.VERSION.SDK_INT >= 31 &&
+        LocalLiquidGlassEnabled.current && !LocalReduceTransparency.current && newSource != null
     BackSurface(enabled = false, onBack = {}, pixels = pagePixels) {
-    Box(Modifier.fillMaxSize().background(p.pageBg)) {
+    GlassContextMenuHost(backEnabled = LocalBackActive.current) {
+    Box(Modifier.fillMaxSize().background(p.pageBg).onGloballyPositioned { editorHostOrigin = it.boundsInRoot().topLeft }) {
+        Box(
+            Modifier.fillMaxSize().then(
+                if (sampleEditorBackdrop) Modifier.drawWithContent {
+                    editorBackdrop.record { this@drawWithContent.drawContent() }
+                    drawLayer(editorBackdrop)
+                } else Modifier,
+            ),
+        ) {
         PageScaffold(
             title = statisticsScope?.groupName ?: "明细",
             listState = listState,
             onBack = onBack,
             actions = {
                 if (statisticsScope == null) {
-                    IconButton(onClick = { historyOpen = true }, modifier = Modifier.size(38.dp)) {
-                        Icon(AbIcons.Clock, contentDescription = "记录历史", tint = p.label, modifier = Modifier.size(20.dp))
-                    }
-                    IconButton(onClick = { addBill() }, modifier = Modifier.size(38.dp)) {
-                        Icon(AbIcons.Plus, contentDescription = "记一笔", tint = p.label, modifier = Modifier.size(20.dp))
-                    }
+                    GlassCircleIconButton(AbIcons.Clock, "记录历史", { historyOpen = true }, tint = p.label)
+                    GlassCircleIconButton(AbIcons.Plus, "记一笔", { addBill() }, tint = p.label)
                 }
             },
         ) { padding ->
-            Column(Modifier.fillMaxSize().imePadding()) {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .imePadding()
+                    .padding(top = (padding.calculateTopPadding() - AbSpacing.s).coerceAtLeast(0.dp)),
+            ) {
                 if (statisticsScope != null) {
                     val scopeTypeLabel = when (statisticsScope.type) { "INCOME" -> "收入"; "REFUND" -> "退款"; else -> "支出" }
                     val totalCents = window.summary?.let {
@@ -258,10 +288,11 @@ fun BillsScreen(requestAdd: Int = 0, applyPendingFilter: Boolean = false, onPend
                                             message = if (emptyLedger) "点右上角「+」记一笔，或开启识别后确认保存。" else "该筛选范围内没有账单。",
                                         )
                                         if (active && statisticsScope == null) {
-                                            TextButton(
+                                            AbTextButton(
+                                                text = "清除筛选",
                                                 onClick = { clear() },
-                                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                                            ) { Text("清除筛选") }
+                                                modifier = Modifier.fillMaxWidth(),
+                                            )
                                         }
                                     }
                                 }
@@ -296,13 +327,15 @@ fun BillsScreen(requestAdd: Int = 0, applyPendingFilter: Boolean = false, onPend
                                                 .clip(shape)
                                                 .background(p.cardBg),
                                         ) {
+                                            var rowBounds by remember { mutableStateOf<Rect?>(null) }
                                             SwipeableBillRow(
                                                 bill,
+                                                modifier = Modifier.onGloballyPositioned { rowBounds = it.boundsInRoot() },
                                                 onAmountBounds = {},
                                                 hideAmount = false,
                                                 onEdit = { openBill(bill.id); newSource = null },
                                                 onDelete = { deleteId = bill.id },
-                                                onLongPress = { if (Reimburse.eligible(bill)) reimburseBill = bill },
+                                                onLongPress = { if (Reimburse.eligible(bill)) reimburseTarget = bill to rowBounds },
                                             )
                                             if (!last) InsetDivider(inset = AbSpacing.l + AbCardDensity.icon + AbSpacing.m)
                                         }
@@ -324,8 +357,9 @@ fun BillsScreen(requestAdd: Int = 0, applyPendingFilter: Boolean = false, onPend
                 }
             }
         }
+        }
         deleteId?.let { id -> DeleteBillDialog(id, origin = "ledger", onDismiss = { deleteId = null }, onDeleted = { deleteId = null }) }
-        reimburseBill?.let { bill -> ReimburseChoiceDialog(bill) { reimburseBill = null } }
+        reimburseTarget?.let { (bill, bounds) -> ReimburseChoiceDialog(bill, anchor = bounds) { reimburseTarget = null } }
         SlideSubPage(visible = historyOpen, modifier = Modifier.fillMaxSize().zIndex(9f)) {
             RecognitionHistoryScreen(onBack = { historyOpen = false }, reserveDock = false)
         }
@@ -333,8 +367,18 @@ fun BillsScreen(requestAdd: Int = 0, applyPendingFilter: Boolean = false, onPend
             BillActionsHost(billId = id, onClose = { selectedId = null; sourcePreview = null }, sourcePreview = sourcePreview)
         }
         if (newSource != null) key(newSource) {
-            Box(Modifier.fillMaxSize().zIndex(10f)) { BillEditorDialog(null, newSource.orEmpty(), newTime, onClose = { newSource = null }) }
+            Box(Modifier.fillMaxSize().zIndex(10f)) {
+                BillEditorDialog(
+                    original = null,
+                    newSource = newSource.orEmpty(),
+                    newTime = newTime,
+                    backdrop = if (sampleEditorBackdrop) editorBackdrop else null,
+                    backdropOrigin = editorHostOrigin,
+                    onClose = { newSource = null },
+                )
+            }
         }
+    }
     }
     }
 }
@@ -376,17 +420,39 @@ private fun LedgerCardDayHeader(day: LocalDate, dayBills: List<BillEntity>, cloc
 }
 
 /** 左滑请求删除确认；取消时保持原账单。 */
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-private fun SwipeableBillRow(bill: BillEntity, onEdit: () -> Unit, onDelete: () -> Unit, onLongPress: () -> Unit, onAmountBounds: (Rect) -> Unit, hideAmount: Boolean) {
+private fun SwipeableBillRow(
+    bill: BillEntity,
+    modifier: Modifier = Modifier,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onLongPress: () -> Unit,
+    onAmountBounds: (Rect) -> Unit,
+    hideAmount: Boolean,
+) {
     val haptic = rememberAbHaptic()
     val reduceMotion = LocalReduceMotion.current
     if (reduceMotion) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             BillListRow(bill, modifier = Modifier.weight(1f).combinedClickable(onClick = onEdit, onLongClick = onLongPress),
                 onAmountBounds = onAmountBounds, hideAmount = hideAmount)
-            IconButton(onClick = { haptic.warn(); onDelete() }) {
-                Icon(AbIcons.Close, contentDescription = "删除账单，需确认", tint = LocalAbPalette.current.red)
+            Box(
+                Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        role = Role.Button,
+                    ) {
+                        haptic.warn()
+                        onDelete()
+                    }
+                    .semantics { contentDescription = "删除账单，需确认" },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(AbIcons.Close, contentDescription = null, tint = LocalAbPalette.current.red, modifier = Modifier.size(18.dp))
             }
         }
         return
@@ -403,17 +469,28 @@ private fun SwipeableBillRow(bill: BillEntity, onEdit: () -> Unit, onDelete: () 
         },
     )
 
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val offsetPx = runCatching { kotlin.math.abs(state.requireOffset()) }.getOrDefault(0f)
+    val progress = (offsetPx / rowWidth).coerceIn(0f, 1f)
+    var crossedThreshold by remember { mutableStateOf(false) }
+    LaunchedEffect(progress) {
+        val nowCrossed = progress >= 0.38f
+        if (nowCrossed && !crossedThreshold) haptic.tick()
+        crossedThreshold = nowCrossed
+    }
+    val rowCorner = if (offsetPx > with(density) { 2.dp.toPx() }) 16.dp else 0.dp
+
     SwipeToDismissBox(
         state = state,
         enableDismissFromStartToEnd = false,
-        backgroundContent = { SwipeDeleteBackground(progress = (kotlin.math.abs(runCatching { state.requireOffset() }.getOrDefault(0f)) / rowWidth).coerceIn(0f, 1f)) },
-        modifier = Modifier.onSizeChanged { rowWidth = it.width.toFloat().coerceAtLeast(1f) },
+        backgroundContent = { SwipeDeleteBackground(progress = progress) },
+        modifier = modifier.onSizeChanged { rowWidth = it.width.toFloat().coerceAtLeast(1f) },
     ) {
-        // 行本身要盖住红色底衬，所以必须有实底
+        // 行本身要盖住删除底衬，所以必须有实底；左滑露出底衬时右侧自适应收出圆角弧度
         Column(
             Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(0.dp))
+                .clip(RoundedCornerShape(topEnd = rowCorner, bottomEnd = rowCorner))
                 .background(LocalAbPalette.current.cardBg),
         ) {
             BillListRow(bill, modifier = Modifier.combinedClickable(onClick = onEdit, onLongClick = onLongPress), onAmountBounds = onAmountBounds, hideAmount = hideAmount)

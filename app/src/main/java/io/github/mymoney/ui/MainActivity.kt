@@ -17,6 +17,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
@@ -416,7 +417,12 @@ private fun AppContent(tabState: MutableIntState, requestAdd: Int, settingsRootR
                 onPendingFilterApplied = { pendingFilter = false }, onBack = { detailsOpen = false },
                 onEditorVisibilityChanged = { editorChanged(4, it) }, statisticsScope = detailScope)
         }
-        ReimburseNoticeBar(Modifier.align(Alignment.BottomCenter).padding(start = 16.dp, end = 16.dp, bottom = 96.dp))
+        ReimburseNoticeBar(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(start = 16.dp, end = 16.dp, bottom = 84.dp),
+        )
     }
     }
 }

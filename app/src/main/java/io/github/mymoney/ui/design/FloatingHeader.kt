@@ -9,19 +9,20 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
@@ -40,10 +41,13 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -54,7 +58,7 @@ internal class HeaderBackdrop(val layer: GraphicsLayer) {
     var coordinates: LayoutCoordinates? = null
 }
 
-private val LocalHeaderBackdrop = staticCompositionLocalOf<HeaderBackdrop?> { null }
+internal val LocalHeaderBackdrop = staticCompositionLocalOf<HeaderBackdrop?> { null }
 
 @Composable
 internal fun FloatingPageScaffold(
@@ -73,7 +77,7 @@ internal fun FloatingPageScaffold(
     val topPadding = statusTop + AbSpacing.xs + headerHeight + AbSpacing.s
     val source = rememberGraphicsLayer()
     val backdrop = remember(source) { HeaderBackdrop(source) }
-    val sample = Build.VERSION.SDK_INT >= 31 && !LocalReduceTransparency.current
+    val sample = Build.VERSION.SDK_INT >= 31 && LocalLiquidGlassEnabled.current && !LocalReduceTransparency.current
     Box(modifier.fillMaxSize()) {
         Box(Modifier.widthIn(max = 560.dp).fillMaxSize().align(Alignment.TopCenter)
             .onGloballyPositioned { backdrop.coordinates = it }) {
@@ -85,8 +89,19 @@ internal fun FloatingPageScaffold(
                 .background(palette.pageBg)) {
                 content(PaddingValues(top = topPadding, bottom = bottomPadding))
             }
-            // Keep system icons over a quiet safe area while body content passes below it.
-            Box(Modifier.fillMaxWidth().height(statusTop).background(palette.pageBg))
+            // Soft Scroll Edge veil beneath the status bar & floating capsules so scrolling cards dissolve smoothly.
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(statusTop + 20.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            0f to palette.pageBg,
+                            0.55f to palette.pageBg.copy(alpha = 0.84f),
+                            1f to Color.Transparent,
+                        ),
+                    ),
+            )
             CompositionLocalProvider(LocalHeaderBackdrop provides if (sample) backdrop else null) {
                 Row(Modifier.fillMaxWidth().padding(start = AbSpacing.page, end = AbSpacing.page,
                     top = statusTop + AbSpacing.xs).heightIn(min = headerHeight), verticalAlignment = Alignment.CenterVertically,
@@ -114,109 +129,227 @@ internal fun FloatingPageScaffold(
 /** Icon-only visual, with a full 48dp button and an explicit spoken action name. */
 @Composable
 fun FloatingHeaderAction(icon: ImageVector, label: String, onClick: () -> Unit) {
+    // Offset +5dp so the 38dp visual capsule's right edge aligns with AbSpacing.page (16dp).
+    GlassCircleIconButton(
+        icon = icon,
+        contentDescription = label,
+        onClick = onClick,
+        modifier = Modifier.offset(x = 5.dp),
+    )
+}
+
+/** 圆形玻璃图标按钮：48dp 触控热区、无水波纹，支持在 [HeaderBackdrop] 下自动采样折射。 */
+@Composable
+fun GlassCircleIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    tint: Color? = null,
+    visualSize: Dp = 38.dp,
+    iconSize: Dp = 20.dp,
+    enabled: Boolean = true,
+) {
     val interactions = remember { MutableInteractionSource() }
     val pressed by interactions.collectIsPressedAsState()
     val reduceMotion = LocalReduceMotion.current
-    val scale by animateFloatAsState(if (pressed && !reduceMotion) 0.95f else 1f,
-        tween(if (reduceMotion) 0 else 120), label = "headerPress")
+    val haptic = rememberAbHaptic()
+    val scale by animateFloatAsState(
+        if (pressed && enabled && !reduceMotion) 0.92f else 1f,
+        AbSpring.bouncyFloat(reduceMotion),
+        label = "headerPress",
+    )
     val p = LocalAbPalette.current
-    // Keep hit testing on a stable, standard foreground button. Sampling and press
-    // transforms belong to separate children and cannot move its touch coordinates.
-    // Offset +5dp so the 38dp visual capsule's right edge aligns with AbSpacing.page (16dp).
-    Box(Modifier.offset(x = 5.dp).size(48.dp), contentAlignment = Alignment.Center) {
-        HeaderGlassCapsule(Modifier.size(38.dp)) { }
-        IconButton(onClick = onClick, interactionSource = interactions,
-            modifier = Modifier.matchParentSize().semantics { contentDescription = label }) {
-            Icon(icon, contentDescription = null, tint = p.accent,
-                modifier = Modifier.size(20.dp).graphicsLayer { scaleX = scale; scaleY = scale })
+    val resolvedTint = (tint ?: p.accent).let { if (enabled) it else it.copy(alpha = 0.45f) }
+    val touchSize = visualSize.coerceAtLeast(48.dp)
+    Box(
+        modifier = modifier.size(touchSize),
+        contentAlignment = Alignment.Center,
+    ) {
+        HeaderGlassCapsule(Modifier.size(visualSize)) { }
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .clip(CircleShape)
+                .clickable(
+                    interactionSource = interactions,
+                    indication = null,
+                    enabled = enabled,
+                    role = Role.Button,
+                ) {
+                    haptic.select()
+                    onClick()
+                }
+                .semantics { this.contentDescription = contentDescription },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = resolvedTint,
+                modifier = Modifier.size(iconSize).graphicsLayer { scaleX = scale; scaleY = scale },
+            )
         }
     }
 }
 
 @Composable
-private fun HeaderGlassCapsule(
+internal fun HeaderGlassCapsule(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val p = LocalAbPalette.current
     val backdrop = LocalHeaderBackdrop.current
-    val reduce = LocalReduceTransparency.current
+    val reduce = !LocalLiquidGlassEnabled.current || LocalReduceTransparency.current
+    val clarity = LocalLiquidGlassClaritySpec.current.header
     val density = LocalDensity.current.density
     val dark = p.pageBg.luminance() < 0.1f
     var measuredSize by remember { mutableStateOf(IntSize.Zero) }
     var position by remember { mutableStateOf(Offset.Zero) }
-    val effect = remember(measuredSize, density, backdrop) {
+    val blurDp = remember(clarity) { glassBlurRadiusDp(clarity, baseDp = 4.5f, minDp = 1.8f, maxDp = 11.0f) }
+    val lensHolder = remember(backdrop, density) {
+        if (backdrop != null && Build.VERSION.SDK_INT >= 33) HeaderGlassApi33Holder(density, blurDp) else null
+    }
+    val effect = remember(measuredSize, density, backdrop, lensHolder, blurDp) {
         if (backdrop == null || measuredSize == IntSize.Zero) null
-        else if (Build.VERSION.SDK_INT >= 33) {
-            runCatching { HeaderGlassApi33.effect(measuredSize, density) }
+        else if (Build.VERSION.SDK_INT >= 33 && lensHolder != null) {
+            runCatching { lensHolder.effect(measuredSize, blurDp) }
                 .getOrElse {
                     android.util.Log.w("FloatingHeader", "Edge effect unavailable; using background blur", it)
-                    BlurEffect(12f * density, 12f * density, TileMode.Clamp)
+                    BlurEffect(blurDp * density, blurDp * density, TileMode.Clamp)
                 }
-        } else BlurEffect(12f * density, 12f * density, TileMode.Clamp)
+        } else BlurEffect(blurDp * density, blurDp * density, TileMode.Clamp)
     }
     val shape = RoundedCornerShape(AbRadius.capsule)
+    val rim = remember(dark) { liquidSpecularRimBrush(dark) }
+    val tintAlpha = when {
+        reduce -> 1f
+        backdrop == null -> glassSurfaceAlpha(0.84f, 0.80f, dark, clarity)
+        else -> glassSurfaceAlpha(0.32f, 0.44f, dark, clarity)
+    }
+    val glassBaseColor = if (reduce) p.cardBg else if (dark) p.cardBg else Color.White
+    val tintColor = glassBaseColor.copy(alpha = tintAlpha)
     Box(modifier.onSizeChanged { measuredSize = it }
         .onGloballyPositioned { placed ->
             val origin = backdrop?.coordinates
             if (origin != null && origin.isAttached && placed.isAttached)
                 position = origin.localPositionOf(placed, Offset.Zero)
         }
-        .shadow(10.dp, shape, clip = false,
-            ambientColor = Color.Black.copy(alpha = if (dark) 0.80f else 0.45f),
-            spotColor = Color.Black.copy(alpha = if (dark) 0.80f else 0.45f))
+        .shadow(
+            elevation = if (reduce) 2.dp else 9.dp,
+            shape = shape,
+            clip = false,
+            ambientColor = Color.Black.copy(alpha = if (dark) 0.28f else 0.08f),
+            spotColor = Color.Black.copy(alpha = if (dark) 0.34f else 0.11f),
+        )
         .clip(shape), contentAlignment = Alignment.Center) {
-        if (backdrop != null) Box(Modifier.matchParentSize()
+        if (backdrop != null && !reduce) Box(Modifier.matchParentSize()
             .graphicsLayer { renderEffect = effect }
             .drawWithContent {
                 translate(-position.x, -position.y) { drawLayer(backdrop.layer) }
             })
-        Box(Modifier.matchParentSize().drawWithCache {
-            val tint = if (reduce) p.cardBg else p.cardBg.copy(alpha = if (backdrop == null) 0.94f else if (dark) 0.68f else 0.52f)
-            val sheen = Brush.verticalGradient(listOf(p.glassHighlight.copy(alpha = if (dark) 0.10f else 0.20f),
-                p.glassHighlight.copy(alpha = 0f)))
-            val rim = Brush.verticalGradient(listOf(p.glassStrokeTop, p.glassStrokeBottom))
-            onDrawBehind {
-                drawRect(tint)
-                if (!reduce) {
-                    drawRect(sheen)
-                    val stroke = 1.dp.toPx()
-                    drawRoundRect(rim, topLeft = Offset(stroke / 2, stroke / 2),
-                        size = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke),
-                        cornerRadius = CornerRadius(size.height / 2), style = Stroke(stroke))
-                }
+        Box(Modifier.matchParentSize().drawBehind {
+            drawRect(tintColor)
+            val radius = minOf(size.width, size.height) * 0.5f
+            if (!reduce) {
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        0f to Color.White.copy(alpha = if (dark) 0.10f else 0.22f),
+                        0.48f to Color.Transparent,
+                    ),
+                )
+                val outerGlassRim = 0.45.dp.toPx()
+                drawRoundRect(
+                    color = if (dark) Color(0x28000000) else Color(0x12000000),
+                    topLeft = Offset(outerGlassRim * 0.5f, outerGlassRim * 0.5f),
+                    size = Size((size.width - outerGlassRim).coerceAtLeast(1f), (size.height - outerGlassRim).coerceAtLeast(1f)),
+                    cornerRadius = CornerRadius(radius),
+                    style = Stroke(outerGlassRim),
+                )
+                val hairline = 0.9.dp.toPx()
+                drawRoundRect(
+                    brush = rim,
+                    topLeft = Offset(outerGlassRim + hairline * 0.5f, outerGlassRim + hairline * 0.5f),
+                    size = Size(
+                        (size.width - (outerGlassRim * 2f + hairline)).coerceAtLeast(1f),
+                        (size.height - (outerGlassRim * 2f + hairline)).coerceAtLeast(1f),
+                    ),
+                    cornerRadius = CornerRadius((radius - outerGlassRim).coerceAtLeast(1f)),
+                    style = Stroke(hairline),
+                )
+            } else {
+                val flatStroke = 0.65.dp.toPx()
+                drawRoundRect(
+                    color = p.separator.copy(alpha = 0.55f),
+                    topLeft = Offset(flatStroke * 0.5f, flatStroke * 0.5f),
+                    size = Size((size.width - flatStroke).coerceAtLeast(1f), (size.height - flatStroke).coerceAtLeast(1f)),
+                    cornerRadius = CornerRadius(radius),
+                    style = Stroke(flatStroke),
+                )
             }
         })
         content()
     }
 }
 
-/** The shader only sees the blurred background. Foreground text/icons are never filtered. */
+/** 缓存每个玻璃胶囊的 RuntimeShader 与高斯模糊实例，结合边缘凸镜折射与微色散呈现真实 iOS 27 玻璃边壁质感。 */
 @RequiresApi(33)
-private object HeaderGlassApi33 {
-    private const val PROGRAM = """
-        uniform shader body;
-        uniform float2 dimensions;
-        uniform float density;
-        half4 main(float2 xy) {
-            float radius = dimensions.y * 0.5;
-            float2 axis = float2(clamp(xy.x, radius, max(radius, dimensions.x - radius)), radius);
-            float2 delta = xy - axis;
-            float distance = length(delta);
-            float edge = smoothstep(max(0.0, radius - 7.0 * density), radius, distance);
-            float2 normal = delta / max(distance, 0.001);
-            return body.eval(xy - normal * edge * 1.8 * density);
-        }
-    """
+private class HeaderGlassApi33Holder(private val density: Float, initialBlurDp: Float) {
+    private val shader = android.graphics.RuntimeShader(PROGRAM).apply {
+        setFloatUniform("density", density)
+        setFloatUniform("refractionBand", 11.5f * density)
+        setFloatUniform("refractionAmount", 5.5f * density)
+        setFloatUniform("dispersion", 0.12f)
+    }
+    private var lastBlurDp = initialBlurDp
+    private var blur = android.graphics.RenderEffect.createBlurEffect(
+        initialBlurDp * density,
+        initialBlurDp * density,
+        android.graphics.Shader.TileMode.CLAMP,
+    )
 
-    fun effect(size: IntSize, density: Float): RenderEffect {
-        val shader = android.graphics.RuntimeShader(PROGRAM).apply {
-            setFloatUniform("dimensions", size.width.toFloat(), size.height.toFloat())
-            setFloatUniform("density", density)
+    fun effect(size: IntSize, blurDp: Float): RenderEffect {
+        if (kotlin.math.abs(blurDp - lastBlurDp) > 0.25f) {
+            lastBlurDp = blurDp
+            blur = android.graphics.RenderEffect.createBlurEffect(
+                blurDp * density,
+                blurDp * density,
+                android.graphics.Shader.TileMode.CLAMP,
+            )
         }
+        shader.setFloatUniform("dimensions", size.width.toFloat(), size.height.toFloat())
         val lens = android.graphics.RenderEffect.createRuntimeShaderEffect(shader, "body")
-        val blur = android.graphics.RenderEffect.createBlurEffect(12f * density, 12f * density,
-            android.graphics.Shader.TileMode.CLAMP)
         return android.graphics.RenderEffect.createChainEffect(lens, blur).asComposeRenderEffect()
+    }
+
+    private companion object {
+        private const val PROGRAM = """
+            uniform shader body;
+            uniform float2 dimensions;
+            uniform float density;
+            uniform float refractionBand;
+            uniform float refractionAmount;
+            uniform float dispersion;
+            half4 main(float2 xy) {
+                float radius = min(dimensions.x, dimensions.y) * 0.5;
+                float2 axis = float2(clamp(xy.x, radius, max(radius, dimensions.x - radius)), dimensions.y * 0.5);
+                float2 delta = xy - axis;
+                float distance = length(delta);
+                float startDist = max(0.0, radius - min(radius, refractionBand));
+                float edge = smoothstep(startDist, radius, distance);
+                float curve = edge * edge * (3.0 - 2.0 * edge);
+                float2 normal = delta / max(distance, 0.001);
+                float2 maxXY = max(float2(1.0), dimensions - float2(1.0));
+                float2 refractOffset = normal * curve * refractionAmount;
+                half4 center = body.eval(clamp(xy - refractOffset, float2(0.0), maxXY));
+                if (dispersion <= 0.001 || curve <= 0.01) {
+                    return center;
+                }
+                float2 dispOffset = normal * curve * (dispersion * 7.5 * density);
+                half4 r = body.eval(clamp(xy - refractOffset - dispOffset, float2(0.0), maxXY));
+                half4 b = body.eval(clamp(xy - refractOffset + dispOffset, float2(0.0), maxXY));
+                return half4(r.r, center.g, b.b, center.a);
+            }
+        """
     }
 }

@@ -1,6 +1,5 @@
 package io.github.mymoney.ui
 
-import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,7 +40,16 @@ import com.example.billkit.BillType
 
 /** Same-window editor preserves the amount trajectory; the shell hides its sibling dock while open. */
 @Composable
-fun BillEditorDialog(original: BillEntity?, newSource: String, newTime: Long, sourceAmountBounds: Rect? = null, sourceAmountFontSize: androidx.compose.ui.unit.TextUnit? = null, onClose: () -> Unit) {
+fun BillEditorDialog(
+    original: BillEntity?,
+    newSource: String,
+    newTime: Long,
+    sourceAmountBounds: Rect? = null,
+    sourceAmountFontSize: androidx.compose.ui.unit.TextUnit? = null,
+    backdrop: androidx.compose.ui.graphics.layer.GraphicsLayer? = null,
+    backdropOrigin: Offset = Offset.Zero,
+    onClose: () -> Unit,
+) {
     val context = LocalContext.current
     val app = context.applicationContext
     val haptic = rememberAbHaptic()
@@ -52,8 +60,10 @@ fun BillEditorDialog(original: BillEntity?, newSource: String, newTime: Long, so
             .sortedWith(compareBy({ it.sortOrder }, { it.createdAt }, { it.id }))
             .firstOrNull()?.name ?: "钱包"
     }
-    val defaultCategory = remember {
-        io.github.mymoney.data.LedgerConfig.groupsFor(BillType.EXPENSE).firstOrNull()?.name
+    val expenseGroups = remember { io.github.mymoney.data.LedgerConfig.groupsFor(BillType.EXPENSE) }
+    val defaultCategory = remember(expenseGroups) { expenseGroups.firstOrNull()?.name }
+    val defaultSubCategory = remember(defaultCategory, expenseGroups, newTime) {
+        if (defaultCategory == "餐饮") io.github.mymoney.data.MealRules.defaultSubCategoryForFood(newTime, expenseGroups) else null
     }
     val draft = remember(original?.id, newSource) {
         original?.let(BillWriter::toDraft) ?: BillDraft(
@@ -61,6 +71,7 @@ fun BillEditorDialog(original: BillEntity?, newSource: String, newTime: Long, so
             merchant = null, method = null, orderTail = null,
             sourcePkg = newSource, strategy = "手动记账",
             category = defaultCategory,
+            subCategory = defaultSubCategory,
             account = defaultAccount,
         )
     }
@@ -126,7 +137,13 @@ fun BillEditorDialog(original: BillEntity?, newSource: String, newTime: Long, so
             reverseSource = latestSource?.takeIf { it.top >= 0 && it.height > 0 } ?: source
             reverseSourceFont = latestSourceFont ?: sourceFont
             progress.snapTo(1f)
-            progress.animateTo(0f, tween(if (reduceMotion) 0 else 280, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+            progress.animateTo(
+                0f,
+                tween(
+                    if (reduceMotion) 0 else if (shared) 280 else 185,
+                    easing = androidx.compose.animation.core.FastOutSlowInEasing,
+                ),
+            )
             focus.clearFocus(force = true)
             keyboard?.hide()
             EditorSaveOperations.remove(operationKey)
@@ -137,7 +154,7 @@ fun BillEditorDialog(original: BillEntity?, newSource: String, newTime: Long, so
     val displayedProgress = if (!exiting && (interrupted || reduceMotion)) 1f else progress.value
     val trajectorySource = if (exiting) reverseSource else source
     val trajectoryTarget = if (exiting) reverseTarget else target
-    val hasMovingAmount = !reduceMotion && trajectorySource != null && (shared || exiting)
+    val hasMovingAmount = !reduceMotion && trajectorySource != null && (shared || (exiting && reverseSource != null))
     Box(Modifier.fillMaxSize().onGloballyPositioned { hostOrigin = it.boundsInRoot().topLeft }) {
         ConfirmSheet(
             draft = draft,
@@ -152,7 +169,7 @@ fun BillEditorDialog(original: BillEntity?, newSource: String, newTime: Long, so
                 if (!exiting && targetFont != null && targetFont != size && progress.value < 1f) interrupted = true
                 targetFont = size
             },
-            sharedAmountProgress = if (original != null || exiting) displayedProgress else null,
+            sharedAmountProgress = if (shared) displayedProgress else null,
             managedEditorExit = true,
             editorExiting = exiting,
             editableDetails = true,
@@ -178,7 +195,7 @@ fun BillEditorDialog(original: BillEntity?, newSource: String, newTime: Long, so
                             },
                             onFailure = {
                                 operation.error = it.message ?: "保存失败，请重试"
-                                Toast.makeText(app, operation.error, Toast.LENGTH_LONG).show()
+                                ReimburseFeedback.show(operation.error ?: "保存失败，请重试")
                             },
                         )
                     }
@@ -186,12 +203,15 @@ fun BillEditorDialog(original: BillEntity?, newSource: String, newTime: Long, so
             },
             onImport = {},
             onIgnore = { if (!operation.saving) leave(saved = false) },
+            backdrop = backdrop,
+            backdropOrigin = backdropOrigin,
         )
-        if (hasMovingAmount && trajectorySource != null && displayedProgress < 1f) {
-            val destination = trajectoryTarget ?: trajectorySource
+        if (hasMovingAmount && displayedProgress < 1f) {
+            val sourceRect = trajectorySource!!
+            val destination = trajectoryTarget ?: sourceRect
             val fraction = displayedProgress
-            val x = trajectorySource.left + (destination.left - trajectorySource.left) * fraction - hostOrigin.x
-            val y = trajectorySource.top + (destination.top - trajectorySource.top) * fraction - hostOrigin.y
+            val x = sourceRect.left + (destination.left - sourceRect.left) * fraction - hostOrigin.x
+            val y = sourceRect.top + (destination.top - sourceRect.top) * fraction - hostOrigin.y
             val shownDraft = reverseDraft ?: draft
             BillAmountDisplay(shownDraft.priceCents, shownDraft.type.name,
                 modifier = Modifier.graphicsLayer { translationX = x; translationY = y }.clearAndSetSemantics {},

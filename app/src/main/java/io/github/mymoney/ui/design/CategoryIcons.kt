@@ -323,11 +323,13 @@ fun CategoryBadge(
     size: Dp = 38.dp,
     foreground: Color? = null,
 ) {
+    val effectiveGlass = LocalLiquidGlassEnabled.current && !LocalReduceTransparency.current
     Box(
         modifier = modifier
             .size(size)
             .clip(CircleShape)
-            .background(solidBadgeBackground(tint)),
+            .background(solidBadgeBackground(tint))
+            .badgeLiquidGlaze(effectiveGlass),
         contentAlignment = Alignment.Center,
     ) {
         Icon(

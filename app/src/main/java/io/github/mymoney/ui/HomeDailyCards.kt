@@ -13,6 +13,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -79,7 +82,7 @@ internal fun LazyListScope.homeDailyCards(
     snapshot: HomeDailySnapshot,
     clock: LedgerClock,
     onBillClick: (Long) -> Unit,
-    onBillLongPress: (BillEntity) -> Unit = {},
+    onBillLongPress: (BillEntity, Rect?) -> Unit = { _, _ -> },
 ) {
     snapshot.days.forEach { day ->
         item(key = "home-day-${day.date}", contentType = "home-day-header") {
@@ -94,11 +97,13 @@ internal fun LazyListScope.homeDailyCards(
             val last = index == day.bills.lastIndex
             val shape = RoundedCornerShape(bottomStart = if (last) AbRadius.group else 0.dp,
                 bottomEnd = if (last) AbRadius.group else 0.dp)
+            var rowBounds by remember { mutableStateOf<Rect?>(null) }
             Column(Modifier.fillMaxWidth().padding(bottom = if (last) AbCardDensity.gap else 0.dp)
-                .clip(shape).background(LocalAbPalette.current.cardBg)) {
+                .clip(shape).background(LocalAbPalette.current.cardBg)
+                .onGloballyPositioned { rowBounds = it.boundsInRoot() }) {
                 BillListRow(bill, modifier = Modifier.combinedClickable(
                     onClick = { onBillClick(bill.id) },
-                    onLongClick = if (io.github.mymoney.data.Reimburse.eligible(bill)) ({ onBillLongPress(bill) }) else null,
+                    onLongClick = if (io.github.mymoney.data.Reimburse.eligible(bill)) ({ onBillLongPress(bill, rowBounds) }) else null,
                 ))
                 if (!last) InsetDivider(inset = AbSpacing.l + AbCardDensity.icon + AbSpacing.m)
             }

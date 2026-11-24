@@ -8,9 +8,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.TextButton
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -31,11 +28,18 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.zIndex
 import com.example.billkit.DebugBus
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -46,18 +50,22 @@ import io.github.mymoney.data.BillEntity
 import io.github.mymoney.data.RecognitionStore
 import io.github.mymoney.data.RecognitionStatus
 import io.github.mymoney.ui.design.AbIcons
+import io.github.mymoney.ui.design.AbTextButton
 import io.github.mymoney.ui.design.AppDialog
 import io.github.mymoney.ui.design.AbRadius
 import io.github.mymoney.ui.design.AbSpacing
 import io.github.mymoney.ui.design.AbType
 import io.github.mymoney.ui.design.sectionHeader
 import io.github.mymoney.ui.design.EmptyState
+import io.github.mymoney.ui.design.GlassContextMenuHost
 import io.github.mymoney.ui.design.GroupFooter
 import io.github.mymoney.ui.design.GroupHeader
 import io.github.mymoney.ui.design.InsetDivider
 import io.github.mymoney.ui.design.InsetGroup
 import io.github.mymoney.ui.design.ListRow
 import io.github.mymoney.ui.design.LocalAbPalette
+import io.github.mymoney.ui.design.LocalLiquidGlassEnabled
+import io.github.mymoney.ui.design.LocalReduceTransparency
 import io.github.mymoney.ui.design.PageScaffold
 import io.github.mymoney.ui.design.formatAmount
 import io.github.mymoney.ui.design.SecondaryButton
@@ -77,7 +85,7 @@ fun HomeScreen(
     val clock = rememberLedgerClock()
     val monthStartDay = rememberMonthStartDay()
     var periodBack by androidx.compose.runtime.saveable.rememberSaveable(monthStartDay) { mutableIntStateOf(0) }
-    var reimburseBill by remember { mutableStateOf<BillEntity?>(null) }
+    var reimburseTarget by remember { mutableStateOf<Pair<BillEntity, Rect?>?>(null) }
     val pendingReimburse by remember(context) {
         io.github.mymoney.data.AppDb.get(context.applicationContext).bills().observePendingReimbursement()
     }.collectAsStateWithLifecycle(io.github.mymoney.data.PendingReimbursement(0, 0))
@@ -135,14 +143,27 @@ fun HomeScreen(
             try { sourcePreview = pagePixels.snapshot(); selectedId = id } finally { openingBill = false }
         }
     }
+    val editorBackdrop = rememberGraphicsLayer()
+    var editorHostOrigin by remember { mutableStateOf(Offset.Zero) }
+    val sampleEditorBackdrop = android.os.Build.VERSION.SDK_INT >= 31 &&
+        LocalLiquidGlassEnabled.current && !LocalReduceTransparency.current && newSource != null
     BackSurface(enabled = false, onBack = {}, pixels = pagePixels) {
-    Box(Modifier.fillMaxSize()) {
+    GlassContextMenuHost(backEnabled = LocalBackActive.current) {
+    Box(Modifier.fillMaxSize().onGloballyPositioned { editorHostOrigin = it.boundsInRoot().topLeft }) {
     LaunchedEffect(pending) {
         if (pending.isNotEmpty()) {
             recognized = true
             prefs.edit().putBoolean("recognized", true).apply()
         }
     }
+    Box(
+        Modifier.fillMaxSize().then(
+            if (sampleEditorBackdrop) Modifier.drawWithContent {
+                editorBackdrop.record { this@drawWithContent.drawContent() }
+                drawLayer(editorBackdrop)
+            } else Modifier,
+        ),
+    ) {
     PageScaffold(
         title = "账本",
         compact = true,
@@ -202,20 +223,14 @@ fun HomeScreen(
                         modifier = Modifier.weight(1f),
                     )
                     primaryAction?.let { action ->
-                        TextButton(
+                        AbTextButton(
+                            text = "处理",
                             onClick = {
                                 performCaptureAction(context, action, onOpenSettings) {
                                     historyFilter = RecognitionStatus.PENDING; historyOpen = true
                                 }
                             },
-                            modifier = Modifier.heightIn(min = 48.dp),
-                        ) {
-                            Text(
-                                "处理",
-                                style = AbType.footnote.copy(fontWeight = FontWeight.SemiBold),
-                                color = p.accent,
-                            )
-                        }
+                        )
                     }
                 }
             }
@@ -252,7 +267,9 @@ fun HomeScreen(
                     }
                 }
             } else if (dailySnapshot != null) {
-                homeDailyCards(dailySnapshot, clock, onBillClick = { openBill(it) }, onBillLongPress = { reimburseBill = it })
+                homeDailyCards(dailySnapshot, clock, onBillClick = { openBill(it) }, onBillLongPress = { bill, bounds ->
+                    reimburseTarget = bill to bounds
+                })
             }
             if (dailySnapshot != null && (dailyState.failed || dailyState.loading || dailySnapshot.hasMore)) {
                 homeCardItem(key = "daily-more") {
@@ -293,6 +310,7 @@ fun HomeScreen(
         }
         }
     }
+    }
     if (healthDetails) AppDialog(title = "识别状态", onDismiss = { healthDetails = false }) {
         CaptureHealthCard(health) { action ->
             healthDetails = false
@@ -302,7 +320,9 @@ fun HomeScreen(
         }
         SecondaryButton("关闭", onClick = { healthDetails = false }, modifier = Modifier.fillMaxWidth())
     }
-    reimburseBill?.let { bill -> ReimburseChoiceDialog(bill) { reimburseBill = null } }
+    reimburseTarget?.let { (bill, bounds) ->
+        ReimburseChoiceDialog(bill, anchor = bounds) { reimburseTarget = null }
+    }
     io.github.mymoney.ui.design.SlideSubPageValue(value = selectedId, modifier = Modifier.fillMaxSize().zIndex(10f)) { id ->
         BillActionsHost(billId = id, onClose = { selectedId = null; sourcePreview = null }, sourcePreview = sourcePreview)
     }
@@ -311,8 +331,16 @@ fun HomeScreen(
     }
     if (newSource != null) key(newSource) {
         Box(Modifier.fillMaxSize().zIndex(10f)) {
-            BillEditorDialog(null, newSource.orEmpty(), newTime, onClose = { newSource = null })
+            BillEditorDialog(
+                original = null,
+                newSource = newSource.orEmpty(),
+                newTime = newTime,
+                backdrop = if (sampleEditorBackdrop) editorBackdrop else null,
+                backdropOrigin = editorHostOrigin,
+                onClose = { newSource = null },
+            )
         }
+    }
     }
     }
     }

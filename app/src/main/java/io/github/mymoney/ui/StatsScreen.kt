@@ -17,7 +17,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -28,6 +27,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
@@ -155,9 +155,16 @@ fun StatsScreen(onOpenDetails: () -> Unit = {}, onOpenGroup: (StatisticsDrilldow
                     BoxWithConstraints(Modifier.fillMaxWidth()) {
                         val stacked = maxWidth < 260.dp * LocalDensity.current.fontScale.coerceAtLeast(1f)
                         val switch: @Composable () -> Unit = {
-                            StatisticsPeriodSwitch(if (period == StatisticsPeriod.WEEK) 0 else 1) {
-                                periodName = if (it == 0) StatisticsPeriod.WEEK.name else StatisticsPeriod.MONTH.name
-                            }
+                            Segmented(
+                                options = listOf("周", "月"),
+                                selected = if (period == StatisticsPeriod.WEEK) 0 else 1,
+                                onSelect = {
+                                    val next = if (it == 0) StatisticsPeriod.WEEK.name else StatisticsPeriod.MONTH.name
+                                    if (periodName != next) periodName = next
+                                },
+                                compact = true,
+                                modifier = Modifier.width(112.dp),
+                            )
                         }
                         val navigation: @Composable RowScope.() -> Unit = {
                             PeriodArrow(true) { shift(-1) }
@@ -193,9 +200,7 @@ fun StatsScreen(onOpenDetails: () -> Unit = {}, onOpenGroup: (StatisticsDrilldow
                     InsetGroup(Modifier.padding(bottom = AbCardDensity.gap)) {
                         Column(Modifier.padding(AbCardDensity.content)) {
                             Text(if (failed) "统计加载失败，请重试。" else "正在加载本周期…", color = p.secondaryLabel)
-                            if (failed) TextButton(onClick = { retry++ }, modifier = Modifier.heightIn(min = 48.dp)) {
-                                Text("重新加载", color = p.accent)
-                            }
+                            if (failed) AbTextButton("重新加载", onClick = { retry++ })
                         }
                     }
                 }
@@ -212,7 +217,7 @@ fun StatsScreen(onOpenDetails: () -> Unit = {}, onOpenGroup: (StatisticsDrilldow
                             }
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                                 Text("${if (followsToday) "本期" else "该周期"}${statisticsTypeLabel(type)}",
-                                    style = AbType.footnote, color = p.secondaryLabel, modifier = Modifier.weight(1f))
+                                    style = AbType.headline.copy(fontSize = 16.sp), color = p.label, modifier = Modifier.weight(1f))
                                 Text("共 ${summary.count} 笔",
                                     style = AbType.caption1, color = p.secondaryLabel,
                                     textAlign = androidx.compose.ui.text.style.TextAlign.End)
@@ -514,31 +519,3 @@ internal fun statisticsTypeLabel(type: String) = when (type) { "INCOME" -> "收�
 /** 图表/环图用的短标签：「每日支出」而不是「每日原支出」。 */
 internal fun statisticsShortTypeLabel(type: String) = when (type) { "INCOME" -> "收入"; "REFUND" -> "退款"; else -> "支出" }
 internal fun statisticsPercent(ratio: Double) = String.format(java.util.Locale.US, "%.1f%%", ratio * 100)
-
-/** The flat visual sits inside separate, stable 56×48dp touch targets. */
-@Composable
-private fun StatisticsPeriodSwitch(selectedIndex: Int, onSelect: (Int) -> Unit) {
-    val p = LocalAbPalette.current
-    val reduceMotion = LocalReduceMotion.current
-    val position by androidx.compose.animation.core.animateFloatAsState(selectedIndex.toFloat(),
-        tween(if (reduceMotion) 0 else AbMotion.selection), label = "statistics-period")
-    val visualHeight = 32.dp * LocalDensity.current.fontScale.coerceAtLeast(1f)
-    Box(Modifier.width(112.dp).heightIn(min = maxOf(48.dp, visualHeight)), contentAlignment = Alignment.Center) {
-        Box(Modifier.fillMaxWidth().height(visualHeight).clip(RoundedCornerShape(AbRadius.capsule))
-            .background(p.fill).padding(2.dp)) {
-            Box(Modifier.offset(x = 54.dp * position).width(54.dp).fillMaxHeight()
-                .clip(RoundedCornerShape(AbRadius.capsule)).background(p.cardBg))
-        }
-        Row(Modifier.fillMaxWidth().selectableGroup()) {
-            listOf("周", "月").forEachIndexed { index, label ->
-                Box(Modifier.weight(1f).heightIn(min = maxOf(48.dp, visualHeight))
-                    .selectable(selected = index == selectedIndex, role = androidx.compose.ui.semantics.Role.Tab,
-                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                        indication = null, onClick = { onSelect(index) }), contentAlignment = Alignment.Center) {
-                    Text(label, style = AbType.footnote.copy(fontWeight = FontWeight.SemiBold),
-                        color = if (index == selectedIndex) p.label else p.secondaryLabel)
-                }
-            }
-        }
-    }
-}

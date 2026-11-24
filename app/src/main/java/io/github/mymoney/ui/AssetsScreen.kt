@@ -2,12 +2,15 @@ package io.github.mymoney.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -15,26 +18,44 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.layer.GraphicsLayer
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.mymoney.data.*
 import io.github.mymoney.ui.design.*
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -126,14 +147,37 @@ fun AssetsScreen(onBack: () -> Unit, isTab: Boolean = false, onSubpageVisibility
         frm == "candidates" && sel == null -> 1
         else -> 2
     }
+    val balanceBackdrop = rememberGraphicsLayer()
+    var balanceHostOrigin by remember { mutableStateOf(Offset.Zero) }
+    val sampleBalanceBackdrop = android.os.Build.VERSION.SDK_INT >= 31 &&
+        LocalLiquidGlassEnabled.current && !LocalReduceTransparency.current &&
+        balanceOpen && account != null
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .onGloballyPositioned { coords ->
+                if (coords.isAttached) balanceHostOrigin = coords.boundsInRoot().topLeft
+            },
+    ) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .then(
+                if (sampleBalanceBackdrop) Modifier.drawWithContent {
+                    balanceBackdrop.record { this@drawWithContent.drawContent() }
+                    drawLayer(balanceBackdrop)
+                } else Modifier,
+            ),
+    ) {
     AnimatedContent(
         targetState = Pair(selected, form),
         modifier = Modifier.fillMaxSize(),
         transitionSpec = {
-            val duration = if (reduceMotion) 0 else AbMotion.normal
-            val goingBack = routeDepth(targetState.first, targetState.second) < routeDepth(initialState.first, initialState.second)
-            slideInHorizontally(tween(duration)) { if (goingBack) -it else it } togetherWith
-                slideOutHorizontally(tween(duration)) { if (goingBack) it else -it }
+            liquidNavigationTransition(
+                goingBack = routeDepth(targetState.first, targetState.second) < routeDepth(initialState.first, initialState.second),
+                reduceMotion = reduceMotion,
+            )
         },
         label = "assetPageTransition",
     ) { (shownSelected, shownForm) ->
@@ -243,12 +287,16 @@ fun AssetsScreen(onBack: () -> Unit, isTab: Boolean = false, onSubpageVisibility
         }
     }
     }
+    }
     if (balanceOpen && account != null) {
         AssetBalanceSheet(
             account = account,
             current = AssetMath.balance(account.id, entries),
+            backdrop = if (sampleBalanceBackdrop) balanceBackdrop else null,
+            backdropOrigin = balanceHostOrigin,
             onDismiss = { balanceOpen = false },
         )
+    }
     }
     if (moreOpen && account != null) AppDialog("账户操作", onDismiss = { moreOpen = false }) {
         ListRow(title = "纳入资产总览", trailing = { AbSwitch(account.included, onCheckedChange = { checked ->
@@ -268,6 +316,7 @@ fun AssetsScreen(onBack: () -> Unit, isTab: Boolean = false, onSubpageVisibility
             confirmArchive = false; mutate { AssetStore.setArchived(account.id, !account.archived) }
         })
     if (confirmDelete && account != null) AssetConfirmation("删除空账户？", "将移除此账户名称与别名。已有余额、流水或账单关联的账户会被保留，请改用归档。",
+        destructive = true,
         onDismiss = { confirmDelete = false }, onConfirm = {
             confirmDelete = false
             mutate(onSuccess = { selected = null }) { AssetStore.deleteEmptyAccount(account.id) }
@@ -404,9 +453,7 @@ private fun AssetScaffold(title: String, isRoot: Boolean, onBack: () -> Unit, on
     content: @Composable (PaddingValues) -> Unit) {
     val actions: @Composable RowScope.() -> Unit = {
         if (onAdd != null && isRoot) io.github.mymoney.ui.design.FloatingHeaderAction(AbIcons.Plus, "添加账户", onAdd)
-        else if (onAdd != null) TextButton(onClick = onAdd, modifier = Modifier.heightIn(min = 48.dp)) {
-            Text("添加账户", color = LocalAbPalette.current.accent)
-        }
+        else if (onAdd != null) AbTextButton("添加账户", onClick = onAdd)
     }
     if (isRoot) PageScaffold(title = title, listState = androidx.compose.foundation.lazy.rememberLazyListState(),
         compact = true, floatingHeader = true, actions = actions, content = content)
@@ -414,12 +461,22 @@ private fun AssetScaffold(title: String, isRoot: Boolean, onBack: () -> Unit, on
 }
 
 @Composable
-private fun AssetConfirmation(title: String, message: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
-    AppDialog(title, onDismiss) {
-        Text(message, style = AbType.body, color = LocalAbPalette.current.secondaryLabel)
-        PrimaryButton("确认", onClick = onConfirm, modifier = Modifier.fillMaxWidth())
-        SecondaryButton("取消", onClick = onDismiss, modifier = Modifier.fillMaxWidth())
-    }
+private fun AssetConfirmation(
+    title: String,
+    message: String,
+    destructive: Boolean = false,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AppAlertDialog(
+        title = title,
+        message = message,
+        onDismiss = onDismiss,
+        confirmLabel = "确认",
+        onConfirm = onConfirm,
+        dismissLabel = "取消",
+        destructive = destructive,
+    )
 }
 
 @Composable
@@ -508,9 +565,15 @@ private fun AssetAccountForm(
     }
 }
 
-/** 底部弹层调整余额；详情点余额 / 账户设置入口共用。 */
+/** 同窗底部悬浮调整余额卡：共享液态玻璃质感、下拉手势关闭、紧凑大号金额与快捷原因胶囊，防窄屏/键盘裁剪。 */
 @Composable
-private fun AssetBalanceSheet(account: AssetAccount, current: Long, onDismiss: () -> Unit) {
+private fun AssetBalanceSheet(
+    account: AssetAccount,
+    current: Long,
+    backdrop: GraphicsLayer? = null,
+    backdropOrigin: Offset = Offset.Zero,
+    onDismiss: () -> Unit,
+) {
     val debt = AssetMath.isDebt(account.kind)
     var amount by rememberSaveable(account.id) { mutableStateOf(if (account.initialized) assetNumber(if (debt) -current else current) else "") }
     var reason by rememberSaveable(account.id) { mutableStateOf(if (account.initialized) "" else "设置当前余额") }
@@ -520,72 +583,242 @@ private fun AssetBalanceSheet(account: AssetAccount, current: Long, onDismiss: (
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val title = if (account.initialized) "调整余额" else "设置当前余额"
-    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val bottomPad = maxOf(
-        if (navBottom > 0.dp) navBottom + AbSpacing.xxl else 0.dp,
-        AbSpacing.xxxl * 2 + AbSpacing.s,
-    )
-    ActiveBackHandler { if (!busy) onDismiss() }
-    Dialog(
-        onDismissRequest = { if (!busy) onDismiss() },
-        properties = DialogProperties(usePlatformDefaultWidth = false),
+    val p = LocalAbPalette.current
+    val isDark = p.pageBg.luminance() < 0.1f
+    val reduceMotion = LocalReduceMotion.current
+    val density = LocalDensity.current
+    val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
+    val slideStartPx = minOf(screenHeightPx * 0.55f, with(density) { 420.dp.toPx() })
+    val offsetY = remember { Animatable(if (reduceMotion) 0f else slideStartPx) }
+    var dragging by remember { mutableStateOf(false) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+    var closing by remember { mutableStateOf(false) }
+    val displayedOffset = if (dragging) dragOffset else offsetY.value
+    val latestOnDismiss by rememberUpdatedState(onDismiss)
+
+    fun dismissAnimated() {
+        if (busy || closing) return
+        if (reduceMotion) {
+            latestOnDismiss()
+            return
+        }
+        closing = true
+        scope.launch {
+            try {
+                offsetY.animateTo(slideStartPx, tween(175))
+                latestOnDismiss()
+            } finally {
+                closing = false
+            }
+        }
+    }
+
+    ActiveBackHandler { dismissAnimated() }
+    LaunchedEffect(reduceMotion) {
+        if (reduceMotion) offsetY.snapTo(0f) else offsetY.animateTo(0f, AbSpring.sheetFloat(false))
+    }
+
+    val scrimProgress = (1f - (displayedOffset / slideStartPx.coerceAtLeast(1f))).coerceIn(0f, 1f)
+    val dimAlpha = (if (isDark) 0.40f else 0.24f) * scrimProgress
+    val fieldShape = RoundedCornerShape(AbRadius.row)
+    val fieldBg = if (isDark) Color(0x18FFFFFF) else Color(0x0E767680)
+    val quickReasons = remember(account.initialized) {
+        if (account.initialized) listOf("对账校准", "盘点差异", "利息收益", "手续费补记")
+        else listOf("设置当前余额", "初始启用")
+    }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = dimAlpha))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                enabled = !busy && !closing,
+                onClick = { dismissAnimated() },
+            )
+            .statusBarsPadding()
+            .padding(floatingSheetViewportPadding()),
+        contentAlignment = Alignment.BottomCenter,
     ) {
-        Box(
-            Modifier.fillMaxSize()
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = { if (!busy) onDismiss() },
-                )
-                .imePadding()
-                .padding(start = AbSpacing.l, top = AbSpacing.l, end = AbSpacing.l),
+        BoxWithConstraints(
+            Modifier.fillMaxSize(),
             contentAlignment = Alignment.BottomCenter,
         ) {
-            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth().widthIn(max = 480.dp)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = {},
-                        ),
-                    shape = RoundedCornerShape(AbRadius.sheet),
-                    color = LocalAbPalette.current.cardBg,
-                ) {
-                    Column(
-                        Modifier.fillMaxWidth()
-                            .heightIn(max = 560.dp)
-                            .verticalScroll(rememberScrollState())
-                            .padding(AbSpacing.m),
-                        verticalArrangement = Arrangement.spacedBy(AbCardDensity.gap),
-                    ) {
-                        Text(title, style = AbType.navTitle, color = LocalAbPalette.current.label,
-                            modifier = Modifier.padding(horizontal = AbSpacing.m, vertical = AbSpacing.xs))
-                        InsetGroup {
-                            ListRow(title = account.name, subtitle = positionLabel(account, current))
+            GlassBottomSheetBox(
+                backdrop = backdrop,
+                backdropOrigin = backdropOrigin,
+                modifier = Modifier
+                    .widthIn(max = 560.dp)
+                    .fillMaxWidth()
+                    .offset { IntOffset(0, displayedOffset.roundToInt()) }
+                    .heightIn(max = maxHeight * 0.90f)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {},
+                    ),
+            ) {
+                CompositionLocalProvider(LocalInModalSurface provides true) {
+                    Column(Modifier.fillMaxWidth()) {
+                        SheetDragGrabber(
+                            enabled = !busy && !closing,
+                            offsetY = offsetY,
+                            onDragOffsetChange = { isDrag, nextOffset ->
+                                dragging = isDrag
+                                dragOffset = nextOffset
+                            },
+                            onDismiss = { dismissAnimated() },
+                        )
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .weight(1f, fill = false)
+                                .verticalScroll(rememberScrollState())
+                                .padding(start = AbSpacing.xl, end = AbSpacing.xl, top = AbSpacing.xs, bottom = AbSpacing.m),
+                            verticalArrangement = Arrangement.spacedBy(AbSpacing.m),
+                        ) {
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
+                            ) {
+                                Text(title, style = AbType.navTitle, color = p.label, modifier = Modifier.weight(1f))
+                                Box(
+                                    Modifier
+                                        .clip(RoundedCornerShape(AbRadius.capsule))
+                                        .background(fieldBg)
+                                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                                ) {
+                                    Text(
+                                        "${account.name} · ${positionLabel(account, current)}",
+                                        style = AbType.caption1,
+                                        color = p.secondaryLabel,
+                                        maxLines = 1,
+                                    )
+                                }
+                            }
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    if (debt) "当前欠款（元）" else "当前余额（元）",
+                                    style = AbType.caption1,
+                                    color = p.secondaryLabel,
+                                )
+                                Row(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clip(fieldShape)
+                                        .background(fieldBg)
+                                        .padding(horizontal = AbSpacing.l, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text("¥", style = AbType.amountTitle, color = p.accent, modifier = Modifier.padding(end = 6.dp))
+                                    BasicTextField(
+                                        value = amount,
+                                        onValueChange = { amount = it; error = null },
+                                        singleLine = true,
+                                        enabled = !busy,
+                                        textStyle = AbType.amountTitle.copy(color = p.label),
+                                        cursorBrush = SolidColor(p.accent),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .semantics { contentDescription = if (debt) "当前欠款" else "当前余额" },
+                                        decorationBox = { inner ->
+                                            Box(contentAlignment = Alignment.CenterStart) {
+                                                if (amount.isEmpty()) {
+                                                    Text(
+                                                        if (debt) "欠款填正数，溢缴填负数" else "例如 1000.00，透支填负数",
+                                                        style = AbType.body,
+                                                        color = p.tertiaryLabel,
+                                                    )
+                                                }
+                                                inner()
+                                            }
+                                        },
+                                    )
+                                }
+                            }
+                            Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
+                                BasicTextField(
+                                    value = reason,
+                                    onValueChange = { reason = it; error = null },
+                                    singleLine = true,
+                                    enabled = !busy,
+                                    textStyle = AbType.body.copy(color = p.label),
+                                    cursorBrush = SolidColor(p.accent),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(fieldShape)
+                                        .background(fieldBg)
+                                        .heightIn(min = 44.dp)
+                                        .padding(horizontal = AbSpacing.l, vertical = 10.dp)
+                                        .semantics { contentDescription = "调整原因" },
+                                    decorationBox = { inner ->
+                                        Box(contentAlignment = Alignment.CenterStart) {
+                                            if (reason.isEmpty()) Text("调整原因（例如：对账校准）", style = AbType.body, color = p.tertiaryLabel)
+                                            inner()
+                                        }
+                                    },
+                                )
+                                Row(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
+                                ) {
+                                    quickReasons.forEach { preset ->
+                                        val selected = reason == preset
+                                        Box(
+                                            Modifier
+                                                .clip(RoundedCornerShape(AbRadius.capsule))
+                                                .background(if (selected) p.accent.copy(alpha = if (isDark) 0.28f else 0.16f) else p.fill)
+                                                .clickable(enabled = !busy) { reason = preset; error = null }
+                                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                                        ) {
+                                            Text(
+                                                preset,
+                                                style = AbType.caption1.copy(fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium),
+                                                color = if (selected) p.accent else p.secondaryLabel,
+                                                maxLines = 1,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            if (error != null) InlineMessage(error.orEmpty(), isError = true, announce = true)
                         }
-                        AssetFormField(
-                            if (debt) "当前欠款（元）" else "当前余额（元）",
-                            amount,
-                            if (debt) "欠款填正数，溢缴填负数" else "例如 1000.00，透支填负数",
-                        ) { amount = it; error = null }
-                        AssetFormField("原因", reason, "请填写这次调整的原因") { reason = it; error = null }
-                        if (error != null) InlineMessage(error.orEmpty(), isError = true, announce = true)
-                        PrimaryButton("预览并确认", modifier = Modifier.fillMaxWidth(), busy = busy, onClick = {
-                            runCatching {
-                                require(reason.isNotBlank()) { "请填写原因" }
-                                val cents = AssetMath.parseCents(amount)
-                                val target = if (debt) Math.negateExact(cents) else cents
-                                require(target != Long.MIN_VALUE) { "金额超出范围" }
-                                Math.subtractExact(target, current)
-                                target
-                            }.onSuccess { previewCurrent = current; preview = it; error = null }
-                                .onFailure { error = it.message ?: "金额格式无效" }
-                        })
-                        SecondaryButton("取消", onClick = { if (!busy) onDismiss() }, modifier = Modifier.fillMaxWidth())
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(start = AbSpacing.xl, end = AbSpacing.xl, bottom = AbSpacing.l),
+                            horizontalArrangement = Arrangement.spacedBy(AbSpacing.m),
+                        ) {
+                            SecondaryButton(
+                                "取消",
+                                onClick = { dismissAnimated() },
+                                modifier = Modifier.weight(1f),
+                                enabled = !busy && !closing,
+                            )
+                            PrimaryButton(
+                                "预览并确认",
+                                modifier = Modifier.weight(1f),
+                                busy = busy,
+                                enabled = !closing,
+                                onClick = {
+                                    runCatching {
+                                        require(reason.isNotBlank()) { "请填写原因" }
+                                        val cents = AssetMath.parseCents(amount)
+                                        val target = if (debt) Math.negateExact(cents) else cents
+                                        require(target != Long.MIN_VALUE) { "金额超出范围" }
+                                        Math.subtractExact(target, current)
+                                        target
+                                    }.onSuccess { previewCurrent = current; preview = it; error = null }
+                                        .onFailure { error = it.message ?: "金额格式无效" }
+                                },
+                            )
+                        }
                     }
                 }
-                Spacer(Modifier.height(bottomPad))
             }
         }
     }
@@ -600,7 +833,7 @@ private fun AssetBalanceSheet(account: AssetAccount, current: Long, onDismiss: (
                     withContext(Dispatchers.IO) {
                         AssetStore.setBalance(account.id, target, reason.trim(), expectedPosition = previewCurrent)
                     }
-                }.onSuccess { onDismiss() }.onFailure { error = it.message ?: "设置失败" }
+                }.onSuccess { dismissAnimated() }.onFailure { error = it.message ?: "设置失败" }
                 busy = false
             }
         },

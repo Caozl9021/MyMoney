@@ -134,7 +134,7 @@ fun LedgerConfigPage(
             contentPadding = PaddingValues(
                 start = AbSpacing.page,
                 end = AbSpacing.page,
-                top = AbSpacing.m,
+                top = padding.calculateTopPadding(),
                 bottom = padding.calculateBottomPadding(),
             ),
             verticalArrangement = Arrangement.spacedBy(AbSpacing.xs),
@@ -291,7 +291,7 @@ private fun PresetPickerPage(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 start = AbSpacing.page, end = AbSpacing.page,
-                top = AbSpacing.m, bottom = padding.calculateBottomPadding(),
+                top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding(),
             ),
             verticalArrangement = Arrangement.spacedBy(AbSpacing.l),
         ) {
@@ -404,7 +404,7 @@ private fun SubCategoryPage(
             contentPadding = PaddingValues(
                 start = AbSpacing.page,
                 end = AbSpacing.page,
-                top = AbSpacing.m,
+                top = padding.calculateTopPadding(),
                 bottom = padding.calculateBottomPadding(),
             ),
             verticalArrangement = Arrangement.spacedBy(AbSpacing.xs),

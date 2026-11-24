@@ -91,10 +91,10 @@ fun AssetAccountWizard(onBack: () -> Unit, onSaved: (String) -> Unit) {
         targetState = step,
         modifier = Modifier.fillMaxSize(),
         transitionSpec = {
-            val duration = if (reduceMotion) 0 else io.github.mymoney.ui.design.AbMotion.normal
-            val goingBack = stepDepth(targetState) < stepDepth(initialState)
-            slideInHorizontally(tween(duration)) { if (goingBack) -it else it } togetherWith
-                slideOutHorizontally(tween(duration)) { if (goingBack) it else -it }
+            io.github.mymoney.ui.design.liquidNavigationTransition(
+                goingBack = stepDepth(targetState) < stepDepth(initialState),
+                reduceMotion = reduceMotion,
+            )
         },
         label = "wizardStepTransition",
     ) { shownStep ->

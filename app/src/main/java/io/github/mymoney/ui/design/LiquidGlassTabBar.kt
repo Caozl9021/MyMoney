@@ -60,13 +60,36 @@ class LiquidGlassTabBar(
     // source and invalidates the glass even for identical values. Apply only changes.
     private var appliedTint: androidx.compose.ui.graphics.Color? = null
     private var appliedTintAlpha: Float? = null
+    private var appliedBlurRadius: Float? = null
+    private var liquidGlassEnabled: Boolean = true
+
+    private fun setLiquidGlassEnabled(enabled: Boolean) {
+        if (liquidGlassEnabled == enabled) return
+        liquidGlassEnabled = enabled
+        glass.visibility = if (enabled) View.VISIBLE else View.GONE
+        lensBridge.enabled = enabled
+        if (!enabled) {
+            dockStage.scaleX = 1f
+            dockStage.scaleY = 1f
+            dockStage.translationX = 0f
+            lensBridge.notifyFrameChanged()
+        }
+    }
 
     private val overlay = ComposeView(activity).apply { id = R.id.dock_tabs }
-    private val lensBridge = LiquidPillLensBridge()
     private val dockStage = FrameLayout(activity).apply {
         clipChildren = false
         clipToPadding = false
         setBackgroundColor(Color.TRANSPARENT)
+    }
+    private val lensBridge = LiquidPillLensBridge().apply {
+        onDockTransform = { sx, sy, tx ->
+            dockStage.pivotX = dockStage.width * 0.5f
+            dockStage.pivotY = dockStage.height * 0.5f
+            dockStage.scaleX = sx
+            dockStage.scaleY = sy
+            dockStage.translationX = tx
+        }
     }
 
     private val density = resources.displayMetrics.density
@@ -132,9 +155,12 @@ class LiquidGlassTabBar(
                 // 浅深主题均只覆薄层中性色，保留背景透光与文字可读性。
                 val dark = LocalAbPalette.current == DarkPalette || LocalAbPalette.current.pageBg == DarkPalette.pageBg
                 val tint = LocalAbPalette.current.cardBg
+                val effectiveGlass = LocalLiquidGlassEnabled.current && !LocalReduceTransparency.current
+                val clarity = LocalLiquidGlassClaritySpec.current.dock.coerceIn(0f, 1f)
                 val fontScale = androidx.compose.ui.platform.LocalDensity.current.fontScale
                 val bleed = with(androidx.compose.ui.platform.LocalDensity.current) { shadowBleedPx.toDp() }
                 SideEffect {
+                    setLiquidGlassEnabled(effectiveGlass)
                     val height = dockHeightForFontScale(fontScale).value * density
                     val targetHeight = height.roundToInt() + shadowBleedPx * 2
                     val params = layoutParams
@@ -143,15 +169,32 @@ class LiquidGlassTabBar(
                         layoutParams = params
                         glass.setCornerRadius(height / 2f)
                     }
-                    val previousTint = appliedTint
-                    if (previousTint?.red != tint.red) glass.setTintColorRed(tint.red)
-                    if (previousTint?.green != tint.green) glass.setTintColorGreen(tint.green)
-                    if (previousTint?.blue != tint.blue) glass.setTintColorBlue(tint.blue)
-                    appliedTint = tint
-                    val alpha = if (dark) 0.22f else 0.42f
-                    if (appliedTintAlpha != alpha) {
-                        glass.setTintAlpha(alpha)
-                        appliedTintAlpha = alpha
+                    if (effectiveGlass) {
+                        val previousTint = appliedTint
+                        if (previousTint?.red != tint.red) glass.setTintColorRed(tint.red)
+                        if (previousTint?.green != tint.green) glass.setTintColorGreen(tint.green)
+                        if (previousTint?.blue != tint.blue) glass.setTintColorBlue(tint.blue)
+                        appliedTint = tint
+                        // 0.65f 默认值保持 2026-11-24 已验收参数（浅 0.42 / 深 0.22，模糊 4.5dp）；
+                        // 往左雾面收敛至厚霜质感，往右清透降遮罩并减薄模糊与顶栏/预览统一。
+                        val baseAlpha = if (dark) 0.22f else 0.42f
+                        val frostedAlpha = if (dark) 0.78f else 0.86f
+                        val clearAlpha = if (dark) 0.08f else 0.14f
+                        val alpha = if (clarity <= 0.65f) {
+                            frostedAlpha + (baseAlpha - frostedAlpha) * (clarity / 0.65f)
+                        } else {
+                            baseAlpha + (clearAlpha - baseAlpha) * ((clarity - 0.65f) / 0.35f)
+                        }
+                        if (appliedTintAlpha != alpha) {
+                            glass.setTintAlpha(alpha)
+                            appliedTintAlpha = alpha
+                        }
+                        val blurPx = (glassBlurRadiusDp(clarity, baseDp = 4.5f, minDp = 2.0f, maxDp = 10.5f) * density)
+                            .coerceIn(2f, 28f)
+                        if (appliedBlurRadius == null || kotlin.math.abs(appliedBlurRadius!! - blurPx) > 0.5f) {
+                            glass.setBlurRadius(blurPx)
+                            appliedBlurRadius = blurPx
+                        }
                     }
                 }
                 LiquidTabCells(

@@ -28,8 +28,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -46,7 +44,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.Composable
@@ -70,6 +67,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -106,13 +104,21 @@ import io.github.mymoney.data.NoteSuggester
 import io.github.mymoney.ui.design.CompactAbSwitch
 import io.github.mymoney.ui.design.AppDialog
 import io.github.mymoney.ui.design.AppDialogActions
+import io.github.mymoney.ui.design.GlassBottomSheetBox
+import io.github.mymoney.ui.design.floatingSheetViewportPadding
 import io.github.mymoney.ui.design.amountTint
 import io.github.mymoney.ui.design.AbIcons
 import io.github.mymoney.ui.design.AbMotion
 import io.github.mymoney.ui.design.AbRadius
 import io.github.mymoney.ui.design.AbSpacing
+import io.github.mymoney.ui.design.AbTextButton
 import io.github.mymoney.ui.design.AbType
 import io.github.mymoney.ui.design.LocalAbPalette
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
+import io.github.mymoney.ui.design.LocalLiquidGlassEnabled
+import io.github.mymoney.ui.design.LocalReduceTransparency
 import io.github.mymoney.ui.design.LocalReduceMotion
 import io.github.mymoney.ui.design.PrimaryButton
 import io.github.mymoney.ui.design.Segmented
@@ -164,6 +170,8 @@ fun ConfirmSheet(
     onAmountFontSize: ((androidx.compose.ui.unit.TextUnit) -> Unit)? = null,
     onAmountBounds: ((androidx.compose.ui.geometry.Rect) -> Unit)? = null,
     onPickerBackHandler: (((() -> Boolean)?) -> Unit)? = null,
+    backdrop: androidx.compose.ui.graphics.layer.GraphicsLayer? = null,
+    backdropOrigin: Offset = Offset.Zero,
     noteSuggestions: (current: BillDraft) -> List<NoteSuggester.Suggestion> = { emptyList() },
 ) {
     // 所有宿主统一在卡片中查账本；重开卡片重新对照，不在采集事务里重复查询。
@@ -335,12 +343,18 @@ fun ConfirmSheet(
     val density = LocalDensity.current
     val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
     val offsetY = remember { Animatable(if (reduceMotion || sharedAmountProgress != null) 0f else screenHeightPx) }
-    val tracker = remember { VelocityTracker() }
     var dragging by remember { mutableStateOf(false) }
     var dragOffset by remember { mutableStateOf(0f) }
     val displayedOffset = if (dragging) dragOffset else offsetY.value
-    LaunchedEffect(reduceMotion) {
-        if (reduceMotion || sharedAmountProgress != null) offsetY.snapTo(0f) else offsetY.animateTo(0f, spring(dampingRatio = 0.86f, stiffness = 420f))
+    LaunchedEffect(reduceMotion, sharedAmountProgress == null) {
+        if (reduceMotion || sharedAmountProgress != null) offsetY.snapTo(0f)
+        else offsetY.animateTo(0f, io.github.mymoney.ui.design.AbSpring.sheetFloat(false))
+    }
+    LaunchedEffect(editorExiting, sharedAmountProgress == null, reduceMotion) {
+        if (editorExiting && sharedAmountProgress == null) {
+            if (reduceMotion) offsetY.snapTo(screenHeightPx)
+            else offsetY.animateTo(screenHeightPx, tween(185))
+        }
     }
 
     var closeJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
@@ -381,6 +395,11 @@ fun ConfirmSheet(
     }
     fun dismiss() { if (locked) return; if (timeOpen) { timeOpen = false; return }; if (noteFillOpen) { noteFillOpen=false; return }; if (detailsOpen) { detailsOpen=false; return }; if (picker.open) picker.cancel() else { haptic.select(); requestClose { onDismiss(current()) } } }
     fun ignore() { if (!locked) { haptic.warn(); requestClose(onIgnore) } }
+    LaunchedEffect(discardPrompt) {
+        if (discardPrompt && offsetY.value > 0f) {
+            if (reduceMotion) offsetY.snapTo(0f) else offsetY.animateTo(0f, io.github.mymoney.ui.design.AbSpring.sheetFloat(false))
+        }
+    }
     if (discardPrompt) DiscardChangesDialog(onContinue = { discardPrompt = false; discardAction = null },
         onDiscard = { val action = discardAction; discardPrompt = false; discardAction = null; if (action != null) closeAnimated(action) })
     // 悬浮窗没有 OnBackPressedDispatcher（宿主在 View 层自己接返回键），只在 Activity 宿主里注册
@@ -390,7 +409,20 @@ fun ConfirmSheet(
 
     val scrimAlpha = (0.32f * (1f - (displayedOffset / (screenHeightPx * 0.7f)))).coerceIn(0f, 0.32f)
 
+    val pickerBackdrop = rememberGraphicsLayer()
+    val usePickerGlass = android.os.Build.VERSION.SDK_INT >= 31 &&
+        LocalLiquidGlassEnabled.current && !LocalReduceTransparency.current && !reduceMotion
+
     Box(Modifier.fillMaxSize().onGloballyPositioned { hostOrigin = it.boundsInRoot().topLeft }, contentAlignment = Alignment.BottomCenter) {
+        Box(
+            Modifier.fillMaxSize().then(
+                if (usePickerGlass && picker.open) Modifier.drawWithContent {
+                    pickerBackdrop.record { this@drawWithContent.drawContent() }
+                    drawLayer(pickerBackdrop)
+                } else Modifier,
+            ),
+            contentAlignment = Alignment.BottomCenter,
+        ) {
         // 压暗层：识别草稿回待确认；编辑器由宿主处理取消。
         Box(
             Modifier.fillMaxSize().background(Color.Black.copy(alpha = scrimAlpha * (sharedAmountProgress ?: 1f)))
@@ -402,61 +434,29 @@ fun ConfirmSheet(
         // consume ancestor insets and share consumption, so IME/navigation avoidance
         // uses the remaining obstruction rather than adding two bottom gaps.
         BoxWithConstraints(
-            Modifier.fillMaxSize().statusBarsPadding().imePadding().navigationBarsPadding(),
+            Modifier.fillMaxSize().statusBarsPadding().padding(floatingSheetViewportPadding()),
             contentAlignment = Alignment.BottomCenter,
         ) {
-            Column(
+            GlassBottomSheetBox(
+                backdrop = backdrop,
+                backdropOrigin = backdropOrigin,
                 modifier = Modifier
                     .widthIn(max = 560.dp).fillMaxWidth()
                     .offset { IntOffset(0, displayedOffset.roundToInt()) }
                     .graphicsLayer { alpha = sharedAmountProgress ?: 1f }
-                    .clip(RoundedCornerShape(topStart = AbRadius.sheet, topEnd = AbRadius.sheet))
-                    .background(p.cardBg)
                     .heightIn(max = maxHeight * 0.92f)
                     .testTag("confirm-sheet"),
             ) {
-                // ---- 抓手：只在这里接下滑，避免和内部横滑/竖滚抢手势 ----
-                Box(
-                    Modifier.fillMaxWidth().height(28.dp)
-                        .pointerInput(screenHeightPx, reduceMotion, locked) {
-                            if (locked) return@pointerInput
-                            detectVerticalDragGestures(
-                                onDragStart = {
-                                    dragOffset = offsetY.value; dragging = true; tracker.resetTracking()
-                                    scope.launch { offsetY.stop() }
-                                },
-                                onDragEnd = {
-                                    val released = dragOffset
-                                    val velocity = tracker.calculateVelocity().y
-                                    val shouldClose = released > with(density) { 120.dp.toPx() } || velocity > 1000f
-                                    scope.launch {
-                                        offsetY.snapTo(released); dragging = false
-                                        when {
-                                            shouldClose && !locked -> dismiss()
-                                            reduceMotion -> offsetY.snapTo(0f)
-                                            else -> offsetY.animateTo(0f, spring(dampingRatio = 0.8f, stiffness = 600f), initialVelocity = velocity)
-                                        }
-                                    }
-                                },
-                                onDragCancel = {
-                                    val cancelled = dragOffset
-                                    scope.launch {
-                                        offsetY.snapTo(cancelled); dragging = false
-                                        if (reduceMotion) offsetY.snapTo(0f) else offsetY.animateTo(0f, spring(stiffness = 600f))
-                                    }
-                                },
-                            ) { change, delta ->
-                                change.consume()
-                                tracker.addPosition(change.uptimeMillis, Offset(change.position.x, change.position.y + dragOffset))
-                                dragOffset = (dragOffset + delta).coerceAtLeast(0f)
-                            }
-                        }
-                        .semantics { contentDescription = "下滑关闭" },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Box(Modifier.size(width = 36.dp, height = 4.dp).clip(RoundedCornerShape(100.dp))
-                        .background(p.tertiaryLabel.copy(alpha = 0.5f)))
-                }
+                Column(Modifier.fillMaxWidth()) {
+                io.github.mymoney.ui.design.SheetDragGrabber(
+                    enabled = !locked,
+                    offsetY = offsetY,
+                    onDragOffsetChange = { isDrag, nextOffset ->
+                        dragging = isDrag
+                        dragOffset = nextOffset
+                    },
+                    onDismiss = { if (!locked) dismiss() },
+                )
 
                 Column(
                     Modifier.verticalScroll(rememberScrollState()).padding(bottom = AbSpacing.l),
@@ -532,9 +532,13 @@ fun ConfirmSheet(
                                     if (reimbursable && type == BillType.EXPENSE) pendingType = next
                                     else {
                                         type = next
-                                        category = if (isNew && editableDetails && next != BillType.TRANSFER)
-                                            LedgerConfig.groupsFor(next).firstOrNull()?.name else null
-                                        subCategory = null
+                                        val nextGroups = LedgerConfig.groupsFor(next)
+                                        val nextCategory = if (isNew && editableDetails && next != BillType.TRANSFER)
+                                            nextGroups.firstOrNull()?.name else null
+                                        category = nextCategory
+                                        subCategory = if (next == BillType.EXPENSE && nextCategory == "餐饮")
+                                            io.github.mymoney.data.MealRules.defaultSubCategoryForFood(timeMillis, nextGroups)
+                                        else null
                                     }
                                 }
                                 importError = null
@@ -545,7 +549,7 @@ fun ConfirmSheet(
                         {
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = AbSpacing.s, end = AbSpacing.s)) {
                                 Text("可报销", style = AbType.caption1, color = p.secondaryLabel)
-                                CompactAbSwitch(checked = reimbursable, onCheckedChange = { if (!locked) reimbursable = it })
+                                CompactAbSwitch(checked = reimbursable, contentDescription = "可报销", onCheckedChange = { if (!locked) reimbursable = it })
                             }
                         }
                     } else null
@@ -557,9 +561,13 @@ fun ConfirmSheet(
                                 onConfirm = {
                                     reimbursable = false
                                     type = next
-                                    category = if (isNew && editableDetails && next != BillType.TRANSFER)
-                                        LedgerConfig.groupsFor(next).firstOrNull()?.name else null
-                                    subCategory = null
+                                    val nextGroups = LedgerConfig.groupsFor(next)
+                                    val nextCategory = if (isNew && editableDetails && next != BillType.TRANSFER)
+                                        nextGroups.firstOrNull()?.name else null
+                                    category = nextCategory
+                                    subCategory = if (next == BillType.EXPENSE && nextCategory == "餐饮")
+                                        io.github.mymoney.data.MealRules.defaultSubCategoryForFood(timeMillis, nextGroups)
+                                    else null
                                     pendingType = null
                                 },
                                 onDismiss = { pendingType = null },
@@ -591,7 +599,17 @@ fun ConfirmSheet(
                         onSlideStart = { name, anchor -> currentOpenPicker(name, anchor, true) }, onSlideMove = picker::move,
                         onSlideRelease = { picker.release()?.let { (group, sub) -> currentSelectSub(group, sub) } }, onSlideCancel = picker::cancel,
                         onOpenSub = { name, anchor -> currentOpenPicker(name, anchor, false) },
-                        onToggle = { name -> if (!currentLocked) { touch(io.github.mymoney.data.CaptureFields.CATEGORY or io.github.mymoney.data.CaptureFields.SUBCATEGORY); haptic.tick(); category = if (category == name) null else name; subCategory = null } },
+                        onToggle = { name ->
+                            if (!currentLocked) {
+                                touch(io.github.mymoney.data.CaptureFields.CATEGORY or io.github.mymoney.data.CaptureFields.SUBCATEGORY)
+                                haptic.tick()
+                                val nextCategory = if (category == name) null else name
+                                category = nextCategory
+                                subCategory = if (nextCategory == "餐饮")
+                                    io.github.mymoney.data.MealRules.defaultSubCategoryForFood(timeMillis, groups)
+                                else null
+                            }
+                        },
                         trailing = reimburseSwitch,
                     )
                     if (accounts.isEmpty()) Text(
@@ -628,9 +646,11 @@ fun ConfirmSheet(
                             Text("时间", style = AbType.caption1, color = p.secondaryLabel)
                             Text(SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(timeMillis)), style = AbType.footnote, color = p.label)
                         }
-                        TextButton(onClick={picker.cancel();detailsOpen=!detailsOpen;if(!detailsOpen) noteFillOpen=false},enabled=!locked) {
-                            Text(if(detailsOpen) "收起" else "更多")
-                        }
+                        AbTextButton(
+                            text = if (detailsOpen) "收起" else "更多",
+                            enabled = !locked,
+                            onClick = { picker.cancel(); detailsOpen = !detailsOpen; if (!detailsOpen) noteFillOpen = false },
+                        )
                     }
                     if (editableDetails && timeMillis > System.currentTimeMillis() && assetAccount?.initialized == true)
                         Text("保存即更新当前余额", style = AbType.caption1, color = p.secondaryLabel, modifier = Modifier.padding(horizontal = AbSpacing.xl))
@@ -651,15 +671,23 @@ fun ConfirmSheet(
                             evidence.orderTail?.let { DetailLine("单号尾号", it) }
                             evidence.productName?.takeIf(String::isNotBlank)?.let { product ->
                                 DetailLine("商品说明", product)
-                                TextButton(onClick = {
-                                    touch(io.github.mymoney.data.CaptureFields.NOTE)
-                                    note = product; noteOrigin = NoteTemplate.USER; undo = null
-                                }, enabled = !locked) { Text("用作备注") }
+                                AbTextButton(
+                                    text = "用作备注",
+                                    enabled = !locked,
+                                    onClick = {
+                                        touch(io.github.mymoney.data.CaptureFields.NOTE)
+                                        note = product; noteOrigin = NoteTemplate.USER; undo = null
+                                    },
+                                )
                             }
                             sourceLabel(draft)?.let { DetailLine("来源", it) }
                             assetHint?.let { Text(it, style = AbType.caption1, color = p.secondaryLabel) }
                             if (draft.sourcePkg in setOf("com.tencent.mm", "com.eg.android.AlipayGphone") && merchant.isNotBlank() && type != BillType.TRANSFER) {
-                                TextButton(onClick={noteFillOpen=!noteFillOpen},enabled=!locked) {Text(if(noteFillOpen) "收起备注设置" else "设置此商家的备注")}
+                                AbTextButton(
+                                    text = if (noteFillOpen) "收起备注设置" else "设置此商家的备注",
+                                    enabled = !locked,
+                                    onClick = { noteFillOpen = !noteFillOpen },
+                                )
                                 if(noteFillOpen && !locked) InlineMerchantNoteEditor(current(),templateSnapshot,onClose={noteFillOpen=false},onSaved={updated->
                                     touch(io.github.mymoney.data.CaptureFields.NOTE); note=updated.note.orEmpty();noteOrigin=updated.noteOrigin;undo=null;noteFillOpen=false
                                 })
@@ -701,9 +729,22 @@ fun ConfirmSheet(
                     }
                 }
             }
+            }
         }
-        if (timeOpen) LedgerDateTimeDialog(timeMillis, onDismiss = { timeOpen = false }, onConfirm = { touch(io.github.mymoney.data.CaptureFields.TIME); timeMillis = it; timeOpen = false })
-        CategoryPicker(picker, hostOrigin) { group, sub -> selectSub(group, sub) }
+        }
+        if (timeOpen) LedgerDateTimeDialog(timeMillis, onDismiss = { timeOpen = false }, onConfirm = {
+            touch(io.github.mymoney.data.CaptureFields.TIME)
+            timeMillis = it
+            if (category == "餐饮") {
+                val snapshot = io.github.mymoney.data.LocalRuleStore.snapshot()
+                val mealNames = io.github.mymoney.data.MealRules.windowNames(snapshot.mealWindows)
+                if (subCategory == null || subCategory in mealNames) {
+                    subCategory = io.github.mymoney.data.MealRules.defaultSubCategoryForFood(it, groups, snapshot)
+                }
+            }
+            timeOpen = false
+        })
+        CategoryPicker(picker, hostOrigin, backdrop = if (usePickerGlass) pickerBackdrop else null) { group, sub -> selectSub(group, sub) }
     }
 }
 
@@ -847,33 +888,51 @@ private fun ChipRow(
 @Composable
 private fun SheetChip(text: String, selected: Boolean, tint: Color?, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) {
     val p = LocalAbPalette.current
+    val isDark = p.pageBg.luminance() < 0.1f
     val duration = if (LocalReduceMotion.current) 0 else AbMotion.selection
     val c = tint ?: p.accent
-    val bg by androidx.compose.animation.animateColorAsState(if (selected) c.copy(alpha = 0.16f) else p.fill, tween(duration), label = "chip-bg")
-    val fg by androidx.compose.animation.animateColorAsState(if (enabled) p.label else p.secondaryLabel, tween(duration), label = "chip-fg")
+    val bg by androidx.compose.animation.animateColorAsState(
+        if (selected) c.copy(alpha = if (isDark) 0.30f else 0.16f) else p.fill,
+        tween(duration),
+        label = "chip-bg",
+    )
+    val fg by androidx.compose.animation.animateColorAsState(
+        when {
+            !enabled -> p.secondaryLabel
+            selected && tint == null -> c
+            else -> p.label
+        },
+        tween(duration),
+        label = "chip-fg",
+    )
+    val shape = RoundedCornerShape(AbRadius.capsule)
     Box(
         modifier.heightIn(min = 48.dp)
             .clickable(remember { MutableInteractionSource() }, indication = null, enabled = enabled, onClick = onClick)
             .semantics { this.selected = selected; role = Role.Tab; stateDescription = if (selected) "已选中" else "未选中" },
         contentAlignment = Alignment.Center,
     ) {
-        Row(
-            Modifier.heightIn(min = 36.dp).clip(RoundedCornerShape(AbRadius.capsule)).background(bg)
-                .border(1.dp, if (selected) c.copy(alpha = 0.5f) else Color.Transparent, RoundedCornerShape(AbRadius.capsule))
+        Box(
+            Modifier.heightIn(min = 36.dp).clip(shape).background(bg)
                 .padding(horizontal = 14.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            if (selected) Icon(AbIcons.Check, contentDescription = null, tint = fg, modifier = Modifier.size(14.dp))
-            Text(text, style = AbType.footnote.copy(fontWeight = FontWeight.Medium), color = fg, maxLines = 1)
+            Text(
+                text,
+                style = AbType.footnote.copy(fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium),
+                color = fg,
+                maxLines = 1,
+            )
         }
     }
 }
 
-/** 备注建议气泡：比分类胶囊更轻，避免和"选中态"混淆。 */
+/** 备注建议气泡：无框柔胶囊填充，避免和"选中态"混淆。 */
 @Composable
 private fun SuggestionBubble(text: String, accent: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
     val p = LocalAbPalette.current
+    val isDark = p.pageBg.luminance() < 0.1f
+    val shape = RoundedCornerShape(AbRadius.capsule)
     Box(
         Modifier.heightIn(min = 48.dp)
             .clickable(remember { MutableInteractionSource() }, indication = null, enabled = enabled, onClick = onClick)
@@ -881,9 +940,8 @@ private fun SuggestionBubble(text: String, accent: Boolean = false, enabled: Boo
         contentAlignment = Alignment.Center,
     ) {
         Row(
-            Modifier.clip(RoundedCornerShape(AbRadius.capsule))
-                .background(if (accent) p.accent.copy(alpha = 0.12f) else p.cardBg)
-                .then(if (accent) Modifier else Modifier.border(1.dp, p.separator, RoundedCornerShape(AbRadius.capsule)))
+            Modifier.clip(shape)
+                .background(if (accent) p.accent.copy(alpha = if (isDark) 0.24f else 0.14f) else p.fill)
                 .padding(horizontal = 12.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),

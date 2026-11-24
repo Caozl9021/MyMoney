@@ -9,7 +9,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -34,8 +40,28 @@ internal fun solidBadgeBackground(tint: Color): Color {
     return if (opaque.luminance() > 0.38f) lerp(opaque, Color.Black, 0.28f) else opaque
 }
 
+/** 为纯色徽章叠加极细对角线玻璃边缘高光，保持纯色饱满实底与白色图标锐利。 */
+internal fun Modifier.badgeLiquidGlaze(enabled: Boolean): Modifier =
+    if (!enabled) this
+    else this.drawBehind {
+        val stroke = 0.75.dp.toPx()
+        val r = minOf(size.width, size.height) * 0.5f
+        drawRoundRect(
+            brush = Brush.linearGradient(
+                0.0f to Color.White.copy(alpha = 0.36f),
+                0.45f to Color.Transparent,
+                1.0f to Color.White.copy(alpha = 0.14f),
+            ),
+            topLeft = Offset(stroke * 0.5f, stroke * 0.5f),
+            size = Size((size.width - stroke).coerceAtLeast(1f), (size.height - stroke).coerceAtLeast(1f)),
+            cornerRadius = CornerRadius(r),
+            style = Stroke(stroke),
+        )
+    }
+
 @Composable
 internal fun SettingsIconBadge(title: String, fallback: ImageVector, size: Dp = AbCardDensity.settingsIcon) {
+    val effectiveGlass = LocalLiquidGlassEnabled.current && !LocalReduceTransparency.current
     val colors = SettingsIconColors
     val color = when (title) {
         "支出分类" -> colors.pink
@@ -66,7 +92,11 @@ internal fun SettingsIconBadge(title: String, fallback: ImageVector, size: Dp = 
         else -> null
     }
     Box(
-        Modifier.size(size).clip(CircleShape).background(solidBadgeBackground(color)),
+        Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(solidBadgeBackground(color))
+            .badgeLiquidGlaze(effectiveGlass),
         contentAlignment = Alignment.Center,
     ) {
         Icon(

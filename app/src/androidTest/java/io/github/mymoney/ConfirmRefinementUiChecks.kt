@@ -28,7 +28,11 @@ internal class ConfirmRefinementUiChecks(private val instrumentation: Instrument
         if (node == null) return emptyList()
         return listOf(node) + (0 until node.childCount).flatMap { nodes(node.getChild(it)) }
     }
-    private fun find(text: String) = nodes().firstOrNull { it.text?.toString() == text || it.contentDescription?.toString() == text }
+    private fun find(text: String) = nodes().firstOrNull {
+        val nodeText = it.text?.toString()
+        val desc = it.contentDescription?.toString()
+        nodeText == text || desc == text || (text == "餐饮" && nodeText?.startsWith("餐饮 · ") == true)
+    }
     private fun await(text: String): AccessibilityNodeInfo {
         val end = SystemClock.uptimeMillis() + 15000
         while (SystemClock.uptimeMillis() < end) { find(text)?.let { return it }; Thread.sleep(100) }

@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -308,7 +307,7 @@ internal fun CloudBackupPage(
             // Below the primary flow, right-aligned, and never gated on `busy`: the local backup
             // file screen and connection management stay reachable while the server is unreachable.
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = { menuExpanded = true }) { Text("更多") }
+                AbTextButton("更多", onClick = { menuExpanded = true })
             }
             if (menuExpanded) {
                 AppActionSheet(
@@ -350,7 +349,7 @@ internal fun CloudBackupPage(
                             dividerAbove = index > 0, chevron = true, onClick = { if (!busy) sourceToReplace = source })
                     }
                 }
-                TextButton(enabled = !busy, onClick = { operate { CloudBackupCoordinator.cancelEnrollment(context); enrollment = null; needsAuthorization = true } }) { Text("取消连接") }
+                AbTextButton("取消连接", enabled = !busy, onClick = { operate { CloudBackupCoordinator.cancelEnrollment(context); enrollment = null; needsAuthorization = true } })
             }
         }
         if (destination == CloudBackupDestination.CONNECTION) {
@@ -381,14 +380,14 @@ internal fun CloudBackupPage(
             if (historyLoaded && entries.isEmpty()) InsetGroup { ListRow(title = "暂无备份") }
             if (entries.isNotEmpty()) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    if (managing) TextButton(enabled = !busy, onClick = {
+                    if (managing) AbTextButton("全选", enabled = !busy, onClick = {
                         val all = entries.map { it.id }.toSet()
                         selected = if (selected.size == all.size) emptySet() else all.take(LedgerBackupApi.DELETE_BATCH).toSet()
                         if (all.size > LedgerBackupApi.DELETE_BATCH) message = "一次最多删除${LedgerBackupApi.DELETE_BATCH}份，已选择前${LedgerBackupApi.DELETE_BATCH}份"
-                    }) { Text("全选") }
-                    if (verified) TextButton(enabled = !busy, onClick = {
+                    })
+                    if (verified) AbTextButton(if (managing) "完成" else "管理", enabled = !busy, onClick = {
                         managing = !managing; if (!managing) selected = emptySet()
-                    }) { Text(if (managing) "完成" else "管理") }
+                    })
                 }
             }
             InsetGroup { entries.forEachIndexed { index, entry ->

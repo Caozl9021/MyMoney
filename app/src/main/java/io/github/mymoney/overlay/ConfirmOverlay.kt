@@ -179,6 +179,18 @@ object ConfirmOverlay {
             gravity = Gravity.TOP or Gravity.START
             // 备注/金额要能弹输入法
             softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+            if (Build.VERSION.SDK_INT >= 31) {
+                val glassEnabled = io.github.mymoney.ui.design.Appearance.prefs(app)
+                    .getBoolean(io.github.mymoney.ui.design.Appearance.LIQUID_GLASS, io.github.mymoney.ui.design.Appearance.DEFAULT_LIQUID_GLASS)
+                if (glassEnabled) {
+                    runCatching {
+                        if (wm.isCrossWindowBlurEnabled) {
+                            flags = flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
+                            blurBehindRadius = (18f * app.resources.displayMetrics.density).toInt()
+                        }
+                    }
+                }
+            }
         }
 
         return try {
@@ -223,6 +235,8 @@ object ConfirmOverlay {
     private fun SheetContent(app: Context, card: Session) {
         MyMoneyTheme {
             val result = card.result
+            var sawConfirmForm by androidx.compose.runtime.remember(card) { androidx.compose.runtime.mutableStateOf(false) }
+            androidx.compose.runtime.SideEffect { if (result == null) sawConfirmForm = true }
             if (result != null) {
                 ConfirmResultSheet(
                     draft = result.bill?.let(BillWriter::toDraft) ?: card.edited,
@@ -231,6 +245,7 @@ object ConfirmOverlay {
                     canView = result.bill != null,
                     onDismiss = { if (session === card) dismissOnMain() },
                     onView = { result.bill?.let { if (BillResultActivity.open(app, it.id) && session === card) dismissOnMain() } },
+                    animateEntranceFromBottom = !sawConfirmForm,
                 )
             } else ConfirmSheet(
                 draft = card.edited,

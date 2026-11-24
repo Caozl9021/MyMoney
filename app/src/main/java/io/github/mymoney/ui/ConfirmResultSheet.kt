@@ -1,6 +1,7 @@
 package io.github.mymoney.ui
 
-import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -14,8 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -27,12 +27,21 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -42,22 +51,31 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.mymoney.ui.design.amountTint
 import io.github.mymoney.ui.design.AbIcons
+import io.github.mymoney.ui.design.AbMotion
 import io.github.mymoney.ui.design.AbRadius
 import io.github.mymoney.ui.design.AbSpacing
+import io.github.mymoney.ui.design.AbSpring
 import io.github.mymoney.ui.design.AbType
+import io.github.mymoney.ui.design.GlassBottomSheetBox
 import io.github.mymoney.ui.design.LocalAbPalette
+import io.github.mymoney.ui.design.LocalReduceMotion
 import io.github.mymoney.ui.design.PrimaryButton
 import io.github.mymoney.ui.design.SecondaryButton
+import io.github.mymoney.ui.design.SheetDragGrabber
+import io.github.mymoney.ui.design.floatingSheetViewportPadding
 import io.github.mymoney.ui.design.solidBadgeBackground
 import com.example.billkit.BillDraft
 import com.example.billkit.BillType
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 /** 仅呈现宿主确认的保存结果；关闭不再把已保存账单放回待确认。 */
 @Composable
@@ -68,14 +86,53 @@ fun ConfirmResultSheet(
     canView: Boolean,
     onDismiss: () -> Unit,
     onView: () -> Unit,
+    backdrop: GraphicsLayer? = null,
+    backdropOrigin: Offset = Offset.Zero,
+    animateEntranceFromBottom: Boolean = true,
 ) {
     val p = LocalAbPalette.current
     val density = LocalDensity.current
+    val reduceMotion = LocalReduceMotion.current
     val focus = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
+    val scope = rememberCoroutineScope()
+    val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
+    val offsetY = remember { Animatable(if (reduceMotion || !animateEntranceFromBottom) 0f else screenHeightPx) }
+    val morphScale = remember { Animatable(if (reduceMotion || animateEntranceFromBottom) 1f else 0.96f) }
+    val morphAlpha = remember { Animatable(if (reduceMotion || animateEntranceFromBottom) 1f else 0f) }
+    var dragging by remember { mutableStateOf(false) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+    var closing by remember { mutableStateOf(false) }
+    val displayedOffset = if (dragging) dragOffset else offsetY.value
     LaunchedEffect(Unit) { focus.clearFocus(force = true); keyboard?.hide() }
+    LaunchedEffect(reduceMotion, animateEntranceFromBottom) {
+        if (reduceMotion) {
+            offsetY.snapTo(0f)
+            morphScale.snapTo(1f)
+            morphAlpha.snapTo(1f)
+        } else if (animateEntranceFromBottom) {
+            offsetY.animateTo(0f, AbSpring.sheetFloat(false))
+        } else {
+            launch { morphScale.animateTo(1f, AbSpring.morphFloat(false)) }
+            launch { morphAlpha.animateTo(1f, tween(160)) }
+        }
+    }
+    fun closeAnimated() {
+        if (closing) return
+        closing = true
+        scope.launch {
+            var delivered = false
+            try {
+                offsetY.animateTo(screenHeightPx, tween(if (reduceMotion) 0 else AbMotion.normal))
+                delivered = true
+                onDismiss()
+            } finally {
+                if (!delivered) closing = false
+            }
+        }
+    }
     if (androidx.activity.compose.LocalOnBackPressedDispatcherOwner.current != null) {
-        ActiveBackHandler(onBack = onDismiss)
+        ActiveBackHandler(onBack = { closeAnimated() })
     }
     val type = when (draft.type) {
         BillType.EXPENSE -> "支出"
@@ -91,57 +148,81 @@ fun ConfirmResultSheet(
         val cents = draft.priceCents
         "%d.%02d".format(Locale.US, cents / 100, cents % 100)
     }
+    val scrimAlpha = (0.32f * (1f - (displayedOffset / (screenHeightPx * 0.7f).coerceAtLeast(1f)))).coerceIn(0f, 0.32f)
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
         Box(
-            Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.32f))
-                .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onDismiss)
+            Modifier.fillMaxSize().background(Color.Black.copy(alpha = scrimAlpha))
+                .clickable(remember { MutableInteractionSource() }, indication = null, enabled = !closing) { closeAnimated() }
                 .semantics { contentDescription = "完成，关闭记账结果" },
         )
         BoxWithConstraints(
-            Modifier.fillMaxSize().statusBarsPadding().imePadding().navigationBarsPadding(),
+            Modifier.fillMaxSize().statusBarsPadding().padding(floatingSheetViewportPadding()),
             contentAlignment = Alignment.BottomCenter,
         ) {
             val amountSize = minOf(44f, (minOf(maxWidth.value, 560f) - 48f) / ((amount.length + 2) * 0.64f))
                 .coerceAtLeast(20f) / density.fontScale.coerceAtLeast(1f)
-            Column(
-                Modifier.widthIn(max = 560.dp).fillMaxWidth()
+            GlassBottomSheetBox(
+                backdrop = backdrop,
+                backdropOrigin = backdropOrigin,
+                modifier = Modifier
+                    .widthIn(max = 560.dp)
+                    .fillMaxWidth()
+                    .offset { IntOffset(0, displayedOffset.roundToInt()) }
+                    .graphicsLayer {
+                        scaleX = morphScale.value
+                        scaleY = morphScale.value
+                        alpha = morphAlpha.value
+                    }
                     .heightIn(max = maxHeight * 0.92f)
-                    .clip(RoundedCornerShape(topStart = AbRadius.sheet, topEnd = AbRadius.sheet))
-                    .background(p.cardBg)
                     // Consume empty card taps so only the surrounding scrim dismisses.
                     .pointerInput(Unit) { detectTapGestures(onTap = {}) }
-                    .testTag("confirm-result-sheet")
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = AbSpacing.xl, vertical = AbSpacing.xl),
-                verticalArrangement = Arrangement.spacedBy(AbSpacing.m),
+                    .testTag("confirm-result-sheet"),
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AbSpacing.m)) {
-                    Box(
-                        Modifier.size(32.dp).clip(RoundedCornerShape(AbRadius.capsule)).background(solidBadgeBackground(p.green)),
-                        contentAlignment = Alignment.Center,
-                    ) { Icon(AbIcons.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp)) }
-                    Text(title, style = AbType.headline, color = p.label,
-                        modifier = Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite })
-                }
-                detail?.takeIf { it.isNotBlank() }?.let {
-                    Text(it, style = AbType.footnote, color = p.secondaryLabel)
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
-                    draft.note?.takeIf { it.isNotBlank() }?.let {
-                        Text(it, style = AbType.body.copy(fontWeight = FontWeight.Medium), color = p.label)
+                Column(Modifier.fillMaxWidth()) {
+                    SheetDragGrabber(
+                        enabled = !closing,
+                        offsetY = offsetY,
+                        onDragOffsetChange = { isDrag, nextOffset ->
+                            dragging = isDrag
+                            dragOffset = nextOffset
+                        },
+                        onDismiss = { closeAnimated() },
+                    )
+                    Column(
+                        Modifier.fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                            .padding(start = AbSpacing.xl, end = AbSpacing.xl, top = AbSpacing.xs, bottom = AbSpacing.xl),
+                        verticalArrangement = Arrangement.spacedBy(AbSpacing.m),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AbSpacing.m)) {
+                            Box(
+                                Modifier.size(32.dp).clip(RoundedCornerShape(AbRadius.capsule)).background(solidBadgeBackground(p.green)),
+                                contentAlignment = Alignment.Center,
+                            ) { Icon(AbIcons.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp)) }
+                            Text(title, style = AbType.headline, color = p.label,
+                                modifier = Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite })
+                        }
+                        detail?.takeIf { it.isNotBlank() }?.let {
+                            Text(it, style = AbType.footnote, color = p.secondaryLabel)
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
+                            draft.note?.takeIf { it.isNotBlank() }?.let {
+                                Text(it, style = AbType.body.copy(fontWeight = FontWeight.Medium), color = p.label)
+                            }
+                            Text("¥ $amount", style = AbType.amountEntry.copy(fontSize = amountSize.sp, lineHeight = (amountSize * 1.2f).sp), color = amountTint(p, draft.type.name), maxLines = 1,
+                                modifier = Modifier.semantics { contentDescription = "$type，金额$amount 元" })
+                            Text("$type · $date", style = AbType.footnote, color = p.secondaryLabel)
+                        }
+                        Box(Modifier.fillMaxWidth().height(0.5.dp).background(p.separator))
+                        Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
+                            ResultSummaryLine("分类", listOfNotNull(draft.category, draft.subCategory).joinToString(" · ").ifBlank { "未分类" })
+                            ResultSummaryLine("账户", draft.account ?: "未指定")
+                        }
+                        PrimaryButton(text = "完成", onClick = { closeAnimated() }, modifier = Modifier.fillMaxWidth())
+                        // Stack optional actions to remain legible at large font sizes.
+                        if (canView) SecondaryButton(text = "查看账单", onClick = onView, modifier = Modifier.fillMaxWidth())
                     }
-                    Text("¥ $amount", style = AbType.amountEntry.copy(fontSize = amountSize.sp, lineHeight = (amountSize * 1.2f).sp), color = amountTint(p, draft.type.name), maxLines = 1,
-                        modifier = Modifier.semantics { contentDescription = "$type，金额$amount 元" })
-                    Text("$type · $date", style = AbType.footnote, color = p.secondaryLabel)
                 }
-                Box(Modifier.fillMaxWidth().height(0.5.dp).background(p.separator))
-                Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-                    ResultSummaryLine("分类", listOfNotNull(draft.category, draft.subCategory).joinToString(" · ").ifBlank { "未分类" })
-                    ResultSummaryLine("账户", draft.account ?: "未指定")
-                }
-                PrimaryButton(text = "完成", onClick = onDismiss, modifier = Modifier.fillMaxWidth())
-                // Stack optional actions to remain legible at large font sizes.
-                if (canView) SecondaryButton(text = "查看账单", onClick = onView, modifier = Modifier.fillMaxWidth())
             }
         }
     }

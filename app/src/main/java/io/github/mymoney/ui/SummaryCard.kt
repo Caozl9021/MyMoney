@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
@@ -47,6 +46,7 @@ import io.github.mymoney.ui.design.AbIcons
 import io.github.mymoney.ui.design.AbPalette
 import io.github.mymoney.ui.design.AbRadius
 import io.github.mymoney.ui.design.AbSpacing
+import io.github.mymoney.ui.design.AbTextButton
 import io.github.mymoney.ui.design.AbType
 import io.github.mymoney.ui.design.AmountText
 import io.github.mymoney.ui.design.LocalAbPalette
@@ -122,7 +122,7 @@ internal fun MonthlySummaryCard(
                 .heightIn(min = 48.dp).semantics(mergeDescendants = true) {
                     if (back > 0) contentDescription = "${period.label()}，点击回到本期"
                 }, verticalArrangement = Arrangement.Center) {
-                Text("${monthName}支出", style = AbType.footnote.copy(fontWeight = FontWeight.Medium), color = if (back > 0) p.accent else p.label)
+                Text("${monthName}支出", style = AbType.headline.copy(fontSize = 16.sp), color = if (back > 0) p.accent else p.label)
             }
             MonthArrow(p.label, if (monthStartDay == 1) "上个月" else "上一期", previous = true) { onPeriodBackChange(back + 1) }
             MonthArrow(p.label, if (monthStartDay == 1) "下个月" else "下一期", previous = false, enabled = back > 0) { onPeriodBackChange(back - 1) }
@@ -133,9 +133,7 @@ internal fun MonthlySummaryCard(
             }
             SummaryState.Failed -> {
                 Text("${monthName}账单读取失败", style = AbType.subhead, color = p.label)
-                TextButton(onClick = { retry++ }, modifier = Modifier.heightIn(min = 48.dp)) {
-                    Text("重新加载", color = p.label)
-                }
+                AbTextButton("重新加载", onClick = { retry++ }, color = p.label)
             }
             is SummaryState.Ready -> {
                 val summary = state.summary

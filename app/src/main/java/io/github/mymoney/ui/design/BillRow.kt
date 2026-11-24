@@ -11,13 +11,18 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -26,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
@@ -145,14 +151,14 @@ fun BillListRow(
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(AbSpacing.xxs)) {
             Text(
                 text = billRowTitle(bill.category, bill.subCategory, bill.type),
-                style = AbType.body,
+                style = AbType.subhead.copy(fontWeight = FontWeight.Medium),
                 color = p.label,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             if (subtitle.isNotEmpty()) Text(
                 text = subtitle,
-                style = AbType.caption1,
+                style = AbType.caption2.copy(fontSize = 11.5.sp, lineHeight = 15.sp, fontWeight = FontWeight.Light),
                 color = p.secondaryLabel,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -175,7 +181,7 @@ fun BillListRow(
             )
             if (account != null) Text(
                 text = account,
-                style = AbType.caption2,
+                style = AbType.caption2.copy(fontWeight = FontWeight.Light),
                 color = p.secondaryLabel,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -207,20 +213,42 @@ internal fun billIconTint(p: AbPalette, type: String, category: String? = null, 
     else -> swatchFor(displayOrNull(category) ?: displayOrNull(subCategory) ?: "未分类")
 }
 
-/** 左滑露出的删除底衬（红底 + 白字）。 */
+/** 左滑露出的删除底衬（右侧内缩弹性红胶囊 + 白色垃圾桶图标）。 */
 @Composable
 fun SwipeDeleteBackground(modifier: Modifier = Modifier, progress: Float = 1f) {
     val p = LocalAbPalette.current
-    Row(
+    val t = progress.coerceIn(0f, 1f)
+    val ease = ((t - 0.08f) / 0.92f).coerceIn(0f, 1f)
+    val scale = (0.72f + 0.28f * ease).coerceIn(0.72f, 1f)
+    val capsuleWidth = (38f + 30f * ease).dp
+    val effectiveGlass = LocalLiquidGlassEnabled.current && !LocalReduceTransparency.current
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .clip(RoundedCornerShape(0.dp))
-            .background(p.red.copy(alpha = progress.coerceIn(0f, 1f)))
-            .padding(end = AbSpacing.xl),
-        horizontalArrangement = Arrangement.End,
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(end = 12.dp, top = 6.dp, bottom = 6.dp),
+        contentAlignment = Alignment.CenterEnd,
     ) {
-        Text("删除", style = AbType.body, color = Color.White.copy(alpha = progress.coerceIn(0f, 1f)))
+        Box(
+            modifier = Modifier
+                .width(capsuleWidth)
+                .height(40.dp)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    alpha = (ease * 1.35f).coerceIn(0f, 1f)
+                }
+                .clip(RoundedCornerShape(AbRadius.capsule))
+                .background(solidBadgeBackground(p.red))
+                .badgeLiquidGlaze(effectiveGlass),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = AbIcons.Trash,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(18.dp),
+            )
+        }
     }
 }
 

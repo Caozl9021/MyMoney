@@ -9,9 +9,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import io.github.mymoney.ui.design.LocalAbPalette
 
 /** ID-only internal navigation; the shared host observes the current entity instead of a draft copy. */
@@ -43,6 +46,12 @@ class BillResultActivity : ComponentActivity() {
                 Surface(color = LocalAbPalette.current.pageBg, modifier = Modifier.fillMaxSize()) {
                     Box(Modifier.fillMaxSize()) {
                         BillActionsHost(billId = id, onClose = { finish() })
+                        ReimburseNoticeBar(
+                            Modifier
+                                .align(Alignment.BottomCenter)
+                                .navigationBarsPadding()
+                                .padding(start = 16.dp, end = 16.dp, bottom = 84.dp),
+                        )
                     }
                 }
             }

@@ -117,17 +117,73 @@ class LiquidTabIndicatorTest {
     @Test fun velocityCouplesVolumeConservingSquashAndStretchAndSaturates() {
         val staticLifted = frameAt(position = 1.5f, velocity = 0f, lift = 1f)
         val fastMoving = frameAt(position = 1.5f, velocity = 8f, lift = 1f)
+        val fastMovingLeft = frameAt(position = 1.5f, velocity = -8f, lift = 1f)
         val extremeMoving = frameAt(position = 1.5f, velocity = 100f, lift = 1f)
         val glideOnly = frameAt(position = 1.5f, velocity = 8f, lift = 0f)
 
-        assertTrue(fastMoving.width > staticLifted.width)
-        assertTrue(fastMoving.height < staticLifted.height)
+        assertTrue(fastMoving.width < staticLifted.width)
+        assertTrue(fastMoving.height > staticLifted.height)
+        assertEquals(fastMoving.width, fastMovingLeft.width, 0.01f)
+        assertEquals(fastMoving.height, fastMovingLeft.height, 0.01f)
         assertTrue(fastMoving.height > dockH + 10f)
         assertEquals(canvasH / 2f, fastMoving.top + fastMoving.height / 2f, 0.01f)
         assertTrue(glideOnly.lensMix > 0f)
-        assertTrue(extremeMoving.width >= fastMoving.width)
+        assertTrue(extremeMoving.width <= fastMoving.width)
+        assertTrue(extremeMoving.width > 1f)
         assertTrue(extremeMoving.width < canvasW)
-        assertTrue(extremeMoving.height > dockH * 0.85f)
+        assertTrue(extremeMoving.height >= fastMoving.height)
+    }
+
+    @Test fun dragSqueezeNarrowsWidthBelowRestWhileSwellingHeight() {
+        val runtimeInsetPx = 15f
+        val rest = computeTabIndicatorFrame(
+            canvasWidth = canvasW,
+            canvasHeight = canvasH,
+            bleedPx = bleedPx,
+            insetPx = runtimeInsetPx,
+            extraPadPx = 0f,
+            tabCount = 4,
+            position = 1.5f,
+            velocityTabsPerSec = 0f,
+            lift = 0f,
+            baseFillAlpha = baseFillAlpha,
+            isDark = false,
+            dragSqueeze = 0f,
+        )
+        val liftedHold = computeTabIndicatorFrame(
+            canvasWidth = canvasW,
+            canvasHeight = canvasH,
+            bleedPx = bleedPx,
+            insetPx = runtimeInsetPx,
+            extraPadPx = 0f,
+            tabCount = 4,
+            position = 1.5f,
+            velocityTabsPerSec = 0f,
+            lift = 1f,
+            baseFillAlpha = baseFillAlpha,
+            isDark = false,
+            dragSqueeze = 0f,
+        )
+        val dragged = computeTabIndicatorFrame(
+            canvasWidth = canvasW,
+            canvasHeight = canvasH,
+            bleedPx = bleedPx,
+            insetPx = runtimeInsetPx,
+            extraPadPx = 0f,
+            tabCount = 4,
+            position = 1.5f,
+            velocityTabsPerSec = 8f,
+            lift = 1f,
+            baseFillAlpha = baseFillAlpha,
+            isDark = false,
+            dragSqueeze = 1f,
+        )
+
+        assertTrue(liftedHold.width > liftedHold.height)
+        assertTrue(dragged.width < rest.width)
+        assertTrue(dragged.width < liftedHold.width)
+        assertTrue(dragged.height > liftedHold.height)
+        assertEquals(canvasH / 2f, dragged.top + dragged.height / 2f, 0.01f)
     }
 
     @Test fun rubberBandEdgeDragRemainsInsideCanvasWithoutClipping() {
@@ -224,6 +280,27 @@ class LiquidTabIndicatorTest {
         assertEquals(rest.height, midLens.height, 0.0001f)
         assertEquals(0f, clampedLow.lensMix, 0.0001f)
         assertEquals(1f, clampedHigh.lensMix, 0.0001f)
+    }
+
+    @Test fun staggeredLiftAxesControlWidthAndHeightIndependently() {
+        val rest = frameAt(position = 1f, velocity = 0f, lift = 0f)
+        val xWobble = computeTabIndicatorFrame(
+            canvasWidth = canvasW,
+            canvasHeight = canvasH,
+            bleedPx = bleedPx,
+            insetPx = insetPx,
+            extraPadPx = extraPadPx,
+            tabCount = 4,
+            position = 1f,
+            velocityTabsPerSec = 0f,
+            lift = -0.10f,
+            baseFillAlpha = baseFillAlpha,
+            isDark = false,
+            liftY = 0.25f,
+        )
+
+        assertTrue(xWobble.width < rest.width)
+        assertTrue(xWobble.height > rest.height)
     }
 
     @Test fun smoothstep01ClampsAndIsMonotonic() {

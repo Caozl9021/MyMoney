@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,6 +30,7 @@ import io.github.mymoney.ui.design.AbCardDensity
 import io.github.mymoney.ui.design.AbIcons
 import io.github.mymoney.ui.design.AbSpacing
 import io.github.mymoney.ui.design.AbSwitch
+import io.github.mymoney.ui.design.AbTextButton
 import io.github.mymoney.ui.design.AbTextField
 import io.github.mymoney.ui.design.AbType
 import io.github.mymoney.ui.design.AppAlertDialog
@@ -89,10 +89,6 @@ internal fun RecognitionRulesPage(
             ),
             verticalArrangement = Arrangement.spacedBy(AbCardDensity.gap),
         ) {
-            mealState.message?.let { message ->
-                item { InsetGroup { ListRow(title = message) } }
-            }
-
             if (section == RecognitionRuleSection.APPS) {
                 item {
                     InsetGroup {
@@ -205,9 +201,7 @@ internal fun RecognitionRulesPage(
                                     "命中 ${rule.hits} 次", learnedDate(rule.updatedAt),
                                 ).joinToString(" · "),
                                 trailing = {
-                                    TextButton(onClick = { pendingDelete = rule.id }) {
-                                        Text("删除", color = p.red)
-                                    }
+                                    AbTextButton("删除", onClick = { pendingDelete = rule.id }, color = p.red)
                                 },
                             )
                         }
@@ -220,9 +214,7 @@ internal fun RecognitionRulesPage(
                                 title = LearningRules.pendingLabels(pending).joinToString(" · "),
                                 subtitle = LearningRules.progress(pending),
                                 trailing = {
-                                    TextButton(onClick = { LocalRuleStore.deletePending(pending.key) }) {
-                                        Text("删除", color = p.red)
-                                    }
+                                    AbTextButton("删除", onClick = { LocalRuleStore.deletePending(pending.key) }, color = p.red)
                                 },
                             )
                         }
