@@ -747,7 +747,7 @@ private fun AppearancePage(
             val revision = appearanceRevision()
             val prefs = remember(revision) { Appearance.prefs(context) }
             val p = LocalAbPalette.current
-            AppIconPicker()
+            ThemeColorPicker()
             GroupHeader("明暗模式")
             Segmented(
                 listOf("跟随系统", "浅色", "深色"),

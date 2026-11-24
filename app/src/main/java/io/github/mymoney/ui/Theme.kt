@@ -12,14 +12,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.SideEffect
 import androidx.compose.foundation.text.selection.LocalTextSelectionColors
 import androidx.compose.foundation.text.selection.TextSelectionColors
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import io.github.mymoney.systems.LauncherIcons
 import io.github.mymoney.ui.design.*
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
@@ -58,11 +52,8 @@ fun MyMoneyTheme(
         ) == 0f
     }
     val density = LocalDensity.current
-    val confirmedChoice by LauncherIcons.selection.collectAsStateWithLifecycle()
-    var lastConfirmed by remember(context) { mutableStateOf(LauncherIcons.initialThemeSelection(context)) }
-    val choice = confirmedChoice ?: lastConfirmed
-    SideEffect { confirmedChoice?.let { lastConfirmed = it } }
-    val roles = animatedBrandRoles(choice, dark, reduceMotion)
+    val brandTheme = remember(prefs, revision) { Appearance.readBrandTheme(prefs) }
+    val roles = animatedBrandRoles(brandTheme, dark, reduceMotion)
     val basePalette = if (dark) DarkPalette else LightPalette
     val palette = remember(basePalette, roles) { BrandColors.apply(basePalette, roles) }
 

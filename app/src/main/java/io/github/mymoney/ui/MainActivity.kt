@@ -74,9 +74,6 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         foregroundRefreshRate.resume()
-        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            io.github.mymoney.systems.LauncherIcons.reconcile(this@MainActivity)
-        }
         // 用户经常是「去系统设置授权 → 返回应用」：回来时重算一次通道，别让授权前后的旧判定
         // 继续跑（真机上出现过授权后仍按无授权走 root 读通知）。reconcile 幂等，且读的是缓存。
         CaptureModeManager.reconcile(this)

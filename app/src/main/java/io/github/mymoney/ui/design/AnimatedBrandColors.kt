@@ -2,19 +2,18 @@ package io.github.mymoney.ui.design
 
 import androidx.compose.animation.animateColor
 import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.rememberTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.updateTransition
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import io.github.mymoney.systems.LauncherIconChoice
 
 /** A common transition drives every role. First composition and display-mode changes start settled. */
 @Composable
-fun animatedBrandRoles(choice: LauncherIconChoice, dark: Boolean, reduceMotion: Boolean): BrandColorRoles {
-    val state = remember(dark) { MutableTransitionState(choice) }
-    state.targetState = choice
-    val transition = updateTransition(state, label = "brand-choice")
+fun animatedBrandRoles(theme: BrandTheme, dark: Boolean, reduceMotion: Boolean): BrandColorRoles {
+    val state = remember(dark) { MutableTransitionState(theme) }
+    state.targetState = theme
+    val transition = rememberTransition(state, label = "brand-theme")
     val duration = BrandMotion.duration(reduceMotion)
     val primary by transition.animateColor({ tween(duration) }, label = "brand-primary") { BrandColors.roles(it, dark).primary }
     val onPrimary by transition.animateColor({ tween(duration) }, label = "brand-on-primary") { BrandColors.roles(it, dark).onPrimary }

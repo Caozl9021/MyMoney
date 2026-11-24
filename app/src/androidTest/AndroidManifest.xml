@@ -11,7 +11,6 @@
     <instrumentation android:name="io.github.mymoney.NoteMetadataInstrumentation" android:targetPackage="io.github.mymoney" />
     <instrumentation android:name="io.github.mymoney.NoteTemplateRuntimeInstrumentation" android:targetPackage="io.github.mymoney" />
     <instrumentation android:name="io.github.mymoney.BackGestureInstrumentation" android:targetPackage="io.github.mymoney" />
-    <instrumentation android:name="io.github.mymoney.LauncherIconsInstrumentation" android:targetPackage="io.github.mymoney" />
     <instrumentation android:name="io.github.mymoney.BrandThemeInstrumentation" android:targetPackage="io.github.mymoney" />
     <instrumentation android:name="io.github.mymoney.RuleBundleInstrumentation" android:targetPackage="io.github.mymoney" />
     <instrumentation android:name="io.github.mymoney.WechatTransferInstrumentation" android:targetPackage="io.github.mymoney" />

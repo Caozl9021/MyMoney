@@ -22,8 +22,31 @@ object Appearance {
     const val CLARITY_HEADER = "liquid_glass_clarity_header"
     const val CLARITY_SHEET = "liquid_glass_clarity_sheet"
     const val CLARITY_DIALOG = "liquid_glass_clarity_dialog"
+    const val BRAND_THEME = "brand_theme"
+    internal const val LEGACY_LAUNCHER_ICON = "launcher_icon"
+    val DEFAULT_BRAND_THEME = BrandTheme.BLUE
 
     fun prefs(context: Context) = context.getSharedPreferences("appearance", Context.MODE_PRIVATE)
+
+    internal fun resolveBrandTheme(storedTheme: String?, legacyLauncherIcon: String?): BrandTheme =
+        BrandTheme.fromId(storedTheme)
+            ?: when (legacyLauncherIcon) {
+                "logo3" -> BrandTheme.RED
+                else -> DEFAULT_BRAND_THEME
+            }
+
+    fun readBrandTheme(prefs: android.content.SharedPreferences): BrandTheme {
+        val stored = runCatching { prefs.all[BRAND_THEME] as? String }.getOrNull()
+        val legacy = runCatching { prefs.all[LEGACY_LAUNCHER_ICON] as? String }.getOrNull()
+        return resolveBrandTheme(stored, legacy)
+    }
+
+    fun setBrandTheme(context: Context, theme: BrandTheme) {
+        prefs(context).edit()
+            .putString(BRAND_THEME, theme.id)
+            .remove(LEGACY_LAUNCHER_ICON)
+            .apply()
+    }
 
     internal fun resolveClaritySpec(
         perZone: Boolean,

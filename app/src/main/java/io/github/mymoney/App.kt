@@ -51,7 +51,6 @@ class App : Application() {
                 }
             }
         }
-        scope.launch { io.github.mymoney.systems.LauncherIcons.reconcile(this@App) }
         scope.launch {
             runCatching { io.github.mymoney.data.BackupStore.completePendingConfiguration(this@App) }
                 .onFailure { android.util.Log.e("MyMoney", "恢复配置尚未完成", it) }
