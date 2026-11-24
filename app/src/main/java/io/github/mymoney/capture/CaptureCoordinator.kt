@@ -267,7 +267,21 @@ object CaptureCoordinator {
         val resolved = OcrEvidencePolicy.resolveAccount(result.fields.method, db.assets().accounts())
         val decision = OcrEvidencePolicy.apply(row, expected, result, CaptureEditLocks.fields(row.id), resolved)
         if (!allowed()) return null
-        val updated = if (decision.row != row) decision.row.copy(updatedAt = System.currentTimeMillis()) else row
+        var updatedRow = decision.row
+        if (decision.outcome == "added" && ("merchant" in decision.changedFields || "time" in decision.changedFields)) {
+            val protected = row.protectedFields or CaptureEditLocks.fields(row.id) or expected.captureTouchedFields
+            if ((protected and CaptureFields.CATEGORY == 0L) && (protected and CaptureFields.SUBCATEGORY == 0L)) {
+                runCatching { CategorySuggester.suggest(updatedRow.toDraft()) }.getOrNull()?.let { suggestion ->
+                    if (suggestion.category != null) {
+                        updatedRow = updatedRow.copy(
+                            category = suggestion.category,
+                            subCategory = suggestion.subCategory,
+                        )
+                    }
+                }
+            }
+        }
+        val updated = if (updatedRow != row) updatedRow.copy(updatedAt = System.currentTimeMillis()) else row
         if (updated != row) db.recognitions().update(updated)
         db.capture().putEvidence(CaptureEvidence(eventId, row.id, if (manualTarget) "IMAGE" else "PAGE", row.sourcePkg, System.currentTimeMillis(),
             "ocr-" + decision.outcome, "method=ocr;observation=" + CaptureMergePolicy.digest(observationId).take(16) +

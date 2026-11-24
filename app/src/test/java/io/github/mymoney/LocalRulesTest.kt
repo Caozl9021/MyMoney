@@ -22,9 +22,10 @@ class LocalRulesTest {
         assertEquals("夜宵", suggest(draft(hour=4, minute=59)).subCategory)
         assertEquals("三餐", suggest(draft(hour=15)).subCategory)
     }
-    @Test fun `explicit meal precedes time and coffee stays coffee`() {
+    @Test fun `explicit meal precedes time and coffee keeps fallback in blank window`() {
         assertEquals("早餐", suggest(draft("早餐店", 19)).subCategory)
-        assertEquals("咖啡茶饮", suggest(draft("瑞幸咖啡", 12)).subCategory)
+        assertEquals("午餐", suggest(draft("瑞幸咖啡", 12)).subCategory)
+        assertEquals("咖啡茶饮", suggest(draft("瑞幸咖啡", 15)).subCategory)
         assertNull(suggest(draft("未知商户")).category)
     }
     @Test fun `manual one time category changes take effect independently of account`() {
@@ -60,11 +61,12 @@ class LocalRulesTest {
         assertNull(s.learned.single().subCategory)
         assertEquals("晚餐",suggest(draft(hour=19),s).subCategory)
     }
-    @Test fun `manual meal is pinned over time and stays strong`() {
+    @Test fun `food learning records primary category only so meals follow bill time`() {
         val d = draft().copy(category="餐饮",subCategory="午餐")
         var s = RuleLearning.record(LocalRuleSnapshot(),d,d.copy(subCategory="早餐"))
         repeat(3) { s=RuleLearning.record(s,d,d) }
-        assertEquals("早餐",suggest(draft(hour=19),s).subCategory)
+        assertNull(s.learned.single().subCategory)
+        assertEquals("晚餐",suggest(draft(hour=19),s).subCategory)
         assertEquals(RuleSource.MANUAL,s.learned.single().source)
     }
     @Test fun `account learning needs same method and never crosses type`() {
@@ -111,13 +113,40 @@ class LocalRulesTest {
         val valid=rule.copy(category="购物",subCategory="日用品")
         assertEquals("午餐",suggest(draft(),LocalRuleSnapshot(learned=listOf(valid),learningEnabled=false)).subCategory)
     }
-    @Test fun `explicit manual three meals and JSON takeout survive time`() {
+    @Test fun `food defaults to meal in meal window and keeps explicit sub in blank window`() {
         val d=draft().copy(category="餐饮",subCategory="午餐")
         val manual=RuleLearning.record(LocalRuleSnapshot(),d,d.copy(subCategory="三餐"))
-        assertEquals("三餐",suggest(draft(),manual).subCategory)
+        assertNull(manual.learned.single().subCategory)
+        assertEquals("午餐",suggest(draft(hour=12),manual).subCategory)
+        assertNull(suggest(draft(hour=15),manual).subCategory)
         val expanded=groups.map { if(it.name=="餐饮") it.copy(subs=it.subs+"外卖") else it }
         val candidate=RuleCandidate(BillType.EXPENSE,"沙县",category="餐饮",subCategory="外卖")
-        assertEquals("外卖",CategorySuggester.suggest(draft(),expanded,emptyList(),accounts,LocalRuleSnapshot(),listOf(candidate)).subCategory)
+        assertEquals("午餐",CategorySuggester.suggest(draft(hour=12),expanded,emptyList(),accounts,LocalRuleSnapshot(),listOf(candidate)).subCategory)
+        assertEquals("外卖",CategorySuggester.suggest(draft(hour=15),expanded,emptyList(),accounts,LocalRuleSnapshot(),listOf(candidate)).subCategory)
+    }
+    @Test fun `legacy pinned food rule and milk tea choice still follow meal periods`() {
+        val dirtyLegacy = LocalRuleSnapshot(learned = listOf(
+            LearnedRule("legacy-1", BillType.EXPENSE, "公司食堂", category = "餐饮", subCategory = "午餐", source = RuleSource.MANUAL),
+        ))
+        assertEquals("晚餐", suggest(draft("公司食堂", hour = 19), dirtyLegacy).subCategory)
+
+        val meituan = draft("美团", hour = 15)
+        val afterMilkTea = RuleLearning.record(LocalRuleSnapshot(), meituan, meituan.copy(category = "餐饮", subCategory = "咖啡茶饮"))
+        assertNull(afterMilkTea.learned.single().subCategory)
+        assertEquals("午餐", suggest(draft("美团", hour = 12, minute = 20), afterMilkTea).subCategory)
+    }
+    @Test fun `productName participates in category and explicit meal matching`() {
+        val d = draft("未知商户", hour = 15).copy(productName = "精品外卖晚餐套餐")
+        assertEquals("餐饮", suggest(d).category)
+        assertEquals("晚餐", suggest(d).subCategory)
+    }
+    @Test fun `normalizeTime and defaultSubCategoryForFood handle common inputs`() {
+        assertEquals("08:00", MealRules.normalizeTime(" 8：00 "))
+        assertEquals("14:30", MealRules.normalizeTime("14:30"))
+        val noon = LocalDateTime.of(2026, 10, 22, 12, 30).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val gap = LocalDateTime.of(2026, 10, 22, 15, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        assertEquals("午餐", MealRules.defaultSubCategoryForFood(noon, groups))
+        assertNull(MealRules.defaultSubCategoryForFood(gap, groups))
     }
     @Test fun `meal validation rejects invalid overlapping equal windows`() {
         listOf(listOf(MealWindow("早餐","5:00","10:00")),listOf(MealWindow("早餐","05:00","05:00")),

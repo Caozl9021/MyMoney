@@ -81,10 +81,11 @@ object CategorySuggester {
         val accountHit = hits.firstOrNull { it.account != null }
         val groups = if (draft.type == BillType.INCOME) incomeGroups else expenseGroups
         val food = groups.firstOrNull { it.name == "餐饮" }
-        // Only general food may receive a meal; explicit subcategories and manual meals survive.
-        if (categoryHit?.category == "餐饮" && (categoryHit.subCategory == null || (categoryHit.subCategory == "三餐" && categoryHit.source == RuleSource.BUILTIN))) {
-            val text = listOfNotNull(draft.merchant, draft.note, draft.strategy).joinToString(" ")
-            val explicit = MealRules.names.firstOrNull { text.contains(it) }
+        // 只要归属「餐饮」，优先采用明确餐名，否则按账单时间默认填充餐段（空白时段才保留原匹配子类）。
+        if (categoryHit?.category == "餐饮") {
+            val text = listOfNotNull(draft.merchant, draft.productName, draft.note, draft.strategy).joinToString(" ")
+            val mealNames = MealRules.windowNames(snapshot.mealWindows).sortedByDescending { it.length }
+            val explicit = mealNames.firstOrNull { text.contains(it) }
             val meal = explicit ?: MealRules.match(draft.timeMillis, snapshot.mealWindows)
             val chosen = meal?.takeIf { it in food?.subs.orEmpty() }
             if (chosen != null) categoryHit = categoryHit.copy(subCategory = chosen,
@@ -103,7 +104,7 @@ object CategorySuggester {
         candidates: List<RuleCandidate> = emptyList(),
     ): List<RuleHit> {
         val groups = if (draft.type == BillType.INCOME) incomeGroups else expenseGroups
-        val text = listOfNotNull(draft.merchant, draft.note, draft.strategy).joinToString(" ")
+        val text = listOfNotNull(draft.merchant, draft.productName, draft.note, draft.strategy).joinToString(" ")
         val hits = mutableListOf<RuleHit>()
         fun add(category: String?, sub: String?, account: String?, source: RuleSource, length: Int, reason: String) {
             val group = groups.firstOrNull { it.name == category }

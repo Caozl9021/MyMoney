@@ -27,6 +27,22 @@ object MealRules {
     val names = listOf("早餐", "午餐", "晚餐", "夜宵")
     val defaults = listOf(MealWindow("早餐", "05:00", "10:30"), MealWindow("午餐", "10:30", "14:30"),
         MealWindow("晚餐", "16:30", "21:00"), MealWindow("夜宵", "21:00", "05:00"))
+    fun windowNames(windows: List<MealWindow>): Set<String> =
+        (names + windows.mapNotNull { it.subCategory.trim().takeIf(String::isNotBlank) }).toSet()
+    fun normalizeTime(raw: String): String {
+        val sb = StringBuilder(raw.length)
+        for (ch in raw.trim()) {
+            when {
+                ch in '０'..'９' -> sb.append(('0'.code + (ch.code - '０'.code)).toChar())
+                ch == '：' -> sb.append(':')
+                ch.isWhitespace() -> Unit
+                else -> sb.append(ch)
+            }
+        }
+        val cleaned = sb.toString()
+        val m = Regex("^(\\d):([0-5]\\d)$").matchEntire(cleaned)
+        return if (m != null) "0${m.groupValues[1]}:${m.groupValues[2]}" else cleaned
+    }
     fun minute(text: String): Int {
         require(Regex("(?:[01][0-9]|2[0-3]):[0-5][0-9]").matches(text)) { "时间须为 HH:mm" }
         return text.substring(0, 2).toInt() * 60 + text.substring(3).toInt()
@@ -43,6 +59,15 @@ object MealRules {
     fun match(time: Long, windows: List<MealWindow>, zone: ZoneId = ZoneId.systemDefault()): String? {
         val local = Instant.ofEpochMilli(time).atZone(zone)
         return windows.firstOrNull { contains(it, local.hour * 60 + local.minute) }?.subCategory
+    }
+    fun defaultSubCategoryForFood(
+        time: Long,
+        groups: List<CategoryGroup>,
+        snapshot: LocalRuleSnapshot = LocalRuleStore.snapshot(),
+        zone: ZoneId = ZoneId.systemDefault(),
+    ): String? {
+        val food = groups.firstOrNull { it.name == "餐饮" } ?: return null
+        return match(time, snapshot.mealWindows, zone)?.takeIf { it in food.subs }
     }
 }
 
@@ -82,8 +107,8 @@ object RuleLearning {
             }
         }
         val categoryChanged = original.type != edited.type || original.category != edited.category || original.subCategory != edited.subCategory
-        // Weak learning stores the food group, never the time-derived meal. Manual meal changes remain explicit.
-        val sub = if (!categoryChanged && edited.subCategory in MealRules.names) null else edited.subCategory
+        // 归属「餐饮」时只学习一级分类，不锁定餐段或非餐段二级分类，让后续消费始终随账单时间走餐段。
+        val sub = if (edited.category == "餐饮") null else edited.subCategory
         field("category", categoryChanged, edited.category?.let { MiniJson.encode(listOf(it, sub)) }, edited.category, sub)
         field("account", original.type != edited.type || original.account != edited.account, edited.account, account = edited.account)
         return state.copy(learned = learned.takeLast(500), pending = pending.takeLast(1000))
