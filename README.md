@@ -1,8 +1,8 @@
 # 麦米 My Money
 
-> 当前已发布版本 **1.11.2/165**（2026-11-24 用户验收通过，已发 [GitHub Release `v1.11.2`](https://github.com/Caozl9021/MyMoney/releases/tag/v1.11.2)）：包含局内 iOS 27 液态玻璃与物理弹簧动效统一、分区域通透度独立设置、滚轮时间选择器、Dock 物理手感调优及餐饮餐段匹配修复。说明见 [UI 组件说明](docs/UI_COMPONENTS.md) 与 [更新日志](CHANGELOG.md)，验收见 [验收记录](docs/ACCEPTANCE.md)。
+> 当前已发布版本 **1.11.3/166**（2026-11-24 用户验收通过，已发 [GitHub Release `v1.11.3`](https://github.com/Caozl9021/MyMoney/releases/tag/v1.11.3)）：替换为纯白底麦穗品牌图标与单色矢量轮廓，取消设置内可替换桌面图标并改为独立四色主题（默认蓝色），同步云备份 Web 站点图标。说明见 [UI 组件说明](docs/UI_COMPONENTS.md) 与 [更新日志](CHANGELOG.md)，验收见 [验收记录](docs/ACCEPTANCE.md)。
 >
-> 更早版本 **1.11.1/164**（2026-11-20 已发 [GitHub Release `v1.11.1`](https://github.com/Caozl9021/MyMoney/releases/tag/v1.11.1)）、**1.10.3/162**（2026-11-14 已发 [GitHub Release `v1.10.3`](https://github.com/Caozl9021/MyMoney/releases/tag/v1.10.3)）。
+> 更早版本 **1.11.2/165**（2026-11-24 已发 [GitHub Release `v1.11.2`](https://github.com/Caozl9021/MyMoney/releases/tag/v1.11.2)）、**1.11.1/164**（2026-11-20 已发 [GitHub Release `v1.11.1`](https://github.com/Caozl9021/MyMoney/releases/tag/v1.11.1)）、**1.10.3/162**（2026-11-14 已发 [GitHub Release `v1.10.3`](https://github.com/Caozl9021/MyMoney/releases/tag/v1.10.3)）。
 
 ## 版本说明（1.10.3/162 及近期基线）
 
