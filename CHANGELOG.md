@@ -1,6 +1,12 @@
 # 更新日志
 
-> 最新（2026-11-20）：**1.11.1/164 已验收通过并发布（GitHub Release `v1.11.1`）**，包含底栏液态玻璃滑块重构与透光/光学边缘调优。
+> 最新（2026-11-24）：**1.11.2/165 局内 iOS 27 液态玻璃、物理动效、分区域通透度与 Dock 手感优化已发布（GitHub Release `v1.11.2`）**。
+>
+> 更早（2026-11-24）：**1.11.1/164（待发版基线）局内 iOS 27 液态玻璃、物理动效与分区域通透度统一已装机小米 14 并获用户验收通过**。
+>
+> 更早（2026-11-23）：**1.11.1/164 餐段自动填充修复、全局液态玻璃开关/分段滑块统一、子页/选择器毛玻璃、主页字体层级重排与三级页顶部遮挡修复**（已装机小米 14，工作区待提交）。
+>
+> 更早（2026-11-20）：**1.11.1/164 底栏液态玻璃滑块重构与透光/光学边缘调优已验收通过并发布（GitHub Release `v1.11.1`）**。
 >
 > 更早（2026-11-19）：**App 全局图标徽章（纯色实底 + 白色 Lucide 标志）与实时增量同步、设置页极简重构与 Web 仪表盘均获用户验收通过**（基线提交 `0477448`）。
 >
@@ -12,6 +18,35 @@
 > 更早（2026-11-11）：**首页、账单详情（方案 A）、拖拽排序与统计/明细页全局样式统一**（用户验收通过）；**1.10.2/161 资产添加向导 + 报销**（已发 GitHub Release `v1.10.2`；资产向导功能验收通过；家庭服务 `cloud-backup-161`）。
 > 更早（2026-11-07）：**1.10.0/158 云备份管理台 + 扫码连接 + 历史备份恢复改进**验收通过。
 > 更早（2026-11-07）：1.9.0/157 AA历史备份与恢复改进验收通过。
+
+## 2026-11-24 局内 iOS 27 液态玻璃、物理动效与分区域通透度统一（1.11.1/164，用户验收通过）
+
+### 优化与重构
+- **统一 iOS 27 级物理弹簧动效（`LiquidMotion.kt`）**：建立 `AbSpring` 与 `liquidNavigationTransition`（`-22%` 视差临界阻尼转场），修复账单详情「来源与识别信息」展开、左下角报销胶囊、详情点击编辑弹窗、`ConfirmSheet` ↔ `ConfirmResultSheet` 原生变形、弹窗对称退场及 `CategoryPicker` 锚点缩放动效。
+- **轻透玻璃与斜向高光去深框**：修复 `glassSurfaceAlpha` 缩放公式并新增 `glassBlurRadiusDp` 与斜向高光 `liquidSpecularRimBrush`，移除确认卡、警告按钮与各类选择胶囊上的厚重黑/红边框，`SettingsIcons.kt` `badgeLiquidGlaze` 收敛为极细斜向镜面高光。
+- **滚轮时间选择器与月余额浮卡重构**：`LedgerDateTimeDialog.kt` 时间段替换为双列惯性阻尼滚轮 `LiquidWheelTimePicker` 并放宽 `AppDialog` 高度上限避免遮挡底部操作；`AssetsScreen.kt` `AssetBalanceSheet` 重构为窗内 `GlassBottomSheetBox` + 模糊背景与下拉手势关闭。
+- **悬浮胶囊与二级分类气泡光学升级**：`HeaderGlassApi33Holder` 增强环带厚度（`11.5dp`）、边缘位移（`5.5dp`）、色散（`0.12`）与浅层模糊，同步升级 `PageScaffold` 大标题兜底；`CategoryPicker` 升级至 `20.dp` 底层模糊与高频散射，选中胶囊改为无边框纯净主题色。
+- **分区域通透度与专属「液态玻璃」三级设置页**：拆分 `dock`、`header`、`sheet`、`dialog` 四路独立通透度通道，新增「外观 → 液态玻璃」三级子页（保留各区标题并去除多余说明，附实时预览条与「全部恢复默认」）。
+
+### 验证
+- `scripts/check-ui-components.sh` 通过；`:app:testDebugUnitTest :billkit:testDebugUnitTest --offline` 共 **836 项**（`:app` 107 文件 808 项 + `:billkit` 4 文件 28 项）全绿；签名 Release `1.11.1/164`（`55,857,584` B，SHA-256 `7d5204d9a6db63c1a454dbc314c886391f5636827bce55f6467861e7ced149b9`）安装小米 14 实测验收通过。
+
+## 2026-11-24 Dock 液态物理手感调优（1.11.1/164，用户验收通过）
+
+- **大胶囊微膨回弹与同矩阵折射映射（`LiquidGlassTabBar.kt` / `LiquidPillLensView.kt`）**：切页或拖拽释放时通过 `onDockTransform` 驱动 `dockStage` 向外微膨（`+3.6%` 宽 / `+5.2%` 高，`dampingRatio = 0.48f`）并弹性回弹，拖拽期间限幅随动 `±3.5.dp`；`LiquidPillLensView` 录制与 Shader Uniform 按同一矩阵缩放平移，保持轮廓严丝合缝。
+- **速率挤窄、停手果冻回弹与 X/Y 错相弹性（`Chrome.kt`）**：按住不动保持饱满胶囊（`1.26x × 1.28x`）；横滑时按实时拖速驱动 `dragSqueeze`（`0.46f`）向内挤窄、纵向微鼓，停顿 `45ms` 或松手时以 `0.42f–0.44f` 低阻尼弹簧回弹；拆出独立 `lift`（`0.60f`）与 `liftY`（`0.74f`）错相收束，横向更富有余韵。
+- **相对增量起滑与内壁跟随柔光（`Chrome.kt`）**：当前 Tab 内偏边缘拖起按 `dragAnchorX` 增量推进消除起跳感；水滴激活期间沿母胶囊内壁叠加跟随水滴中心移动的 `BlendMode.Plus` 径向柔光。
+- **验证与装机**：`scripts/check-ui-components.sh` 通过，`:app:testDebugUnitTest --offline` **106 文件 800 项全绿**（`LiquidTabIndicatorTest` **12/12**），Release `1.11.1/164`（SHA-256 `d6db9d25…1d4e`）保数据安装小米 14 后用户确认「dock完美了」，并已将 Dock 方案与模板同步整理至个人 AI 知识库。
+
+## 2026-11-23 餐段修复、全局液态玻璃统一与字体层级/三级页遮挡修复（1.11.1/164 已装机）
+
+- **餐段识别与全链路自动填充（`LocalRules.kt` / `CategorySuggester.kt` / `BillEditorDialog.kt` / `ConfirmSheet.kt` / `CaptureCoordinator.kt` / `LocalRulesPage.kt` / `RecognitionRulesPage.kt`）**：归属「餐饮」时优先采用文本明确餐名，否则按账单时间匹配 `mealWindows` 自动填充餐段；`RuleLearning.record` 对「餐饮」仅记录一级分类不再钉死餐段或咖啡/奶茶等非餐段子类；手动新建、确认卡操作与 OCR 补全全部接入餐段重算；餐段设置页支持时间自动标准化与可见提示。
+- **全局液态玻璃统一与外观总开关（`Appearance.kt` / `Theme.kt` / `SettingsScreen.kt` / `LiquidGlassControls.kt` / `Components.kt` / `Chrome.kt` / `ConfirmSheet.kt` / `CategoryPicker.kt`）**：
+  - 「设置 → 外观」新增「液态玻璃」总开关（默认开启，即时热切换全应用 Dock、悬浮顶栏、开关、分段滑块及背景模糊）。
+  - `AbSwitch` / `CompactAbSwitch` / `Segmented` 接入统一局部凸镜引擎与跟手横滑；修复浅色模式 `Segmented` 静止底槽不可见问题；`SubPageScaffold` 与 `CategoryPicker` 接入按需背景模糊。
+- **字体层级重排与三级页遮挡修复（`Typography.kt` / `Theme.kt` / `SummaryCard.kt` / `StatsScreen.kt` / `BillRow.kt` / `LedgerConfigCard.kt`）**：
+  - 汇总卡标题「本期支出 / 本月支出」提升至 `16.sp SemiBold`；账单行调整为分类 `15.sp Medium`、金额 `16.sp SemiBold`（`tnum` 等宽数字）、备注/时间 `11.5.sp Light`、账户 `11.sp Light`；`MaterialTheme` 接入 `AbMaterialTypography`（西文/数字保持系统默认字体）。
+  - 修复 `LedgerConfigCard.kt`（分类列表、常用预设、二级分类详情）3 处硬编码 `top = AbSpacing.m` 导致的悬浮顶栏遮挡问题，统一使用 `padding.calculateTopPadding()`。
 
 ## 2026-11-20 底栏悬浮 Dock 液态玻璃滑块重构（1.11.1/164，用户验收通过）
 
