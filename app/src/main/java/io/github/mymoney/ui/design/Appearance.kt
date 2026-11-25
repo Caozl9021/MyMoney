@@ -46,6 +46,7 @@ object Appearance {
             .putString(BRAND_THEME, theme.id)
             .remove(LEGACY_LAUNCHER_ICON)
             .apply()
+        io.github.mymoney.systems.SystemIntegration.refresh(context)
     }
 
     internal fun resolveClaritySpec(

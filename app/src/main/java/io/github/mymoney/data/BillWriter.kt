@@ -462,7 +462,7 @@ object BillWriter {
                     }
                 }
                 enqueueTouched(app)
-                if (message.startsWith("已报销")) io.github.mymoney.systems.SystemIntegration.refresh(app)
+                io.github.mymoney.systems.SystemIntegration.refresh(app)
                 message
             }
             withContext(Dispatchers.Main) { onDone(result) }

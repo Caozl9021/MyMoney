@@ -58,13 +58,31 @@ class MonthlyExpenseWidget : AppWidgetProvider() {
                     val cents = SystemEntryPolicy.expenseCents(rows, month)
                     String.format(Locale.US, "¥%,d.%02d", cents / 100, cents % 100)
                 }.getOrElse { "暂不可用" }
+                val surface = WidgetThemeTokens.defaultSurfaceStyle(app)
+                val palette = WidgetThemeTokens.palette(app, surface)
+                val openHomePending = PendingIntent.getActivity(
+                    app,
+                    9100,
+                    Intent(app, io.github.mymoney.ui.MainActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+                val quickAddPending = PendingIntent.getActivity(
+                    app,
+                    9101,
+                    SystemIntegration.quickAddIntent(app),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
                 val views = RemoteViews(app.packageName, R.layout.widget_monthly_expense).apply {
-                    setTextViewText(R.id.widget_month, if (month.startDay == 1) "本月原支出 · ${month.month.monthValue}月" else "本期原支出 · ${month.shortLabel}")
+                    WidgetThemeTokens.applySurface(this, surface)
+                    setTextViewText(R.id.widget_month, "本期支出")
+                    setTextColor(R.id.widget_month, palette.secondaryText)
                     setTextViewText(R.id.widget_amount, amount)
+                    setTextColor(R.id.widget_amount, palette.primaryText)
+                    WidgetThemeTokens.tintImage(this, R.id.widget_add, palette.secondaryText)
                     setContentDescription(R.id.widget_amount, "${month.rangeLabel}原支出 $amount，退款单独计算")
-                    setOnClickPendingIntent(R.id.widget_add, PendingIntent.getActivity(app, 9101,
-                        SystemIntegration.addBillIntent(app),
-                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+                    setOnClickPendingIntent(R.id.widget_root, openHomePending)
+                    setOnClickPendingIntent(R.id.widget_add, quickAddPending)
                 }
                 manager.updateAppWidget(ids, views)
                 // No exact-alarm permission: the midnight refresh may be deferred by Doze.

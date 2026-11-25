@@ -135,6 +135,7 @@ private enum class SettingsPage(val title: String) {
     BACKUP("本地备份文件"),
     APPEARANCE("外观"),
     LIQUID_GLASS("液态玻璃"),
+    WIDGETS("桌面小组件"),
     ABOUT("关于"),
     PAGE_DEBUG("页面诊断"),
 }
@@ -498,8 +499,10 @@ fun SettingsScreen(
                         SettingsPage.APPEARANCE -> AppearancePage(
                             onBack = back,
                             onOpenLiquidGlass = { navigate(SettingsPage.LIQUID_GLASS) },
+                            onOpenWidgets = { navigate(SettingsPage.WIDGETS) },
                         )
                         SettingsPage.LIQUID_GLASS -> LiquidGlassSettingsPage(onBack = back)
+                        SettingsPage.WIDGETS -> WidgetsSettingsPage(onBack = back)
                         SettingsPage.ABOUT -> AppUpdatePage(back, onOpenDebug = { navigate(SettingsPage.PAGE_DEBUG) })
                         SettingsPage.PAGE_DEBUG -> PageDebugPage(onBack = back)
                     }
@@ -738,6 +741,7 @@ private fun ExportPage(onBack: () -> Unit, onOpenHelp: () -> Unit) {
 private fun AppearancePage(
     onBack: () -> Unit,
     onOpenLiquidGlass: () -> Unit,
+    onOpenWidgets: () -> Unit,
 ) {
     SubPageScaffold(title = "外观", onBack = onBack) { padding ->
         SectionColumn(
@@ -752,7 +756,10 @@ private fun AppearancePage(
             Segmented(
                 listOf("跟随系统", "浅色", "深色"),
                 listOf("SYSTEM", "LIGHT", "DARK").indexOf(prefs.getString("theme", "SYSTEM")).coerceAtLeast(0),
-                { index -> prefs.edit().putString("theme", listOf("SYSTEM", "LIGHT", "DARK")[index]).apply() },
+                { index ->
+                    prefs.edit().putString("theme", listOf("SYSTEM", "LIGHT", "DARK")[index]).apply()
+                    io.github.mymoney.systems.SystemIntegration.refresh(context)
+                },
             )
             GroupHeader("文字大小")
             Segmented(
@@ -797,6 +804,123 @@ private fun AppearancePage(
                     },
                     onClick = onOpenLiquidGlass,
                 )
+                ListRow(
+                    title = "桌面小组件",
+                    subtitle = "速记、七日柱图与资产报销看板",
+                    dividerAbove = true,
+                    chevron = true,
+                    onClick = onOpenWidgets,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WidgetsSettingsPage(onBack: () -> Unit) {
+    val context = LocalContext.current
+    val p = LocalAbPalette.current
+    val manager = remember(context) { android.appwidget.AppWidgetManager.getInstance(context) }
+    val pinSupported = remember(manager) { manager.isRequestPinAppWidgetSupported }
+    val widgetPrefs = remember(context) { io.github.mymoney.systems.WidgetPrefs.prefs(context) }
+    var surfaceStyle by remember { mutableStateOf(io.github.mymoney.systems.WidgetThemeTokens.defaultSurfaceStyle(context)) }
+
+    fun pin(providerClass: Class<*>, label: String) {
+        if (!pinSupported) {
+            ReimburseFeedback.show("当前桌面不支持直接添加，请回到桌面长按空白处添加「$label」")
+            return
+        }
+        val component = android.content.ComponentName(context, providerClass)
+        val ok = runCatching { manager.requestPinAppWidget(component, null, null) }.getOrDefault(false)
+        if (!ok) {
+            ReimburseFeedback.show("请回到桌面长按空白处添加「$label」")
+        }
+    }
+
+    SubPageScaffold(title = "桌面小组件", onBack = onBack) { padding ->
+        SectionColumn(
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(padding).padding(horizontal = AbSpacing.page),
+        ) {
+            Text(
+                text = "添加后可在桌面长按组件边框自由拖拽缩放，系统会自动切换对应尺寸排版。",
+                style = AbType.footnote,
+                color = p.secondaryLabel,
+            )
+
+            GroupHeader("小组件默认材质")
+            Segmented(
+                options = io.github.mymoney.systems.WidgetSurfaceStyle.entries.map { it.title },
+                selected = io.github.mymoney.systems.WidgetSurfaceStyle.entries.indexOf(surfaceStyle),
+                onSelect = { idx ->
+                    val next = io.github.mymoney.systems.WidgetSurfaceStyle.entries[idx]
+                    surfaceStyle = next
+                    io.github.mymoney.systems.WidgetPrefs.setDefaultSurface(widgetPrefs, next)
+                    io.github.mymoney.systems.SystemIntegration.refresh(context)
+                },
+            )
+            Text(
+                text = "「暗透玻璃」更贴合深色/桌面半透明文件夹质感；资产看板也可按实例单独覆盖。",
+                style = AbType.caption1,
+                color = p.secondaryLabel,
+            )
+
+            data class WidgetSpec(
+                val title: String,
+                val sizes: String,
+                val desc: String,
+                val cls: Class<*>,
+            )
+            val specs = remember {
+                listOf(
+                    WidgetSpec(
+                        title = "极速记账",
+                        sizes = "默认 2×1 · 支持 1×1 / 1×2 / 2×1 / 2×2",
+                        desc = "品牌图标与主题色加号，全卡片任意位置点击直接弹出透明确认卡记一笔。",
+                        cls = io.github.mymoney.systems.QuickEntryWidget::class.java,
+                    ),
+                    WidgetSpec(
+                        title = "七日支出趋势",
+                        sizes = "默认 3×2 · 支持 2×1～4×1 纯柱图及 2×2～4×2",
+                        desc = "3×2/4×2 带星期标签，2×2 精简去日期，横条纯柱状图；轻点直达统计页。",
+                        cls = io.github.mymoney.systems.SevenDayExpenseWidget::class.java,
+                    ),
+                    WidgetSpec(
+                        title = "资产与报销看板",
+                        sizes = "默认 2×2 · 支持 1×1～4×2 全尺寸",
+                        desc = "可按实例配置混合/纯资产/纯报销模式与材质，分区直达资产与待报销。",
+                        cls = io.github.mymoney.systems.AssetReimburseWidget::class.java,
+                    ),
+                    WidgetSpec(
+                        title = "本期支出",
+                        sizes = "固定 2×1",
+                        desc = "紧凑展示本期原支出与右侧加号速记，轻点卡片进首页，点加号直接弹出确认卡。",
+                        cls = io.github.mymoney.systems.MonthlyExpenseWidget::class.java,
+                    ),
+                )
+            }
+
+            specs.forEach { spec ->
+                InsetGroup {
+                    Column(
+                        Modifier.fillMaxWidth().padding(AbCardDensity.content),
+                        verticalArrangement = Arrangement.spacedBy(AbSpacing.s),
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(spec.title, style = AbType.headline, color = p.label)
+                            Text(spec.sizes, style = AbType.caption1, color = p.accent)
+                        }
+                        Text(spec.desc, style = AbType.footnote, color = p.secondaryLabel)
+                        Spacer(Modifier.height(2.dp))
+                        SecondaryButton(
+                            text = if (pinSupported) "添加到桌面" else "查看添加方式",
+                            onClick = { pin(spec.cls, spec.title) },
+                        )
+                    }
+                }
             }
         }
     }
@@ -839,6 +963,7 @@ private fun LiquidGlassSettingsPage(onBack: () -> Unit) {
                     trailing = {
                         AbSwitch(liquidGlass) {
                             prefs.edit().putBoolean(Appearance.LIQUID_GLASS, it).apply()
+                            io.github.mymoney.systems.SystemIntegration.refresh(context)
                         }
                     },
                 )

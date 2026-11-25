@@ -114,6 +114,13 @@ interface BillDao {
     """)
     fun observePendingReimbursement(): Flow<PendingReimbursement>
 
+    @Query("""
+        SELECT COUNT(*) AS count, COALESCE(SUM(priceCents), 0) AS cents
+        FROM bills
+        WHERE type = 'EXPENSE' AND reimburseStatus = 'PENDING' AND feeParentKey IS NULL
+    """)
+    suspend fun pendingReimbursement(): PendingReimbursement
+
     /** Includes historical categories and folds SQL NULL into the unclassified empty value. */
     @Query("SELECT DISTINCT COALESCE(category, '') FROM bills ORDER BY COALESCE(category, '')")
     fun observeCategories(): Flow<List<String>>

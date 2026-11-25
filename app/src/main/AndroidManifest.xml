@@ -101,6 +101,61 @@
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/monthly_expense_widget" />
         </receiver>
 
+        <receiver android:name=".systems.QuickEntryWidget" android:exported="false"
+            android:label="@string/quick_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/quick_entry_widget" />
+        </receiver>
+
+        <receiver android:name=".systems.SevenDayExpenseWidget" android:exported="false"
+            android:label="@string/seven_day_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.DATE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/seven_day_expense_widget" />
+        </receiver>
+
+        <receiver android:name=".systems.AssetReimburseWidget" android:exported="false"
+            android:label="@string/asset_reimburse_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.DATE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/asset_reimburse_widget" />
+        </receiver>
+
+        <!-- 桌面速记小组件半屏透明确认卡：不进最近任务、保存或取消后直接退回桌面 -->
+        <activity
+            android:name=".ui.QuickAddActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.MyMoney.Translucent" />
+
+        <!-- 资产 & 报销桌面小组件实例配置页 -->
+        <activity
+            android:name=".ui.WidgetConfigureActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
         <!-- 确认页：不导出、不进最近任务、只有一行确认 -->
         <activity
             android:name=".ui.ConfirmActivity"

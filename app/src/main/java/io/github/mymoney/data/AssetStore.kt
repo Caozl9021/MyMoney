@@ -54,6 +54,7 @@ object AssetStore {
         val snapshot = db.withTransaction { AssetSnapshot(db.assets().accounts(), db.assets().entries()) }
         _accounts.value = snapshot.accounts; _entries.value = snapshot.entries
         publishSnapshotDiff(snapshot)
+        if (_ready.value) io.github.mymoney.systems.SystemIntegration.refresh(appContext)
     }
 
     /**

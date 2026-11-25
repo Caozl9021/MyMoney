@@ -2,11 +2,20 @@
     <string name="shortcut_add_bill_short">记一笔</string>
     <string name="shortcut_add_bill_long">麦米 · 记一笔</string>
     <string name="recognition_tile_label">麦米</string>
-    <string name="monthly_widget_label">麦米 · 本月支出</string>
-    <string name="monthly_widget_description">查看本月原支出，轻点记一笔手动记账</string>
+    <string name="monthly_widget_label">麦米 · 本期支出</string>
+    <string name="monthly_widget_description">查看本期原支出，轻点右侧加号快速记一笔</string>
+    <string name="quick_widget_label">麦米 · 极速记账</string>
+    <string name="quick_widget_description">桌面任意位置轻点弹出确认卡记一笔，支持 1×1 / 1×2 / 2×1 / 2×2</string>
+    <string name="seven_day_widget_label">麦米 · 七日支出</string>
+    <string name="seven_day_widget_description">近 7 天原支出柱状图趋势，点击直达统计页</string>
+    <string name="asset_reimburse_widget_label">麦米 · 资产与报销</string>
+    <string name="asset_reimburse_widget_description">可配置净资产、待报销与账期看板，支持多尺寸自适应</string>
     <color name="widget_surface">#F7F7F7</color>
+    <color name="widget_surface_frosted">#D8FFFFFF</color>
     <color name="widget_primary">#1C1C1E</color>
     <color name="widget_secondary">#636366</color>
     <color name="widget_border">#E5E5EA</color>
+    <color name="widget_border_frosted">#CCFFFFFF</color>
     <color name="widget_button">#E9E9EC</color>
+    <color name="widget_pill_surface">#14767680</color>
 </resources>

@@ -458,8 +458,17 @@ fun ConfirmSheet(
                     onDismiss = { if (!locked) dismiss() },
                 )
 
+                val assetAccount = assetAccounts.firstOrNull { it.name == account }
+                val transferEligible = assetAccounts.filter { !it.archived && it.initialized }
+                val fromTransfer = transferEligible.firstOrNull { it.name == account }
+                val toTransfer = transferEligible.firstOrNull { it.id == transferAccountId }
+                val transferValid = type != BillType.TRANSFER || fromTransfer != null && toTransfer != null && fromTransfer.id != toTransfer.id
+
                 Column(
-                    Modifier.verticalScroll(rememberScrollState()).padding(bottom = AbSpacing.l),
+                    Modifier
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState())
+                        .padding(bottom = AbSpacing.s),
                     verticalArrangement = Arrangement.spacedBy(AbSpacing.s),
                 ) {
                     // Keep the label attached to the amount, independently of the form row gaps.
@@ -574,11 +583,6 @@ fun ConfirmSheet(
                             )
                         }
                     }
-                    val assetAccount = assetAccounts.firstOrNull { it.name == account }
-                    val transferEligible = assetAccounts.filter { !it.archived && it.initialized }
-                    val fromTransfer = transferEligible.firstOrNull { it.name == account }
-                    val toTransfer = transferEligible.firstOrNull { it.id == transferAccountId }
-                    val transferValid = type != BillType.TRANSFER || fromTransfer != null && toTransfer != null && fromTransfer.id != toTransfer.id
                     if (type == BillType.TRANSFER) {
                         ChipRow(label = "转出账户", items = transferEligible.map { it.name }, selected = account, enabled = !locked,
                             onToggle = { name -> touch(io.github.mymoney.data.CaptureFields.ACCOUNT); haptic.tick(); account = name })
@@ -695,18 +699,27 @@ fun ConfirmSheet(
                         }
                     }
 
-                    // ---- 动作 ----
+                }
+
+                // ---- 动作（固定在卡片底部，键盘弹出或展开建议时不顶出视口） ----
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = AbSpacing.xl)
+                        .padding(top = AbSpacing.xs, bottom = AbSpacing.l),
+                    verticalArrangement = Arrangement.spacedBy(AbSpacing.s),
+                ) {
                     (errorMessage ?: importError)?.let {
                         Text("操作未完成：$it", color = p.red, style = AbType.footnote,
-                            modifier = Modifier.padding(horizontal = AbSpacing.xl).semantics {
+                            modifier = Modifier.semantics {
                                 liveRegion = LiveRegionMode.Polite
                                 error(it)
                             })
                     }
                     displayedReviewNotice?.let { Text(it, style = AbType.footnote, color = p.secondaryLabel,
-                        modifier = Modifier.padding(horizontal = AbSpacing.xl).semantics { liveRegion = LiveRegionMode.Polite }) }
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
                     Row(
-                        Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xl).padding(top = AbSpacing.xs),
+                        Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(AbSpacing.m),
                     ) {
                         PrimaryButton(

@@ -59,12 +59,13 @@ internal fun StatisticsDailyChart(
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val gap = AbSpacing.xs
         val cell = (maxWidth - gap * (days.size - 1).coerceAtLeast(0)) / days.size.coerceAtLeast(1)
-        val barWidth = (cell * 0.52f).coerceIn(10.dp, 28.dp)
+        val barWidth = (cell * 0.54f).coerceIn(12.dp, 26.dp)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(gap)) {
             days.forEach { day ->
                 val chosen = day.date == selectedDate
                 val amount = day.amount(type)
-                val barColor = if (!hasSelection || chosen) tint else tint.copy(alpha = 0.32f)
+                val barColor = if (!hasSelection || chosen) tint else tint.copy(alpha = 0.34f)
+                val trackColor = if (chosen) tint.copy(alpha = 0.16f) else p.fill
                 Column(
                     Modifier.width(cell)
                         .clip(RoundedCornerShape(AbRadius.chip))
@@ -78,11 +79,23 @@ internal fun StatisticsDailyChart(
                     verticalArrangement = Arrangement.spacedBy(AbSpacing.xs),
                 ) {
                     Canvas(Modifier.width(barWidth).height(124.dp)) {
-                        drawLine(p.separator.copy(alpha = 0.55f), Offset(0f, size.height), Offset(size.width, size.height), 0.75.dp.toPx())
-                        if (amount > 0L) {
-                            val height = (size.height * (amount.toDouble() / max).toFloat() * progress).coerceAtLeast(0f)
-                            drawRoundRect(barColor, topLeft = Offset(0f, size.height - height),
-                                size = Size(size.width, height), cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx()))
+                        val radius = androidx.compose.ui.geometry.CornerRadius(size.width / 2f)
+                        drawRoundRect(
+                            color = trackColor,
+                            topLeft = Offset.Zero,
+                            size = size,
+                            cornerRadius = radius,
+                        )
+                        if (amount > 0L && progress > 0f) {
+                            val rawHeight = size.height * (amount.toDouble() / max).toFloat() * progress
+                            val minCap = min(size.width * 0.72f, size.height) * progress
+                            val height = rawHeight.coerceIn(minCap, size.height)
+                            drawRoundRect(
+                                color = barColor,
+                                topLeft = Offset(0f, size.height - height),
+                                size = Size(size.width, height),
+                                cornerRadius = radius,
+                            )
                         }
                     }
                     Text(
@@ -97,10 +110,8 @@ internal fun StatisticsDailyChart(
 }
 
 /**
- * 月视图热力图：日历网格，每格颜色深浅表示当天金额。
- *
- * 配色跟随当前类型（支出/收入/退款）的语义色，与本页柱图、环图同源；
- * 空白天与隔月占位用卡片填充色，保证网格形状稳定。
+ * 月视图微环日历（Apple 健身月历风）：每格以进度微环表达当天金额占比，
+ * 去掉大面积实底方块压迫感；空白天仅保留淡轨，点选当天高亮圆底。
  */
 @Composable
 internal fun StatisticsMonthHeatmap(
@@ -120,11 +131,7 @@ internal fun StatisticsMonthHeatmap(
         days.forEach { add(it.date) }
         while (size % 7 != 0) add(null)
     }
-    val levelAlpha = listOf(0f, 0.22f, 0.44f, 0.68f, 0.94f)
-    // 日期数字的前景色按**混色后**的格子底色算对比度：alpha 叠在卡片底上，
-    // 直接拿语义色原色算会低估亮度、把中档格子错判成可以放白字。
-    val onStrong = Color(ColorContrast.contrastingForeground(lerp(p.cardBg, tint, 0.94f).toArgb()))
-    val onMedium = Color(ColorContrast.contrastingForeground(lerp(p.cardBg, tint, 0.68f).toArgb()))
+    val onChosen = Color(ColorContrast.contrastingForeground(tint.toArgb()))
     Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
             listOf("一", "二", "三", "四", "五", "六", "日").forEach { weekday ->
@@ -141,24 +148,13 @@ internal fun StatisticsMonthHeatmap(
                     } else {
                         val day = days.first { it.date == date }
                         val amount = day.amount(type)
-                        val level = heatLevel(amount, peak)
+                        val ratio = if (amount > 0L && peak > 0L) (amount.toDouble() / peak).toFloat().coerceIn(0f, 1f) else 0f
                         val chosen = date == selectedDate
-                        val shape = RoundedCornerShape(AbRadius.chip)
-                        val dimFactor = if (hasSelection && !chosen) 0.42f else 1f
-                        val cellBg = when {
-                            level == 0 && chosen -> tint.copy(alpha = 0.14f)
-                            level == 0 -> p.fill.copy(alpha = p.fill.alpha * dimFactor)
-                            else -> tint.copy(alpha = levelAlpha[level] * progress * dimFactor)
-                        }
-                        val borderColor = when {
-                            !chosen -> Color.Transparent
-                            level >= 3 -> tint
-                            else -> tint.copy(alpha = 0.55f)
-                        }
+                        val dimFactor = if (hasSelection && !chosen) 0.40f else 1f
+                        val label = if (date.dayOfMonth == 1 && days.first().date.month != date.month) "${date.monthValue}/1" else "${date.dayOfMonth}"
                         Box(
-                            Modifier.weight(1f).aspectRatio(1f).clip(shape)
-                                .background(cellBg)
-                                .then(if (chosen) Modifier.border(1.dp, borderColor, shape) else Modifier)
+                            Modifier.weight(1f).aspectRatio(1f)
+                                .clip(androidx.compose.foundation.shape.CircleShape)
                                 .clickable { onSelect(date) }
                                 .semantics(mergeDescendants = true) {
                                     selected = chosen
@@ -166,16 +162,57 @@ internal fun StatisticsMonthHeatmap(
                                 },
                             contentAlignment = Alignment.Center,
                         ) {
+                            Canvas(Modifier.fillMaxSize(0.84f)) {
+                                val strokePx = 2.6.dp.toPx()
+                                val inset = strokePx / 2f
+                                val ringSize = Size(size.width - strokePx, size.height - strokePx)
+                                val origin = Offset(inset, inset)
+                                if (chosen) {
+                                    drawCircle(color = tint, radius = size.minDimension / 2f)
+                                    drawArc(
+                                        color = onChosen.copy(alpha = 0.28f),
+                                        startAngle = 0f,
+                                        sweepAngle = 360f,
+                                        useCenter = false,
+                                        topLeft = origin,
+                                        size = ringSize,
+                                        style = Stroke(strokePx),
+                                    )
+                                } else {
+                                    drawArc(
+                                        color = p.fill.copy(alpha = p.fill.alpha * dimFactor),
+                                        startAngle = 0f,
+                                        sweepAngle = 360f,
+                                        useCenter = false,
+                                        topLeft = origin,
+                                        size = ringSize,
+                                        style = Stroke(strokePx),
+                                    )
+                                    if (amount > 0L && progress > 0f) {
+                                        val sweep = (ratio * 340f).coerceAtLeast(24f) * progress
+                                        drawArc(
+                                            color = tint.copy(alpha = (0.36f + ratio * 0.64f) * dimFactor),
+                                            startAngle = -90f,
+                                            sweepAngle = sweep,
+                                            useCenter = false,
+                                            topLeft = origin,
+                                            size = ringSize,
+                                            style = Stroke(strokePx, cap = androidx.compose.ui.graphics.StrokeCap.Round),
+                                        )
+                                    }
+                                }
+                            }
                             Text(
-                                if (date.dayOfMonth == 1 && days.first().date.month != date.month) "${date.monthValue}/1" else "${date.dayOfMonth}",
-                                style = if (chosen) AbType.caption2.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold) else AbType.caption2,
+                                text = label,
+                                style = (if (label.length > 2) AbType.caption2.copy(fontSize = AbType.caption2.fontSize * 0.88f) else AbType.caption2)
+                                    .let { if (chosen || amount > 0L) it.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold) else it },
                                 color = when {
-                                    level >= 4 && (!hasSelection || chosen) -> onStrong
-                                    level == 3 && (!hasSelection || chosen) -> onMedium
-                                    chosen && level == 0 -> tint
-                                    hasSelection && !chosen -> p.secondaryLabel
-                                    else -> p.label
+                                    chosen -> onChosen
+                                    hasSelection -> p.secondaryLabel
+                                    amount > 0L -> p.label
+                                    else -> p.secondaryLabel
                                 },
+                                maxLines = 1,
                             )
                         }
                     }

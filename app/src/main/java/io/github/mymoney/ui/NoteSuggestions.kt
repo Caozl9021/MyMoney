@@ -30,10 +30,12 @@ fun rememberNoteSuggestions(excludeId: Long? = null): (BillDraft) -> List<NoteSu
             runCatching { AppDb.get(context).bills().recentOnce(1000) }.getOrDefault(emptyList())
         }.filterNot { it.id == excludeId }
     }
+    val settings = remember(context) { io.github.mymoney.data.Settings(context) }
     val rules = LocalRuleStore.snapshot()
-    return remember(history, rules) {
+    return remember(history, rules, settings) {
         { current: BillDraft ->
-            NoteSuggester.suggest(
+            if (!settings.noteSuggestionsEnabled) emptyList()
+            else NoteSuggester.suggest(
                 draft = current,
                 history = history,
                 mealWindows = rules.mealWindows,

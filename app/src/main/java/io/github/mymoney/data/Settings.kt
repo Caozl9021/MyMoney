@@ -45,6 +45,11 @@ class Settings(context: Context) {
         get() = prefs.getBoolean(KEY_ISLAND_CONFIRM_ENABLED, false)
         set(value) = uiEdit { putBoolean(KEY_ISLAND_CONFIRM_ENABLED, value) }
 
+    /** 确认卡内是否显示备注快捷建议气泡。 */
+    var noteSuggestionsEnabled: Boolean
+        get() = prefs.getBoolean(KEY_NOTE_SUGGESTIONS_ENABLED, true)
+        set(value) = uiEdit { putBoolean(KEY_NOTE_SUGGESTIONS_ENABLED, value) }
+
     /** 同一应用两次识别的最小间隔，防止页面滚动时刷屏 */
     var minIntervalMs: Long
         get() = prefs.getLong(KEY_MIN_INTERVAL, 1_500L)
@@ -128,6 +133,7 @@ class Settings(context: Context) {
         const val KEY_ENABLED = "enabled"
         const val KEY_AUTO_CONFIRM = "auto_confirm"
         const val KEY_ISLAND_CONFIRM_ENABLED = "island_confirm_enabled"
+        const val KEY_NOTE_SUGGESTIONS_ENABLED = "note_suggestions_enabled"
         const val KEY_MIN_INTERVAL = "min_interval_ms"
         const val KEY_WHITELIST = "whitelist"
         const val KEY_OCR_FALLBACK = "ocr_fallback"

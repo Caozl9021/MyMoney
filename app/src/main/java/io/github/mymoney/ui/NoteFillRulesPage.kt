@@ -50,6 +50,9 @@ internal fun NoteFillRulesPage(
     onBack: () -> Unit,
     onOpenTemplate: () -> Unit,
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val settings = remember(context) { io.github.mymoney.data.Settings(context) }
+    var suggestionsEnabled by remember { mutableStateOf(settings.noteSuggestionsEnabled) }
     val p = LocalAbPalette.current
     val config by NoteFillStore.state.collectAsStateWithLifecycle()
     val storedError by NoteFillStore.error.collectAsStateWithLifecycle()
@@ -120,6 +123,23 @@ internal fun NoteFillRulesPage(
                                     }
                                 }
                             }
+                        },
+                    )
+                    ListRow(
+                        title = "备注快捷建议",
+                        subtitle = "关闭后确认卡不再展示下方建议气泡",
+                        leading = { SettingsIconBadge("备注快捷建议", AbIcons.Note) },
+                        dividerAbove = true,
+                        trailing = {
+                            AbSwitch(suggestionsEnabled) { checked ->
+                                suggestionsEnabled = checked
+                                settings.noteSuggestionsEnabled = checked
+                            }
+                        },
+                        onClick = {
+                            val next = !suggestionsEnabled
+                            suggestionsEnabled = next
+                            settings.noteSuggestionsEnabled = next
                         },
                     )
                 }

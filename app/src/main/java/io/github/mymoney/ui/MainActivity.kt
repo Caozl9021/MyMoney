@@ -92,19 +92,43 @@ class MainActivity : ComponentActivity() {
     /** Tab 索引提到 Activity 层级：内容 ComposeView 与玻璃上的图标 ComposeView 共享它 */
     private val tabState = mutableIntStateOf(0)
     private val requestAdd = mutableIntStateOf(0)
+    private val requestPending = mutableIntStateOf(0)
+    private val closeDetailsRequest = mutableIntStateOf(0)
     private val editorVisible = mutableStateOf(false)
     // One-shot UI intent: deliberately not saved/replayed across Activity recreation.
     private val settingsRootRequest = mutableStateOf<Long?>(null)
     private var settingsRootSequence = 0L
+
+    private fun consumeWidgetRoute(intent: android.content.Intent?) {
+        val action = intent?.action ?: return
+        when (action) {
+            io.github.mymoney.systems.SystemIntegration.ACTION_ADD_BILL -> {
+                tabState.intValue = 0
+                requestAdd.intValue++
+                intent.action = null
+            }
+            io.github.mymoney.systems.SystemIntegration.ACTION_OPEN_STATS -> {
+                tabState.intValue = 1
+                closeDetailsRequest.intValue++
+                intent.action = null
+            }
+            io.github.mymoney.systems.SystemIntegration.ACTION_OPEN_ASSETS -> {
+                tabState.intValue = 2
+                closeDetailsRequest.intValue++
+                intent.action = null
+            }
+            io.github.mymoney.systems.SystemIntegration.ACTION_OPEN_PENDING -> {
+                tabState.intValue = 0
+                requestPending.intValue++
+                intent.action = null
+            }
+        }
+    }
+
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (intent.action == "io.github.mymoney.action.ADD_BILL") {
-            tabState.intValue = 0
-            requestAdd.intValue++
-            // Consume the command while retaining extras identifying the launch source.
-            intent.action = null
-        }
+        consumeWidgetRoute(intent)
         consumeJoinLink(intent)
     }
 
@@ -148,13 +172,11 @@ class MainActivity : ComponentActivity() {
         CaptureModeManager.init(this)
         tabState.intValue = savedInstanceState?.getInt("selectedTab", 0)?.coerceIn(tabs.indices) ?: 0
         requestAdd.intValue = savedInstanceState?.getInt("requestAdd", 0) ?: 0
-        if (savedInstanceState == null && intent.action == "io.github.mymoney.action.ADD_BILL") {
-            tabState.intValue = 0
-            requestAdd.intValue++
-            intent.action = null
+        requestPending.intValue = savedInstanceState?.getInt("requestPending", 0) ?: 0
+        if (savedInstanceState == null) {
+            consumeWidgetRoute(intent)
+            consumeJoinLink(intent)
         }
-        // 冷启动直接由邀请深链拉起时也要接住。
-        if (savedInstanceState == null) consumeJoinLink(intent)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.isNavigationBarContrastEnforced = false
         }
@@ -171,10 +193,17 @@ class MainActivity : ComponentActivity() {
             setViewCompositionStrategy(
                 ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed,
             )
-            setContent { MyMoneyTheme { AppContent(tabState = tabState, requestAdd = requestAdd.intValue,
-                settingsRootRequest = settingsRootRequest.value, onSettingsRootHandled = { handled ->
+            setContent { MyMoneyTheme { AppContent(
+                tabState = tabState,
+                requestAdd = requestAdd.intValue,
+                requestPending = requestPending.intValue,
+                closeDetailsRequest = closeDetailsRequest.intValue,
+                settingsRootRequest = settingsRootRequest.value,
+                onSettingsRootHandled = { handled ->
                     if (settingsRootRequest.value == handled) settingsRootRequest.value = null
-                }, onEditorVisibilityChanged = { editorVisible.value = it }) } }
+                },
+                onEditorVisibilityChanged = { editorVisible.value = it },
+            ) } }
         }
         root.addView(
             contentView,
@@ -283,6 +312,7 @@ class MainActivity : ComponentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putInt("selectedTab", tabState.intValue)
         outState.putInt("requestAdd", requestAdd.intValue)
+        outState.putInt("requestPending", requestPending.intValue)
         super.onSaveInstanceState(outState)
     }
 }
@@ -296,7 +326,15 @@ private val tabs = listOf(
 )
 
 @Composable
-private fun AppContent(tabState: MutableIntState, requestAdd: Int, settingsRootRequest: Long?, onSettingsRootHandled: (Long) -> Unit, onEditorVisibilityChanged: (Boolean) -> Unit) {
+private fun AppContent(
+    tabState: MutableIntState,
+    requestAdd: Int,
+    requestPending: Int,
+    closeDetailsRequest: Int,
+    settingsRootRequest: Long?,
+    onSettingsRootHandled: (Long) -> Unit,
+    onEditorVisibilityChanged: (Boolean) -> Unit,
+) {
     // Outgoing AnimatedContent pages may dispose after the incoming editor opens.
     // Track each page independently so an old page cannot unhide the sibling dock.
     val editors = remember { androidx.compose.runtime.mutableStateMapOf<Int, Boolean>() }
@@ -313,12 +351,28 @@ private fun AppContent(tabState: MutableIntState, requestAdd: Int, settingsRootR
     var detailAddRequest by androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(0) }
     var pendingFilter by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     var consumedAddRequest by androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(0) }
+    var consumedPendingRequest by androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(0) }
+    var consumedCloseDetails by androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(0) }
     androidx.compose.runtime.LaunchedEffect(requestAdd) {
         if (requestAdd != 0 && requestAdd != consumedAddRequest) {
             consumedAddRequest = requestAdd
             detailAddRequest = requestAdd
             detailScope = null
             detailsOpen = true
+        }
+    }
+    androidx.compose.runtime.LaunchedEffect(requestPending) {
+        if (requestPending != 0 && requestPending != consumedPendingRequest) {
+            consumedPendingRequest = requestPending
+            detailScope = null
+            pendingFilter = true
+            detailsOpen = true
+        }
+    }
+    androidx.compose.runtime.LaunchedEffect(closeDetailsRequest) {
+        if (closeDetailsRequest != 0 && closeDetailsRequest != consumedCloseDetails) {
+            consumedCloseDetails = closeDetailsRequest
+            if (detailsOpen) detailsOpen = false
         }
     }
     // 明细是「压在 Tab 之上的整页」，但胶囊 Tab 栏仍然可见（iOS 的推入页观感），
