@@ -27,6 +27,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.billkit.BillType
@@ -38,7 +40,9 @@ import io.github.mymoney.ui.design.AbIcons
 import io.github.mymoney.ui.design.AbRadius
 import io.github.mymoney.ui.design.AbSize
 import io.github.mymoney.ui.design.AbSpacing
+import io.github.mymoney.ui.design.AbTextButton
 import io.github.mymoney.ui.design.AbType
+import io.github.mymoney.ui.design.AppAlertDialog
 import io.github.mymoney.ui.design.AppDialog
 import io.github.mymoney.ui.design.AppDialogActions
 import io.github.mymoney.ui.design.CategoryBadge
@@ -55,7 +59,10 @@ import io.github.mymoney.ui.design.InsetDivider
 import io.github.mymoney.ui.design.InsetGroup
 import io.github.mymoney.ui.design.ListRow
 import io.github.mymoney.ui.design.LocalAbPalette
+import io.github.mymoney.ui.design.SlideSubPage
+import io.github.mymoney.ui.design.SlideSubPageValue
 import io.github.mymoney.ui.design.SubPageScaffold
+import io.github.mymoney.ui.design.abPressFeedback
 import io.github.mymoney.ui.design.rememberAbHaptic
 import io.github.mymoney.ui.design.solidBadgeBackground
 import io.github.mymoney.ui.design.swatchFor
@@ -99,40 +106,18 @@ fun LedgerConfigPage(
     )
     val current = groups.firstOrNull { it.name == openGroup }
 
-    if (showPresets) {
-        ActiveBackHandler { showPresets = false }
-        PresetPickerPage(
-            type = type,
-            existing = groups.map { it.name }.toSet(),
-            onBack = { showPresets = false },
-            onChanged = { version++ },
-        )
-        return
-    }
-
-    if (current != null && !presetsOnly) {
-        ActiveBackHandler { openGroup = null }
-        SubCategoryPage(
-            group = current,
-            type = type,
-            version = version,
-            onBack = { openGroup = null },
-            onChanged = { version++ },
-        )
-        return
-    }
-
     val title = when {
         presetsOnly -> "分类预设"
         fixedTab == 0 -> "支出分类"
         fixedTab == 1 -> "收入分类"
         else -> "分类"
     }
-    SubPageScaffold(title = title, onBack = onBack) { padding ->
-        io.github.mymoney.ui.design.SectionLazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                start = AbSpacing.page,
+    Box(Modifier.fillMaxSize()) {
+        SubPageScaffold(title = title, onBack = onBack) { padding ->
+            io.github.mymoney.ui.design.SectionLazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = AbSpacing.page,
                 end = AbSpacing.page,
                 top = padding.calculateTopPadding(),
                 bottom = padding.calculateBottomPadding(),
@@ -178,10 +163,10 @@ fun LedgerConfigPage(
                             LedgerConfig.reorderGroups(type, next.map { it.name })
                         }.onSuccess { version++ }
                     },
-                ) { group, index, dragging ->
+                ) { group, _, _ ->
                                 GroupRow(
                                     group = group,
-                                    dividerAbove = index > 0 && !dragging,
+                                    dividerAbove = false,
                                     onClick = { openGroup = group.name },
                                 )
                             }
@@ -257,6 +242,26 @@ fun LedgerConfigPage(
 
         }
     }
+        SlideSubPage(visible = showPresets, modifier = Modifier.fillMaxSize()) {
+            ActiveBackHandler { showPresets = false }
+            PresetPickerPage(
+                type = type,
+                existing = groups.map { it.name }.toSet(),
+                onBack = { showPresets = false },
+                onChanged = { version++ },
+            )
+        }
+        SlideSubPageValue(value = if (!showPresets && !presetsOnly) current else null, modifier = Modifier.fillMaxSize()) { targetGroup ->
+            ActiveBackHandler { openGroup = null }
+            SubCategoryPage(
+                group = targetGroup,
+                type = type,
+                version = version,
+                onBack = { openGroup = null },
+                onChanged = { version++ },
+            )
+        }
+    }
 }
 
 @Composable
@@ -303,10 +308,10 @@ private fun PresetPickerPage(
                 item(key = "hint") { GroupHeader("可补 ${presets.size} 个分类") }
                 item(key = "list") {
                     InsetGroup {
-                        presets.forEachIndexed { index, preset ->
+                        presets.forEach { preset ->
                             PresetRow(
                                 preset = preset,
-                                dividerAbove = index > 0,
+                                dividerAbove = false,
                                 onClick = {
                                     runCatching {
                                         LedgerConfig.addGroup(type, preset.name)
@@ -331,14 +336,16 @@ private fun PresetRow(
 ) {
     val p = LocalAbPalette.current
     val haptic = rememberAbHaptic()
+    val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     Column(Modifier.fillMaxWidth()) {
         if (dividerAbove) InsetDivider(inset = AbCardDensity.leadingInset)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = AbSize.minTouch)
+                .abPressFeedback(interaction, pressedScale = 0.992f, tintOverlay = true)
                 .clickable(
-                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    interactionSource = interaction,
                     indication = null,
                 ) { haptic.select(); onClick() }
                 .padding(horizontal = AbSpacing.l, vertical = AbSpacing.m),
@@ -438,25 +445,19 @@ private fun SubCategoryPage(
                                     LedgerConfig.reorderSubs(type, fresh.name, next)
                                 }.onSuccess { onChanged() }
                             },
-                        ) { sub, index, dragging ->
+                        ) { sub, _, _ ->
                             ListRow(
                                 title = sub,
-                                dividerAbove = index > 0 && !dragging,
+                                dividerAbove = false,
                                 trailing = {
-                                    Box(
-                                        Modifier
-                                            .clip(RoundedCornerShape(100.dp))
-                                            .clickable(
-                                                interactionSource = remember { MutableInteractionSource() },
-                                                indication = null,
-                                            ) {
-                                                LedgerConfig.removeSubCategory(type, fresh.name, sub)
-                                                onChanged()
-                                            }
-                                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                                    ) {
-                                        Text("删除", style = AbType.footnote, color = p.red)
-                                    }
+                                    AbTextButton(
+                                        text = "删除",
+                                        color = p.red,
+                                        onClick = {
+                                            LedgerConfig.removeSubCategory(type, fresh.name, sub)
+                                            onChanged()
+                                        },
+                                    )
                                 },
                             )
                         }
@@ -509,6 +510,7 @@ private fun AccountsSection(
 ) {
     val p = LocalAbPalette.current
     var accountError by remember { mutableStateOf<String?>(null) }
+    var removeTarget by remember { mutableStateOf<io.github.mymoney.data.AssetAccount?>(null) }
     val ordered = remember(version, assetAccounts) { assetAccounts.filter { !it.archived } }
 
     Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
@@ -533,11 +535,10 @@ private fun AccountsSection(
                         }.onSuccess { onChanged() }
                             .onFailure { accountError = it.message ?: "账户排序失败，请重试" }
                     },
-                ) { row, index, dragging ->
+                ) { row, _, _ ->
                     ListRow(
                         title = row.name,
                         subtitle = if (!row.initialized) "待设置余额" else null,
-                        dividerAbove = index > 0 && !dragging,
                         leading = {
                             io.github.mymoney.ui.design.AccountAvatar(
                                 name = row.name,
@@ -545,22 +546,29 @@ private fun AccountsSection(
                             )
                         },
                         trailing = {
-                            androidx.compose.material3.Icon(
-                                imageVector = AbIcons.Close,
-                                contentDescription = "从清单移除",
-                                modifier = Modifier
-                                    .size(20.dp)
+                            val removeInteraction = remember(row.id) { MutableInteractionSource() }
+                            Box(
+                                Modifier
+                                    .size(AbSize.minTouch)
+                                    .abPressFeedback(removeInteraction, pressedScale = 0.90f, pressedAlpha = 0.65f)
+                                    .clip(RoundedCornerShape(AbRadius.capsule))
                                     .clickable(
-                                        interactionSource = remember { MutableInteractionSource() },
+                                        interactionSource = removeInteraction,
                                         indication = null,
+                                        role = androidx.compose.ui.semantics.Role.Button,
                                     ) {
-                                        accountError = null
-                                        runCatching { LedgerConfig.removeAccount(row.name) }
-                                            .onSuccess { onChanged() }
-                                            .onFailure { accountError = it.message ?: "移除账户失败，请重试" }
-                                    },
-                                tint = p.secondaryLabel,
-                            )
+                                        removeTarget = row
+                                    }
+                                    .semantics { contentDescription = "从清单移除 ${row.name}" },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                androidx.compose.material3.Icon(
+                                    imageVector = AbIcons.Close,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                    tint = p.secondaryLabel,
+                                )
+                            }
                         },
                         onClick = { onOpenAccount(row.id) },
                     )
@@ -568,6 +576,22 @@ private fun AccountsSection(
             }
         }
         if (accountError != null) InlineMessage(accountError.orEmpty(), isError = true, announce = true)
+    }
+    removeTarget?.let { target ->
+        AppAlertDialog(
+            title = "从清单移除「${target.name}」？",
+            message = "不会删除历史账单；账户余额与流水记录仍保留在资产页。",
+            onDismiss = { removeTarget = null },
+            confirmLabel = "移除",
+            destructive = true,
+            onConfirm = {
+                accountError = null
+                runCatching { LedgerConfig.removeAccount(target.name) }
+                    .onSuccess { onChanged() }
+                    .onFailure { accountError = it.message ?: "移除账户失败，请重试" }
+                removeTarget = null
+            },
+        )
     }
 }
 

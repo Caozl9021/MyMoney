@@ -36,6 +36,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import io.github.mymoney.ui.design.displayTracking
+import io.github.mymoney.ui.design.tabular
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -99,31 +102,40 @@ fun ConfirmResultSheet(
     val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
     val offsetY = remember { Animatable(if (reduceMotion || !animateEntranceFromBottom) 0f else screenHeightPx) }
     val morphScale = remember { Animatable(if (reduceMotion || animateEntranceFromBottom) 1f else 0.96f) }
-    val morphAlpha = remember { Animatable(if (reduceMotion || animateEntranceFromBottom) 1f else 0f) }
+    val morphAlpha = remember { Animatable(if (reduceMotion) 0f else if (animateEntranceFromBottom) 1f else 0.45f) }
+    val checkScale = remember { Animatable(if (reduceMotion) 1f else 0.84f) }
     var dragging by remember { mutableStateOf(false) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
     var closing by remember { mutableStateOf(false) }
-    val displayedOffset = if (dragging) dragOffset else offsetY.value
     LaunchedEffect(Unit) { focus.clearFocus(force = true); keyboard?.hide() }
     LaunchedEffect(reduceMotion, animateEntranceFromBottom) {
         if (reduceMotion) {
             offsetY.snapTo(0f)
             morphScale.snapTo(1f)
-            morphAlpha.snapTo(1f)
+            checkScale.snapTo(1f)
+            morphAlpha.animateTo(1f, tween(140, easing = io.github.mymoney.ui.design.AbEasing.EaseOut))
         } else if (animateEntranceFromBottom) {
-            offsetY.animateTo(0f, AbSpring.sheetFloat(false))
+            launch { offsetY.animateTo(0f, AbSpring.sheetFloat(false)) }
+            launch { checkScale.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.72f, stiffness = 480f)) }
         } else {
             launch { morphScale.animateTo(1f, AbSpring.morphFloat(false)) }
-            launch { morphAlpha.animateTo(1f, tween(160)) }
+            launch { morphAlpha.animateTo(1f, tween(160, easing = io.github.mymoney.ui.design.AbEasing.EaseOut)) }
+            launch { checkScale.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.72f, stiffness = 480f)) }
         }
     }
-    fun closeAnimated() {
+    fun closeAnimated(dragVelocity: Float? = null) {
         if (closing) return
         closing = true
         scope.launch {
             var delivered = false
             try {
-                offsetY.animateTo(screenHeightPx, tween(if (reduceMotion) 0 else AbMotion.normal))
+                if (reduceMotion) {
+                    morphAlpha.animateTo(0f, tween(110, easing = io.github.mymoney.ui.design.AbEasing.EaseOut))
+                } else if (dragVelocity != null) {
+                    offsetY.animateTo(screenHeightPx, AbSpring.sheetFloat(false), initialVelocity = dragVelocity)
+                } else {
+                    offsetY.animateTo(screenHeightPx, tween(180, easing = io.github.mymoney.ui.design.AbEasing.EaseOut))
+                }
                 delivered = true
                 onDismiss()
             } finally {
@@ -148,10 +160,14 @@ fun ConfirmResultSheet(
         val cents = draft.priceCents
         "%d.%02d".format(Locale.US, cents / 100, cents % 100)
     }
-    val scrimAlpha = (0.32f * (1f - (displayedOffset / (screenHeightPx * 0.7f).coerceAtLeast(1f)))).coerceIn(0f, 0.32f)
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
         Box(
-            Modifier.fillMaxSize().background(Color.Black.copy(alpha = scrimAlpha))
+            Modifier.fillMaxSize()
+                .drawBehind {
+                    val y = if (dragging) dragOffset else offsetY.value
+                    val base = (0.32f * (1f - (y / (screenHeightPx * 0.7f).coerceAtLeast(1f)))).coerceIn(0f, 0.32f)
+                    drawRect(Color.Black.copy(alpha = base * morphAlpha.value))
+                }
                 .clickable(remember { MutableInteractionSource() }, indication = null, enabled = !closing) { closeAnimated() }
                 .semantics { contentDescription = "完成，关闭记账结果" },
         )
@@ -167,8 +183,8 @@ fun ConfirmResultSheet(
                 modifier = Modifier
                     .widthIn(max = 560.dp)
                     .fillMaxWidth()
-                    .offset { IntOffset(0, displayedOffset.roundToInt()) }
                     .graphicsLayer {
+                        translationY = if (dragging) dragOffset else offsetY.value
                         scaleX = morphScale.value
                         scaleY = morphScale.value
                         alpha = morphAlpha.value
@@ -187,6 +203,7 @@ fun ConfirmResultSheet(
                             dragOffset = nextOffset
                         },
                         onDismiss = { closeAnimated() },
+                        onDragDismiss = { v -> closeAnimated(v) },
                     )
                     Column(
                         Modifier.fillMaxWidth()
@@ -196,7 +213,10 @@ fun ConfirmResultSheet(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AbSpacing.m)) {
                             Box(
-                                Modifier.size(32.dp).clip(RoundedCornerShape(AbRadius.capsule)).background(solidBadgeBackground(p.green)),
+                                Modifier.size(32.dp)
+                                    .graphicsLayer { scaleX = checkScale.value; scaleY = checkScale.value }
+                                    .clip(RoundedCornerShape(AbRadius.capsule))
+                                    .background(solidBadgeBackground(p.green)),
                                 contentAlignment = Alignment.Center,
                             ) { Icon(AbIcons.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp)) }
                             Text(title, style = AbType.headline, color = p.label,
@@ -209,9 +229,9 @@ fun ConfirmResultSheet(
                             draft.note?.takeIf { it.isNotBlank() }?.let {
                                 Text(it, style = AbType.body.copy(fontWeight = FontWeight.Medium), color = p.label)
                             }
-                            Text("¥ $amount", style = AbType.amountEntry.copy(fontSize = amountSize.sp, lineHeight = (amountSize * 1.2f).sp), color = amountTint(p, draft.type.name), maxLines = 1,
+                            Text("¥ $amount", style = AbType.amountEntry.displayTracking(amountSize).copy(lineHeight = (amountSize * 1.2f).sp), color = amountTint(p, draft.type.name), maxLines = 1,
                                 modifier = Modifier.semantics { contentDescription = "$type，金额$amount 元" })
-                            Text("$type · $date", style = AbType.footnote, color = p.secondaryLabel)
+                            Text("$type · $date", style = AbType.footnote.tabular(), color = p.secondaryLabel)
                         }
                         Box(Modifier.fillMaxWidth().height(0.5.dp).background(p.separator))
                         Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {

@@ -4,7 +4,9 @@ import android.os.Bundle
 import androidx.compose.runtime.*
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.togetherWith
 import androidx.lifecycle.ViewModel
+import androidx.compose.animation.togetherWith
 import androidx.lifecycle.ViewModelProvider
 import io.github.mymoney.ui.design.rememberAbHaptic
 import android.widget.Toast
@@ -113,30 +115,42 @@ class ConfirmActivity : ComponentActivity() {
                     val result = operation.result
                     var sawConfirmForm by remember(draft.historyId) { mutableStateOf(false) }
                     SideEffect { if (result == null) sawConfirmForm = true }
-                    if (result != null && ConfirmFeedback.closeAfterSave(result)) {
-                        // Real write completed: close without a success result surface.
-                    } else if (result != null) {
-                        ConfirmResultSheet(
-                            draft = result.bill?.let(BillWriter::toDraft) ?: operation.edited ?: draft,
-                            title = ConfirmFeedback.saved(result.inserted),
-                            detail = ConfirmFeedback.resultDetail(result),
-                            canView = result.bill != null,
-                            onDismiss = { finish() },
-                            onView = { result.bill?.let { BillResultActivity.open(this@ConfirmActivity, it.id) } },
-                            animateEntranceFromBottom = !sawConfirmForm,
-                        )
-                    } else ConfirmSheet(
-                        draft = operation.edited ?: draft,
-                        saving = operation.saving,
-                        errorMessage = operation.error,
-                        busyLabel = operation.busyLabel,
-                        onDraftChange = { operation.edited = it },
-                        onSave = { operation.submit(applicationContext, draft, it) },
-                        onImport = { operation.submit(applicationContext, draft, it) },
-                        onIgnore = { operation.update { RecognitionStore.ignore(draft.historyId!!) } },
-                        onDismiss = { edited -> operation.update { RecognitionStore.preserve(edited) } },
-                        noteSuggestions = rememberNoteSuggestions(),
-                    )
+                    val showResult = result != null && !ConfirmFeedback.closeAfterSave(result)
+                    val reduceMotion = io.github.mymoney.ui.design.LocalReduceMotion.current
+                    androidx.compose.animation.AnimatedContent(
+                        targetState = showResult,
+                        transitionSpec = {
+                            val ease = io.github.mymoney.ui.design.AbEasing.EaseOut
+                            androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(if (reduceMotion) 120 else 160, easing = ease)) togetherWith
+                                androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(110, easing = ease))
+                        },
+                        label = "confirm-activity-stage",
+                    ) { resultVisible ->
+                        if (resultVisible && result != null) {
+                            ConfirmResultSheet(
+                                draft = result.bill?.let(BillWriter::toDraft) ?: operation.edited ?: draft,
+                                title = ConfirmFeedback.saved(result.inserted),
+                                detail = ConfirmFeedback.resultDetail(result),
+                                canView = result.bill != null,
+                                onDismiss = { finish() },
+                                onView = { result.bill?.let { BillResultActivity.open(this@ConfirmActivity, it.id) } },
+                                animateEntranceFromBottom = !sawConfirmForm,
+                            )
+                        } else if (result == null) {
+                            ConfirmSheet(
+                                draft = operation.edited ?: draft,
+                                saving = operation.saving,
+                                errorMessage = operation.error,
+                                busyLabel = operation.busyLabel,
+                                onDraftChange = { operation.edited = it },
+                                onSave = { operation.submit(applicationContext, draft, it) },
+                                onImport = { operation.submit(applicationContext, draft, it) },
+                                onIgnore = { operation.update { RecognitionStore.ignore(draft.historyId!!) } },
+                                onDismiss = { edited -> operation.update { RecognitionStore.preserve(edited) } },
+                                noteSuggestions = rememberNoteSuggestions(),
+                            )
+                        }
+                    }
                 }
             }
         }

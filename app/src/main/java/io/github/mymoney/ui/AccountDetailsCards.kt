@@ -1,7 +1,11 @@
 package io.github.mymoney.ui
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -9,9 +13,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -32,7 +39,10 @@ internal fun AccountBalanceCard(account: AssetAccount, balance: Long, hidden: Bo
                 horizontalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
                 AccountAvatar(account.name, size = 40.dp)
                 Text(account.name, style = AbType.title2, color = p.label, modifier = Modifier.weight(1f))
-                Box(Modifier.heightIn(min = 48.dp).widthIn(min = 60.dp).clickable(onClick = onMore)
+                val moreInteraction = remember { MutableInteractionSource() }
+                Box(Modifier.heightIn(min = 48.dp).widthIn(min = 60.dp)
+                    .abPressFeedback(moreInteraction, pressedScale = 0.94f, pressedAlpha = 0.72f)
+                    .clickable(interactionSource = moreInteraction, indication = null, onClick = onMore)
                     .semantics { contentDescription = "更多账户操作" }, contentAlignment = Alignment.Center) {
                     Text("更多", style = AbType.footnote, color = p.secondaryLabel,
                         modifier = Modifier.clip(RoundedCornerShape(AbRadius.capsule)).background(p.fill)
@@ -40,9 +50,11 @@ internal fun AccountBalanceCard(account: AssetAccount, balance: Long, hidden: Bo
                 }
             }
             Text("账户余额（CNY）", style = AbType.footnote, color = p.secondaryLabel)
+            val balanceInteraction = remember { MutableInteractionSource() }
             Row(
                 Modifier.fillMaxWidth()
-                    .clickable(onClick = onEditBalance)
+                    .abPressFeedback(balanceInteraction, pressedScale = 0.985f, pressedAlpha = 0.76f)
+                    .clickable(interactionSource = balanceInteraction, indication = null, onClick = onEditBalance)
                     .semantics {
                         contentDescription = if (account.initialized) "调整余额" else "设置当前余额"
                     },
@@ -68,27 +80,44 @@ internal fun LazyListScope.accountPeriodCards(periods: List<AccountHistoryPeriod
         val open = key in expanded
         item("account-period-$key") {
             val p = LocalAbPalette.current
+            val reduceMotion = LocalReduceMotion.current
             val endMonth = if (period.day == 1) period.month else YearMonth.from(period.endDate)
             val title = "${endMonth.year}年${endMonth.monthValue}月"
+            val headerInteraction = remember(key) { MutableInteractionSource() }
+            val arrowRotation by animateFloatAsState(
+                targetValue = if (open) 90f else 0f,
+                animationSpec = tween(if (reduceMotion) 110 else 180, easing = AbEasing.EaseOut),
+                label = "period-arrow",
+            )
             Column(Modifier.fillMaxWidth().padding(top = AbCardDensity.gap)
                 .clip(RoundedCornerShape(topStart = AbRadius.group, topEnd = AbRadius.group,
                     bottomStart = if (open) 0.dp else AbRadius.group, bottomEnd = if (open) 0.dp else AbRadius.group))
                 .background(p.cardBg)) {
-                Row(Modifier.fillMaxWidth().clickable { onToggle(key) }
-                    .semantics(mergeDescendants = true) {
-                        contentDescription = "${if (period.month == currentMonth) "本期" else "历史账期"} $title ${period.label()}"
-                        stateDescription = if (open) "已展开" else "已收起"
-                    }.heightIn(min = 64.dp).padding(AbCardDensity.content), verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
+                Row(
+                    Modifier.fillMaxWidth()
+                        .abPressFeedback(headerInteraction, pressedScale = 0.99f, tintOverlay = true)
+                        .clickable(interactionSource = headerInteraction, indication = null) { onToggle(key) }
+                        .semantics(mergeDescendants = true) {
+                            contentDescription = "${if (period.month == currentMonth) "本期" else "历史账期"} $title ${period.label()}"
+                            stateDescription = if (open) "已展开" else "已收起"
+                        }.heightIn(min = 64.dp).padding(AbCardDensity.content),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
+                ) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
                         Text(if (period.month == currentMonth) "本期 · $title" else title, style = AbType.headline, color = p.label)
                         Text(period.shortLabel(), style = AbType.caption1, color = p.secondaryLabel)
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        Text("流出 ${if (hidden) "••••" else assetMoney(group.outflow)}", style = AbType.footnote, color = p.expense)
-                        Text("流入 ${if (hidden) "••••" else assetMoney(group.inflow)}", style = AbType.footnote, color = p.income)
+                        Text("流出 ${if (hidden) "••••" else assetMoney(group.outflow)}", style = AbType.footnote.tabular(), color = p.expense)
+                        Text("流入 ${if (hidden) "••••" else assetMoney(group.inflow)}", style = AbType.footnote.tabular(), color = p.income)
                     }
-                    Icon(if (open) AbIcons.ChevronDown else AbIcons.ChevronRight, null, Modifier.size(18.dp), tint = p.secondaryLabel)
+                    Icon(
+                        AbIcons.ChevronRight,
+                        null,
+                        Modifier.size(18.dp).graphicsLayer { rotationZ = arrowRotation },
+                        tint = p.secondaryLabel,
+                    )
                 }
                 if (open) InsetDivider(inset = AbCardDensity.content)
             }
@@ -127,7 +156,7 @@ internal fun LazyListScope.accountPeriodCards(periods: List<AccountHistoryPeriod
                     Column(horizontalAlignment = Alignment.End, modifier = Modifier.widthIn(max = 150.dp)) {
                         val delta = bill?.let { AssetMath.delta(it.type, it.priceCents) } ?: entry!!.deltaCents
                         Text(if (hidden) "••••" else (if (delta > 0) "+" else "") + assetMoney(delta), style = AbType.amountRow, color = tint)
-                        row.balanceAfter?.takeIf { manual }?.let { Text("余额 ${if (hidden) "••••" else assetMoney(it)}", style = AbType.caption1, color = p.secondaryLabel) }
+                        row.balanceAfter?.takeIf { manual }?.let { Text("余额 ${if (hidden) "••••" else assetMoney(it)}", style = AbType.caption1.tabular(), color = p.secondaryLabel) }
                     }
                 }, onClick = when {
                     bill != null -> ({ onBill(bill.id) })

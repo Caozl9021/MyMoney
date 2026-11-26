@@ -6,7 +6,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.LaunchedEffect
@@ -24,8 +23,11 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import io.github.mymoney.ui.design.AbEasing
+import io.github.mymoney.ui.design.AbSpring
 import io.github.mymoney.ui.design.LocalReduceMotion
 import io.github.mymoney.ui.design.LocalAbPalette
 import io.github.mymoney.ui.design.AbType
@@ -108,7 +110,7 @@ fun BillEditorDialog(
     LaunchedEffect(target, targetFont, reduceMotion, interrupted, exiting) {
         if (exiting) return@LaunchedEffect
         if (!shared || interrupted) progress.snapTo(1f)
-        else if (target != null && targetFont != null) progress.animateTo(1f, tween(320, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+        else if (target != null && targetFont != null) progress.animateTo(1f, AbSpring.sheetFloat(false))
     }
 
     val transitionScope = rememberCoroutineScope()
@@ -121,6 +123,8 @@ fun BillEditorDialog(
     fun leave(saved: Boolean) {
         if (exiting) return
         exiting = true
+        focus.clearFocus(force = true)
+        keyboard?.hide()
         operation.exitRequested = saved
         reverseDraft = if (saved) operation.savedDraft ?: draft else draft
         reverseTarget = currentTarget ?: target
@@ -140,12 +144,10 @@ fun BillEditorDialog(
             progress.animateTo(
                 0f,
                 tween(
-                    if (reduceMotion) 0 else if (shared) 280 else 185,
-                    easing = androidx.compose.animation.core.FastOutSlowInEasing,
+                    if (reduceMotion) 115 else if (shared) 220 else 185,
+                    easing = AbEasing.EaseOut,
                 ),
             )
-            focus.clearFocus(force = true)
-            keyboard?.hide()
             EditorSaveOperations.remove(operationKey)
             latestClose()
         }
@@ -213,9 +215,24 @@ fun BillEditorDialog(
             val x = sourceRect.left + (destination.left - sourceRect.left) * fraction - hostOrigin.x
             val y = sourceRect.top + (destination.top - sourceRect.top) * fraction - hostOrigin.y
             val shownDraft = reverseDraft ?: draft
-            BillAmountDisplay(shownDraft.priceCents, shownDraft.type.name,
-                modifier = Modifier.graphicsLayer { translationX = x; translationY = y }.clearAndSetSemantics {},
-                amountFontSize = lerp(if (exiting) reverseSourceFont ?: sourceFont else sourceFont, targetFont ?: sourceFont, fraction))
+            val endFont = targetFont ?: sourceFont
+            val startFont = if (exiting) reverseSourceFont ?: sourceFont else sourceFont
+            val startRatio = (startFont.value / endFont.value.coerceAtLeast(1f)).coerceIn(0.25f, 2f)
+            val fontScale = startRatio + (1f - startRatio) * fraction
+            BillAmountDisplay(
+                shownDraft.priceCents,
+                shownDraft.type.name,
+                modifier = Modifier
+                    .graphicsLayer {
+                        translationX = x
+                        translationY = y
+                        scaleX = fontScale
+                        scaleY = fontScale
+                        transformOrigin = TransformOrigin(0f, 0.5f)
+                    }
+                    .clearAndSetSemantics {},
+                amountFontSize = endFont,
+            )
         }
     }
 }

@@ -3,11 +3,7 @@ package io.github.mymoney.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -29,6 +25,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -46,7 +43,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -216,7 +216,7 @@ fun AssetsScreen(onBack: () -> Unit, isTab: Boolean = false, onSubpageVisibility
                     if (!isTab) item { InsetGroup {
                         ListRow(title = "账户管理", chevron = true,
                             dividerAbove = false, onClick = { form = "candidates" })
-                        ListRow(title = "显示归档账户", dividerAbove = true,
+                        ListRow(title = "显示归档账户",
                             trailing = { AbSwitch(showArchived) { showArchived = it; prefs.edit().putBoolean("show_archived", it).apply() } },
                             onClick = { showArchived = !showArchived; prefs.edit().putBoolean("show_archived", showArchived).apply() })
                     } }
@@ -257,12 +257,12 @@ fun AssetsScreen(onBack: () -> Unit, isTab: Boolean = false, onSubpageVisibility
                                                     AssetStore.reorderActive(next.map { it.id })
                                                 }.onFailure { error = it.message ?: "排序失败，请重试" }
                                             },
-                                        ) { row, index, dragging ->
+                                        ) { row, _, _ ->
                                             AssetAccountRow(
                                                 account = row,
                                                 balance = AssetMath.balance(row.id, entries),
                                                 hidden = hidden,
-                                                dividerAbove = index > 0 && !dragging,
+                                                dividerAbove = false,
                                                 onClick = { selected = row.id },
                                             )
                                         }
@@ -350,10 +350,12 @@ private fun AssetNetWorthCard(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("净资产", style = AbType.subhead, color = p.secondaryLabel)
+            val eyeInteraction = remember { MutableInteractionSource() }
             Box(
-                Modifier.size(48.dp).clip(CircleShape).clickable(
-                    interactionSource = remember { MutableInteractionSource() }, indication = null,
-                ) { haptic.select(); onToggleHidden() },
+                Modifier.size(48.dp)
+                    .abPressFeedback(eyeInteraction, pressedScale = 0.90f, pressedAlpha = 0.68f)
+                    .clip(CircleShape)
+                    .clickable(interactionSource = eyeInteraction, indication = null) { haptic.select(); onToggleHidden() },
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -401,7 +403,7 @@ private fun AssetGroupTitle(text: String, trailing: String?) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(text, style = AbType.sectionHeader, color = p.secondaryLabel, modifier = Modifier.weight(1f))
-        if (trailing != null) Text(trailing, style = AbType.footnote, color = p.secondaryLabel, maxLines = 1)
+        if (trailing != null) Text(trailing, style = AbType.footnote.tabular(), color = p.secondaryLabel, maxLines = 1)
     }
 }
 
@@ -480,10 +482,22 @@ private fun AssetConfirmation(
 }
 
 @Composable
-internal fun AssetFormField(label: String, value: String, placeholder: String = "", onValue: (String) -> Unit) {
+internal fun AssetFormField(
+    label: String,
+    value: String,
+    placeholder: String = "",
+    keyboardType: KeyboardType = KeyboardType.Text,
+    onValue: (String) -> Unit,
+) {
     InsetGroup { Column(Modifier.fillMaxWidth().padding(AbCardDensity.content), verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
         Text(label, style = AbType.footnote, color = LocalAbPalette.current.secondaryLabel)
-        AbTextField(value, onValue, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), placeholder = placeholder)
+        AbTextField(
+            value,
+            onValue,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            placeholder = placeholder,
+            keyboardType = keyboardType,
+        )
     } }
 }
 
@@ -533,7 +547,6 @@ private fun AssetAccountForm(
                         title = if (original.initialized) "调整余额" else "设置当前余额",
                         subtitle = positionLabel(original, balance),
                         chevron = true,
-                        dividerAbove = true,
                         onClick = onEditBalance,
                     )
                 }
@@ -593,19 +606,21 @@ private fun AssetBalanceSheet(
     var dragging by remember { mutableStateOf(false) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
     var closing by remember { mutableStateOf(false) }
-    val displayedOffset = if (dragging) dragOffset else offsetY.value
+    val animAlpha = remember { Animatable(if (reduceMotion) 0f else 1f) }
     val latestOnDismiss by rememberUpdatedState(onDismiss)
 
-    fun dismissAnimated() {
+    fun dismissAnimated(dragVelocity: Float? = null) {
         if (busy || closing) return
-        if (reduceMotion) {
-            latestOnDismiss()
-            return
-        }
         closing = true
         scope.launch {
             try {
-                offsetY.animateTo(slideStartPx, tween(175))
+                if (reduceMotion) {
+                    animAlpha.animateTo(0f, tween(110, easing = AbEasing.EaseOut))
+                } else if (dragVelocity != null) {
+                    offsetY.animateTo(slideStartPx, AbSpring.sheetFloat(false), initialVelocity = dragVelocity)
+                } else {
+                    offsetY.animateTo(slideStartPx, tween(175, easing = AbEasing.EaseOut))
+                }
                 latestOnDismiss()
             } finally {
                 closing = false
@@ -615,13 +630,18 @@ private fun AssetBalanceSheet(
 
     ActiveBackHandler { dismissAnimated() }
     LaunchedEffect(reduceMotion) {
-        if (reduceMotion) offsetY.snapTo(0f) else offsetY.animateTo(0f, AbSpring.sheetFloat(false))
+        if (reduceMotion) {
+            offsetY.snapTo(0f)
+            animAlpha.animateTo(1f, tween(140, easing = AbEasing.EaseOut))
+        } else {
+            animAlpha.snapTo(1f)
+            offsetY.animateTo(0f, AbSpring.sheetFloat(false))
+        }
     }
 
-    val scrimProgress = (1f - (displayedOffset / slideStartPx.coerceAtLeast(1f))).coerceIn(0f, 1f)
-    val dimAlpha = (if (isDark) 0.40f else 0.24f) * scrimProgress
+    val maxDim = if (isDark) 0.40f else 0.24f
     val fieldShape = RoundedCornerShape(AbRadius.row)
-    val fieldBg = if (isDark) Color(0x18FFFFFF) else Color(0x0E767680)
+    val fieldBg = p.fill
     val quickReasons = remember(account.initialized) {
         if (account.initialized) listOf("对账校准", "盘点差异", "利息收益", "手续费补记")
         else listOf("设置当前余额", "初始启用")
@@ -630,7 +650,11 @@ private fun AssetBalanceSheet(
     Box(
         Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = dimAlpha))
+            .drawBehind {
+                val y = if (dragging) dragOffset else offsetY.value
+                val progress = (1f - (y / slideStartPx.coerceAtLeast(1f))).coerceIn(0f, 1f)
+                drawRect(Color.Black.copy(alpha = maxDim * progress * animAlpha.value))
+            }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -651,7 +675,10 @@ private fun AssetBalanceSheet(
                 modifier = Modifier
                     .widthIn(max = 560.dp)
                     .fillMaxWidth()
-                    .offset { IntOffset(0, displayedOffset.roundToInt()) }
+                    .graphicsLayer {
+                        translationY = if (dragging) dragOffset else offsetY.value
+                        alpha = animAlpha.value
+                    }
                     .heightIn(max = maxHeight * 0.90f)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
@@ -669,6 +696,7 @@ private fun AssetBalanceSheet(
                                 dragOffset = nextOffset
                             },
                             onDismiss = { dismissAnimated() },
+                            onDragDismiss = { v -> dismissAnimated(v) },
                         )
                         Column(
                             Modifier
@@ -768,19 +796,34 @@ private fun AssetBalanceSheet(
                                 ) {
                                     quickReasons.forEach { preset ->
                                         val selected = reason == preset
+                                        val chipInteraction = remember(preset) { MutableInteractionSource() }
                                         Box(
                                             Modifier
-                                                .clip(RoundedCornerShape(AbRadius.capsule))
-                                                .background(if (selected) p.accent.copy(alpha = if (isDark) 0.28f else 0.16f) else p.fill)
-                                                .clickable(enabled = !busy) { reason = preset; error = null }
-                                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                                                .heightIn(min = AbSize.minTouch)
+                                                .abPressFeedback(chipInteraction, enabled = !busy, pressedScale = 0.955f, pressedAlpha = 0.8f)
+                                                .clickable(interactionSource = chipInteraction, indication = null, enabled = !busy) {
+                                                    reason = preset; error = null
+                                                }
+                                                .semantics {
+                                                    role = Role.Button
+                                                    this.selected = selected
+                                                    stateDescription = if (selected) "已选中" else "未选中"
+                                                },
+                                            contentAlignment = Alignment.Center,
                                         ) {
-                                            Text(
-                                                preset,
-                                                style = AbType.caption1.copy(fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium),
-                                                color = if (selected) p.accent else p.secondaryLabel,
-                                                maxLines = 1,
-                                            )
+                                            Box(
+                                                Modifier
+                                                    .clip(RoundedCornerShape(AbRadius.capsule))
+                                                    .background(if (selected) p.accent.copy(alpha = if (isDark) 0.28f else 0.16f) else p.fill)
+                                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                            ) {
+                                                Text(
+                                                    preset,
+                                                    style = AbType.caption1.copy(fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium),
+                                                    color = if (selected) p.accent else p.secondaryLabel,
+                                                    maxLines = 1,
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -875,19 +918,43 @@ fun AssetTransferScreen(initialFromId: String? = null, original: BillEntity? = n
         io.github.mymoney.ui.design.SectionLazyColumn(Modifier.fillMaxSize().imePadding(), contentPadding = PaddingValues(start = AbSpacing.page, end = AbSpacing.page,
             top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding()), verticalArrangement = Arrangement.spacedBy(AbCardDensity.gap)) {
             item(contentType = io.github.mymoney.ui.design.SectionRole.HEADER) { GroupHeader("转出账户") }
-            items(eligible, key = { "from-${it.id}" }) { candidate -> InsetGroup {
-                ListRow(title = candidate.name, subtitle = positionLabel(candidate, AssetMath.balance(candidate.id, entries)),
-                    trailing = { Text(if (from == candidate.id) "✓" else "", color = LocalAbPalette.current.accent) }, onClick = { from = candidate.id })
-            } }
+            item {
+                InsetGroup {
+                    eligible.forEach { candidate ->
+                        ListRow(
+                            title = candidate.name,
+                            subtitle = positionLabel(candidate, AssetMath.balance(candidate.id, entries)),
+                            trailing = {
+                                if (from == candidate.id) {
+                                    Icon(AbIcons.Check, contentDescription = "已选", tint = LocalAbPalette.current.accent, modifier = Modifier.size(18.dp))
+                                }
+                            },
+                            onClick = { from = candidate.id },
+                        )
+                    }
+                }
+            }
             item(contentType = io.github.mymoney.ui.design.SectionRole.HEADER) { GroupHeader("转入 / 还款账户") }
-            items(eligible, key = { "to-${it.id}" }) { candidate -> InsetGroup {
-                ListRow(title = candidate.name, subtitle = positionLabel(candidate, AssetMath.balance(candidate.id, entries)),
-                    trailing = { Text(if (to == candidate.id) "✓" else "", color = LocalAbPalette.current.accent) }, onClick = { to = candidate.id })
-            } }
+            item {
+                InsetGroup {
+                    eligible.forEach { candidate ->
+                        ListRow(
+                            title = candidate.name,
+                            subtitle = positionLabel(candidate, AssetMath.balance(candidate.id, entries)),
+                            trailing = {
+                                if (to == candidate.id) {
+                                    Icon(AbIcons.Check, contentDescription = "已选", tint = LocalAbPalette.current.accent, modifier = Modifier.size(18.dp))
+                                }
+                            },
+                            onClick = { to = candidate.id },
+                        )
+                    }
+                }
+            }
             if (eligible.size < 2) item { InlineMessage("请先为至少两个可用账户设置余额。", isError = true) }
-            item { AssetFormField("本金（元）", amount) { amount = it } }
-            item { AssetFormField("手续费（元）", fee) { fee = it } }
-            item { InsetGroup { ListRow(title = "账单时间", subtitle = date, onClick = if (busy) null else { { dateOpen = true } }) } }
+            item { AssetFormField("本金（元）", amount, keyboardType = KeyboardType.Decimal) { amount = it } }
+            item { AssetFormField("手续费（元）", fee, keyboardType = KeyboardType.Decimal) { fee = it } }
+            item { InsetGroup { ListRow(title = "账单时间", subtitle = date, chevron = true, onClick = if (busy) null else { { dateOpen = true } }) } }
             item { AssetFormField("备注", note) { note = it } }
             if (error != null) item { InlineMessage(error.orEmpty(), isError = true, announce = true) }
             item(contentType = io.github.mymoney.ui.design.SectionRole.ACTION) { PrimaryButton("预览转账", modifier = Modifier.fillMaxWidth(), busy = busy, onClick = {

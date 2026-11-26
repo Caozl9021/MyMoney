@@ -171,6 +171,7 @@ internal class LiquidPillLensView(
     private val hostLoc = IntArray(2)
     private var hasActiveLens = false
     private var isRecording = false
+    private var frameDirty = true
     private var listenerAttached = false
 
     private val preDrawListener = ViewTreeObserver.OnPreDrawListener {
@@ -178,21 +179,32 @@ internal class LiquidPillLensView(
         true
     }
 
+    private fun markFrameDirty() {
+        frameDirty = true
+        invalidate()
+    }
+
     init {
         isClickable = false
         isFocusable = false
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
         bridge.shaderReady = shader != null
-        bridge.onInvalidate = { invalidate() }
+        bridge.onInvalidate = { markFrameDirty() }
     }
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        bridge.onInvalidate = { invalidate() }
+        bridge.onInvalidate = { markFrameDirty() }
+        markFrameDirty()
         if (!listenerAttached) {
             viewTreeObserver.addOnPreDrawListener(preDrawListener)
             listenerAttached = true
         }
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        markFrameDirty()
     }
 
     override fun onDetachedFromWindow() {
@@ -204,13 +216,16 @@ internal class LiquidPillLensView(
         }
         bridge.onInvalidate = null
         hasActiveLens = false
+        frameDirty = false
         lensNode.discardDisplayList()
         super.onDetachedFromWindow()
     }
 
     private fun updateLensNode() {
         val activeShader = shader ?: return
+        if (!frameDirty && !hasActiveLens) return
         if (!bridge.enabled || isRecording || !isLaidOut || !dockStage.isLaidOut || width <= 0 || height <= 0) {
+            frameDirty = false
             if (hasActiveLens) {
                 hasActiveLens = false
                 lensNode.discardDisplayList()
@@ -220,6 +235,7 @@ internal class LiquidPillLensView(
         }
         val frame = bridge.frameProvider?.invoke(width.toFloat(), height.toFloat())
         if (frame == null || frame.lensMix <= 0.005f) {
+            frameDirty = false
             if (hasActiveLens) {
                 hasActiveLens = false
                 lensNode.discardDisplayList()
@@ -227,6 +243,12 @@ internal class LiquidPillLensView(
             }
             return
         }
+        frameDirty = false
+
+        val px = dockStage.width * 0.5f
+        val py = dockStage.height * 0.5f
+        if (dockStage.pivotX != px) dockStage.pivotX = px
+        if (dockStage.pivotY != py) dockStage.pivotY = py
 
         isRecording = true
         try {

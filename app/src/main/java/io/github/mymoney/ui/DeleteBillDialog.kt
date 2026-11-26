@@ -1,5 +1,6 @@
 package io.github.mymoney.ui
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -32,38 +33,44 @@ internal fun DeleteBillDialog(billId: Long, origin: String, onDismiss: () -> Uni
     AppDialog("删除这笔账单？", onDismiss = { if (!busy) dismissed() }, dismissible = !busy) {
         val group = rows
         val bill = group?.firstOrNull()
-        when {
-            bill != null -> {
-                val label = billCategoryDisplay(bill.category, bill.subCategory, bill.type)
-                    ?: bill.note?.takeIf(String::isNotBlank)
-                    ?: bill.merchant
-                    ?: "账单"
-                Text(
-                    "$label · ${formatAmount(bill.priceCents, signed = true, type = bill.type)}",
-                    style = AbType.body,
-                    color = LocalAbPalette.current.label,
-                )
-                val reimbursed = group.any { it.reimburseStatus == io.github.mymoney.data.Reimburse.REIMBURSED }
-                val accountName = bill.account ?: "关联账户"
-                val balanceHint = when {
-                    bill.type == "TRANSFER" && bill.assetLinked ->
-                        "删除后金额将返回原转出账户${if (group.size > 1) "（含手续费）" else ""}"
-                    reimbursed && bill.assetLinked ->
-                        "删除后金额将返回「$accountName」（含报销退回部分）"
-                    bill.type == "INCOME" && bill.assetLinked ->
-                        "删除后「$accountName」余额将返回记账前状态"
-                    bill.assetLinked ->
-                        "删除后金额将返回「$accountName」"
-                    else -> null
+        val reduceMotion = LocalReduceMotion.current
+        Column(
+            Modifier.fillMaxWidth().animateContentSize(AbSpring.morphSize(reduceMotion)),
+            verticalArrangement = Arrangement.spacedBy(AbSpacing.s),
+        ) {
+            when {
+                bill != null -> {
+                    val label = billCategoryDisplay(bill.category, bill.subCategory, bill.type)
+                        ?: bill.note?.takeIf(String::isNotBlank)
+                        ?: bill.merchant
+                        ?: "账单"
+                    Text(
+                        "$label · ${formatAmount(bill.priceCents, signed = true, type = bill.type)}",
+                        style = AbType.body.tabular(),
+                        color = LocalAbPalette.current.label,
+                    )
+                    val reimbursed = group.any { it.reimburseStatus == io.github.mymoney.data.Reimburse.REIMBURSED }
+                    val accountName = bill.account ?: "关联账户"
+                    val balanceHint = when {
+                        bill.type == "TRANSFER" && bill.assetLinked ->
+                            "删除后金额将返回原转出账户${if (group.size > 1) "（含手续费）" else ""}"
+                        reimbursed && bill.assetLinked ->
+                            "删除后金额将返回「$accountName」（含报销退回部分）"
+                        bill.type == "INCOME" && bill.assetLinked ->
+                            "删除后「$accountName」余额将返回记账前状态"
+                        bill.assetLinked ->
+                            "删除后金额将返回「$accountName」"
+                        else -> null
+                    }
+                    if (balanceHint != null) {
+                        Text(balanceHint, style = AbType.footnote, color = LocalAbPalette.current.secondaryLabel)
+                    }
                 }
-                if (balanceHint != null) {
-                    Text(balanceHint, style = AbType.footnote, color = LocalAbPalette.current.secondaryLabel)
-                }
+                group != null -> Text("这笔账单已不存在，请返回列表。", color = LocalAbPalette.current.secondaryLabel)
+                error == null -> Text("正在核对账单…", color = LocalAbPalette.current.secondaryLabel)
             }
-            group != null -> Text("这笔账单已不存在，请返回列表。", color = LocalAbPalette.current.secondaryLabel)
-            error == null -> Text("正在核对账单…", color = LocalAbPalette.current.secondaryLabel)
+            error?.let { InlineMessage(it, isError = true, announce = true) }
         }
-        error?.let { InlineMessage(it, isError = true, announce = true) }
         if (error != null) SecondaryButton("重新核对", enabled = !busy, onClick = { retry++ }, modifier = Modifier.fillMaxWidth())
         val animatedDismiss = LocalDialogDismiss.current
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AbSpacing.m)) {

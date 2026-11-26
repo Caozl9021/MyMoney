@@ -107,6 +107,6 @@ class BrandColorsTest {
 
     @Test fun reducingMotionUsesNoBrandTween() {
         assertEquals(0, BrandMotion.duration(true))
-        assertEquals(320, BrandMotion.duration(false))
+        assertEquals(220, BrandMotion.duration(false))
     }
 }

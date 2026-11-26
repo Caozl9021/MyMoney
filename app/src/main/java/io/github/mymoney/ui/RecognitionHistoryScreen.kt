@@ -100,7 +100,7 @@ fun RecognitionHistoryScreen(onBack: () -> Unit, initialFilter: String = "ALL", 
                     InsetGroup {
                         Column(Modifier.fillMaxWidth().padding(AbSpacing.m), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(row.merchant ?: "识别到一笔账单", style = AbType.headline, color = p.label)
-                            Text("${historyType(row.type)} ${formatAmount(row.priceCents)}", style = AbType.headline, color = amountTint(p, row.type))
+                            Text("${historyType(row.type)} ${formatAmount(row.priceCents)}", style = AbType.amountRow, color = amountTint(p, row.type))
                             StatusLabel(historyStatus(row.status), emphasized = row.status == RecognitionStatus.PENDING,
                                 icon = when (row.status) {
                                     RecognitionStatus.PENDING -> AbIcons.Clock
@@ -116,7 +116,7 @@ fun RecognitionHistoryScreen(onBack: () -> Unit, initialFilter: String = "ALL", 
                                 row.hasExplicitTime -> ""
                                 else -> "（页面未提供，使用识别时间）"
                             }}\n来源：${row.sourcePkg}",
-                                style = AbType.caption1, color = p.secondaryLabel)
+                                style = AbType.caption1.tabular(), color = p.secondaryLabel)
                             if (row.reviewOf != null && row.status == RecognitionStatus.PENDING) {
                                 InlineMessage("待核对：另一来源可能是同一笔交易。未自动合并，也未再次弹框；请比较金额和交易信息。")
                             }

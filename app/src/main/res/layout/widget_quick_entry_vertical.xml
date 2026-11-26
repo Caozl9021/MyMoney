@@ -10,7 +10,7 @@
 
     <LinearLayout
         android:id="@+id/widget_card"
-        android:layout_width="60dp"
+        android:layout_width="62dp"
         android:layout_height="match_parent"
         android:layout_gravity="center"
         android:background="@drawable/widget_background_glass_dark"

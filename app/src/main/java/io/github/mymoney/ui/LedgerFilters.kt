@@ -203,20 +203,27 @@ internal fun LedgerFilters(
             ) {
                 Text(
                     summaryLabel,
-                    style = AbType.caption1,
+                    style = AbType.caption1.tabular(),
                     color = palette.secondaryLabel,
                     modifier = Modifier.weight(1f),
                 )
                 if (active) {
-                    Text(
-                        "清除筛选",
-                        style = AbType.caption1.copy(fontWeight = FontWeight.Medium),
-                        color = palette.accent,
-                        modifier = Modifier
+                    val clearInteraction = remember { MutableInteractionSource() }
+                    Box(
+                        Modifier
+                            .heightIn(min = AbSize.minTouch)
+                            .abPressFeedback(clearInteraction, pressedScale = 0.95f, pressedAlpha = 0.65f)
                             .clip(RoundedCornerShape(AbRadius.capsule))
-                            .clickable(onClick = onClear)
-                            .padding(horizontal = AbSpacing.s, vertical = 2.dp),
-                    )
+                            .clickable(interactionSource = clearInteraction, indication = null, role = Role.Button, onClick = onClear)
+                            .padding(horizontal = AbSpacing.s),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            "清除筛选",
+                            style = AbType.caption1.copy(fontWeight = FontWeight.Medium),
+                            color = palette.accent,
+                        )
+                    }
                 }
             }
         }
@@ -294,39 +301,56 @@ private fun LedgerFilterPill(
 ) {
     val p = LocalAbPalette.current
     val isDark = p.pageBg.luminance() < 0.1f
-    val bg = if (selected) p.accent.copy(alpha = if (isDark) 0.28f else 0.15f) else p.fill
-    val fg = if (selected) p.accent else p.label
+    val reduceMotion = LocalReduceMotion.current
+    val interaction = remember { MutableInteractionSource() }
+    val bg by androidx.compose.animation.animateColorAsState(
+        if (selected) p.accent.copy(alpha = if (isDark) 0.28f else 0.15f) else p.fill,
+        androidx.compose.animation.core.tween(if (reduceMotion) 110 else AbMotion.selection, easing = AbEasing.EaseOut),
+        label = "pill-bg",
+    )
+    val fg by androidx.compose.animation.animateColorAsState(
+        if (selected) p.accent else p.label,
+        androidx.compose.animation.core.tween(if (reduceMotion) 110 else AbMotion.selection, easing = AbEasing.EaseOut),
+        label = "pill-fg",
+    )
     val shape = RoundedCornerShape(AbRadius.capsule)
-    Row(
+    Box(
         modifier = modifier
-            .height(34.dp)
-            .clip(shape)
-            .background(bg)
+            .heightIn(min = AbSize.minTouch)
+            .abPressFeedback(interaction, pressedScale = 0.96f, pressedAlpha = 0.8f)
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = interaction,
                 indication = null,
                 onClick = onClick,
             )
             .semantics {
                 this.selected = selected
                 role = Role.Tab
-            }
-            .padding(start = 12.dp, end = 9.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
+            },
+        contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = text,
-            style = AbType.footnote.copy(fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium),
-            color = fg,
-            maxLines = 1,
-        )
-        Icon(
-            imageVector = AbIcons.ChevronDown,
-            contentDescription = null,
-            modifier = Modifier.size(13.dp),
-            tint = fg.copy(alpha = 0.8f),
-        )
+        Row(
+            modifier = Modifier
+                .height(34.dp)
+                .clip(shape)
+                .background(bg)
+                .padding(start = 12.dp, end = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Text(
+                text = text,
+                style = AbType.footnote.copy(fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium),
+                color = fg,
+                maxLines = 1,
+            )
+            Icon(
+                imageVector = AbIcons.ChevronDown,
+                contentDescription = null,
+                modifier = Modifier.size(13.dp),
+                tint = fg.copy(alpha = 0.8f),
+            )
+        }
     }
 }
 
@@ -349,59 +373,89 @@ private fun LedgerSearchField(
     onSearch: () -> Unit,
 ) {
     val p = LocalAbPalette.current
+    val reduceMotion = LocalReduceMotion.current
     val focusRequester = remember { FocusRequester() }
     val shape = RoundedCornerShape(AbRadius.capsule)
-    val bg = if (focused) p.cardBg else p.fill
-    Row(
+    val bg by androidx.compose.animation.animateColorAsState(
+        if (focused) p.cardBg else p.fill,
+        androidx.compose.animation.core.tween(if (reduceMotion) 110 else 150, easing = AbEasing.EaseOut),
+        label = "search-bg",
+    )
+    val borderColor by androidx.compose.animation.animateColorAsState(
+        if (focused) p.accent.copy(alpha = 0.55f) else androidx.compose.ui.graphics.Color.Transparent,
+        androidx.compose.animation.core.tween(if (reduceMotion) 110 else 150, easing = AbEasing.EaseOut),
+        label = "search-border",
+    )
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(38.dp)
-            .clip(shape)
-            .background(bg)
-            .then(
-                if (focused) Modifier.border(0.75.dp, p.accent.copy(alpha = 0.55f), shape)
-                else Modifier,
-            )
+            .heightIn(min = AbSize.minTouch)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-            ) { focusRequester.requestFocus() }
-            .padding(start = 12.dp, end = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
+            ) { focusRequester.requestFocus() },
+        contentAlignment = Alignment.Center,
     ) {
-        Icon(AbIcons.Search, contentDescription = null, Modifier.size(16.dp), tint = p.secondaryLabel)
-        BasicTextField(
-            value = keyword,
-            onValueChange = onKeyword,
+        Row(
             modifier = Modifier
-                .weight(1f)
-                .focusRequester(focusRequester)
-                .onFocusChanged { onFocusChange(it.isFocused) }
-                .semantics { contentDescription = "搜索商户或备注" },
-            singleLine = true,
-            textStyle = AbType.subhead.copy(color = p.label),
-            cursorBrush = SolidColor(p.accent),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = {
-                onSearch()
-            }),
-            decorationBox = { inner ->
-                Box(contentAlignment = Alignment.CenterStart) {
-                    if (keyword.isEmpty()) {
-                        Text("搜索商户或备注", style = AbType.subhead, color = p.secondaryLabel, maxLines = 1)
+                .fillMaxWidth()
+                .height(38.dp)
+                .clip(shape)
+                .background(bg)
+                .border(0.75.dp, borderColor, shape)
+                .padding(start = 12.dp, end = 0.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
+        ) {
+            Icon(AbIcons.Search, contentDescription = null, Modifier.size(16.dp), tint = p.secondaryLabel)
+            BasicTextField(
+                value = keyword,
+                onValueChange = onKeyword,
+                modifier = Modifier
+                    .weight(1f)
+                    .focusRequester(focusRequester)
+                    .onFocusChanged { onFocusChange(it.isFocused) }
+                    .semantics { contentDescription = "搜索商户或备注" },
+                singleLine = true,
+                textStyle = AbType.subhead.copy(color = p.label),
+                cursorBrush = SolidColor(p.accent),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = {
+                    onSearch()
+                }),
+                decorationBox = { inner ->
+                    Box(contentAlignment = Alignment.CenterStart) {
+                        if (keyword.isEmpty()) {
+                            Text("搜索商户或备注", style = AbType.subhead, color = p.secondaryLabel, maxLines = 1)
+                        }
+                        inner()
                     }
-                    inner()
-                }
-            },
-        )
-        if (keyword.isNotEmpty()) {
-            Box(
-                Modifier.size(32.dp).clip(CircleShape).clickable { onKeyword("") }
-                    .semantics { contentDescription = "清除搜索" },
-                contentAlignment = Alignment.Center,
+                },
+            )
+            androidx.compose.animation.AnimatedVisibility(
+                visible = keyword.isNotEmpty(),
+                enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(120, easing = AbEasing.EaseOut)) +
+                    androidx.compose.animation.scaleIn(androidx.compose.animation.core.tween(120, easing = AbEasing.EaseOut), initialScale = 0.9f),
+                exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(90, easing = AbEasing.EaseOut)) +
+                    androidx.compose.animation.scaleOut(androidx.compose.animation.core.tween(90, easing = AbEasing.EaseOut), targetScale = 0.9f),
             ) {
-                Icon(AbIcons.Close, contentDescription = null, Modifier.size(15.dp), tint = p.secondaryLabel)
+                val clearInteraction = remember { MutableInteractionSource() }
+                Box(
+                    Modifier
+                        .size(AbSize.minTouch)
+                        .abPressFeedback(clearInteraction, pressedScale = 0.90f, pressedAlpha = 0.65f)
+                        .clip(CircleShape)
+                        .clickable(interactionSource = clearInteraction, indication = null, role = Role.Button) { onKeyword("") }
+                        .semantics { contentDescription = "清除搜索" },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        Modifier.size(28.dp).clip(CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(AbIcons.Close, contentDescription = null, Modifier.size(15.dp), tint = p.secondaryLabel)
+                    }
+                }
             }
         }
     }

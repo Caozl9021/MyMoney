@@ -15,10 +15,11 @@ fun animatedBrandRoles(theme: BrandTheme, dark: Boolean, reduceMotion: Boolean):
     state.targetState = theme
     val transition = rememberTransition(state, label = "brand-theme")
     val duration = BrandMotion.duration(reduceMotion)
-    val primary by transition.animateColor({ tween(duration) }, label = "brand-primary") { BrandColors.roles(it, dark).primary }
-    val onPrimary by transition.animateColor({ tween(duration) }, label = "brand-on-primary") { BrandColors.roles(it, dark).onPrimary }
-    val container by transition.animateColor({ tween(duration) }, label = "brand-container") { BrandColors.roles(it, dark).container }
-    val onContainer by transition.animateColor({ tween(duration) }, label = "brand-on-container") { BrandColors.roles(it, dark).onContainer }
-    val inverse by transition.animateColor({ tween(duration) }, label = "brand-inverse") { BrandColors.roles(it, dark).inversePrimary }
+    val spec = { tween<androidx.compose.ui.graphics.Color>(duration, easing = AbEasing.EaseOut) }
+    val primary by transition.animateColor({ spec() }, label = "brand-primary") { BrandColors.roles(it, dark).primary }
+    val onPrimary by transition.animateColor({ spec() }, label = "brand-on-primary") { BrandColors.roles(it, dark).onPrimary }
+    val container by transition.animateColor({ spec() }, label = "brand-container") { BrandColors.roles(it, dark).container }
+    val onContainer by transition.animateColor({ spec() }, label = "brand-on-container") { BrandColors.roles(it, dark).onContainer }
+    val inverse by transition.animateColor({ spec() }, label = "brand-inverse") { BrandColors.roles(it, dark).inversePrimary }
     return BrandColors.readable(BrandColorRoles(primary, onPrimary, container, onContainer, inverse))
 }

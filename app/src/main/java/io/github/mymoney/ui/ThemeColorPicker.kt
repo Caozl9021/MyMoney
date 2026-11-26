@@ -41,6 +41,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
+import io.github.mymoney.ui.design.AbEasing
 import io.github.mymoney.ui.design.AbIcons
 import io.github.mymoney.ui.design.AbRadius
 import io.github.mymoney.ui.design.AbSpacing
@@ -55,6 +56,7 @@ import io.github.mymoney.ui.design.LocalAbPalette
 import io.github.mymoney.ui.design.LocalLiquidGlassEnabled
 import io.github.mymoney.ui.design.LocalReduceMotion
 import io.github.mymoney.ui.design.LocalReduceTransparency
+import io.github.mymoney.ui.design.abPressFeedback
 import io.github.mymoney.ui.design.appearanceRevision
 import io.github.mymoney.ui.design.liquidSpecularRimBrush
 import io.github.mymoney.ui.design.rememberAbHaptic
@@ -71,9 +73,6 @@ internal fun ThemeColorPicker() {
     val reduceMotion = LocalReduceMotion.current
     val effectiveGlass = LocalLiquidGlassEnabled.current && !LocalReduceTransparency.current
     val haptic = rememberAbHaptic()
-    val scope = rememberCoroutineScope()
-    var pressing by remember { mutableStateOf<BrandTheme?>(null) }
-    val pressScale = remember { Animatable(1f) }
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer()
     val textConstraints = with(density) { Constraints(maxWidth = 64.dp.roundToPx()) }
@@ -97,44 +96,40 @@ internal fun ThemeColorPicker() {
                 val roles = BrandColors.roles(theme, isDark)
                 val ringAlpha by animateFloatAsState(
                     targetValue = if (active) 1f else 0f,
-                    animationSpec = if (reduceMotion) tween(0) else tween(BrandMotion.COLOR_MS),
+                    animationSpec = if (reduceMotion) tween(100, easing = AbEasing.EaseOut)
+                    else tween(BrandMotion.duration(false), easing = AbEasing.EaseOut),
                     label = "theme-ring-${theme.id}",
                 )
+                val swatchInteraction = remember(theme) { androidx.compose.foundation.interaction.MutableInteractionSource() }
                 Column(
                     modifier = Modifier
                         .weight(1f)
+                        .abPressFeedback(swatchInteraction, pressedScale = 0.94f, pressedAlpha = 0.85f)
                         .clip(RoundedCornerShape(AbRadius.row))
-                        .selectable(selected = active, role = Role.RadioButton) {
+                        .selectable(
+                            selected = active,
+                            interactionSource = swatchInteraction,
+                            indication = null,
+                            role = Role.RadioButton,
+                        ) {
                             if (theme == selected) return@selectable
                             haptic.select()
                             Appearance.setBrandTheme(context, theme)
-                            if (!reduceMotion) {
-                                scope.launch {
-                                    pressing = theme
-                                    pressScale.animateTo(BrandMotion.PRESSED_SCALE, tween(BrandMotion.PRESS_DOWN_MS))
-                                    pressScale.animateTo(1f, tween(BrandMotion.PRESS_UP_MS))
-                                    pressing = null
-                                }
-                            }
                         }
                         .semantics { stateDescription = if (active) "已选择" else "未选择" }
                         .padding(vertical = AbSpacing.s, horizontal = AbSpacing.xs),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .graphicsLayer {
-                                val s = if (pressing == theme) pressScale.value else 1f
-                                scaleX = s
-                                scaleY = s
-                            },
+                        modifier = Modifier.size(44.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         if (ringAlpha > 0.01f) {
+                            val ringScale = if (reduceMotion) 1f else (0.90f + 0.10f * ringAlpha)
                             Box(
                                 Modifier
                                     .size(44.dp)
+                                    .graphicsLayer { scaleX = ringScale; scaleY = ringScale }
                                     .border(2.dp, roles.primary.copy(alpha = ringAlpha), CircleShape),
                             )
                         }
@@ -149,7 +144,15 @@ internal fun ThemeColorPicker() {
                                 ),
                             contentAlignment = Alignment.Center,
                         ) {
-                            if (active) {
+                            androidx.compose.animation.AnimatedVisibility(
+                                visible = active,
+                                enter = if (reduceMotion) androidx.compose.animation.fadeIn(tween(110, easing = AbEasing.EaseOut))
+                                else androidx.compose.animation.scaleIn(tween(150, easing = AbEasing.EaseOut), initialScale = 0.85f) +
+                                    androidx.compose.animation.fadeIn(tween(120, easing = AbEasing.EaseOut)),
+                                exit = if (reduceMotion) androidx.compose.animation.fadeOut(tween(90, easing = AbEasing.EaseOut))
+                                else androidx.compose.animation.scaleOut(tween(100, easing = AbEasing.EaseOut), targetScale = 0.85f) +
+                                    androidx.compose.animation.fadeOut(tween(90, easing = AbEasing.EaseOut)),
+                            ) {
                                 Icon(
                                     imageVector = AbIcons.Check,
                                     contentDescription = null,

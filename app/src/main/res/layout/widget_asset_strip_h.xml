@@ -58,6 +58,8 @@
                 android:autoSizeMinTextSize="12sp"
                 android:autoSizeStepGranularity="1sp"
                 android:autoSizeTextType="uniform"
+                android:ellipsize="end"
+                android:fontFeatureSettings="tnum"
                 android:maxLines="1"
                 android:text="¥0.00"
                 android:textColor="@color/widget_primary"
@@ -67,10 +69,11 @@
 
         <ImageView
             android:id="@+id/widget_eye"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:layout_marginStart="4dp"
-            android:padding="4dp"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="2dp"
+            android:layout_marginEnd="-6dp"
+            android:padding="12dp"
             android:src="@drawable/ic_widget_eye_on" />
     </LinearLayout>
 </FrameLayout>

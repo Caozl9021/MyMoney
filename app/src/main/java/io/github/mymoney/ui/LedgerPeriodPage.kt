@@ -42,34 +42,35 @@ internal fun LedgerPeriodPage(onBack: () -> Unit) {
     ActiveBackHandler(enabled = busy) { }
     SettingsRootExitHandler(enabled = busy) { /* Match the existing busy back guard. */ }
     ActiveBackHandler(enabled = picker && !busy) { picker = false }
-    if (picker) {
-        MonthStartDayPage(selected, clock, onBack = { picker = false }, onSelect = { selected = it; picker = false })
-        return
-    }
-    SettingsContentPage("记账周期", { if (!busy) onBack() }) {
-        GroupHeader("每月起始日")
-        InsetGroup {
-            ListRow(title = "每月 $selected 日", chevron = true,
-                onClick = { if (!busy) picker = true })
-        }
-        GroupHeader("周期预览")
-        InsetGroup {
-            ListRow(title = if (selected == 1) "本月" else "本期", subtitle = current.label())
-            ListRow(title = if (selected == 1) "上月" else "上期", subtitle = current.shift(-1).label(), dividerAbove = true)
-        }
-        message?.let { InlineMessage(it, isError = true, announce = true) }
-        PrimaryButton("保存", onClick = {
-            busy = true; message = null
-            scope.launch {
-                runCatching { withContext(Dispatchers.IO) { LedgerPeriodStore.save(context, selected) } }
-                    .onSuccess {
-                        ReimburseFeedback.show("已按每月${selected}日统计")
-                        onBack()
-                    }.onFailure { message = it.message ?: "保存失败，请重试" }
-                busy = false
+    Box(Modifier.fillMaxSize()) {
+        SettingsContentPage("记账周期", { if (!busy) onBack() }) {
+            GroupHeader("每月起始日")
+            InsetGroup {
+                ListRow(title = "每月 $selected 日", chevron = true,
+                    onClick = { if (!busy) picker = true })
             }
-        }, modifier = Modifier.fillMaxWidth(), busy = busy, busyLabel = "正在保存…", enabled = !busy)
-        if (selected != 1) SecondaryButton("恢复每月1日", { selected = 1 }, Modifier.fillMaxWidth(), enabled = !busy)
+            GroupHeader("周期预览")
+            InsetGroup {
+                ListRow(title = if (selected == 1) "本月" else "本期", subtitle = current.label())
+                ListRow(title = if (selected == 1) "上月" else "上期", subtitle = current.shift(-1).label())
+            }
+            message?.let { InlineMessage(it, isError = true, announce = true) }
+            PrimaryButton("保存", onClick = {
+                busy = true; message = null
+                scope.launch {
+                    runCatching { withContext(Dispatchers.IO) { LedgerPeriodStore.save(context, selected) } }
+                        .onSuccess {
+                            ReimburseFeedback.show("已按每月${selected}日统计")
+                            onBack()
+                        }.onFailure { message = it.message ?: "保存失败，请重试" }
+                    busy = false
+                }
+            }, modifier = Modifier.fillMaxWidth(), busy = busy, busyLabel = "正在保存…", enabled = !busy)
+            if (selected != 1) SecondaryButton("恢复每月1日", { selected = 1 }, Modifier.fillMaxWidth(), enabled = !busy)
+        }
+        SlideSubPage(visible = picker, modifier = Modifier.fillMaxSize()) {
+            MonthStartDayPage(selected, clock, onBack = { picker = false }, onSelect = { selected = it; picker = false })
+        }
     }
 }
 
@@ -78,13 +79,13 @@ internal fun LedgerPeriodPage(onBack: () -> Unit) {
 private fun MonthStartDayPage(initial: Int, clock: LedgerClock, onBack: () -> Unit, onSelect: (Int) -> Unit) {
     var draft by rememberSaveable(initial) { mutableIntStateOf(initial) }
     val palette = LocalAbPalette.current
+    val reduceMotion = LocalReduceMotion.current
     val fontScale = LocalDensity.current.fontScale.coerceAtLeast(1f)
     val preview = LedgerMonthPeriod.containing(clock.date, draft, clock.zone)
     SettingsContentPage("每月起始日", onBack) {
         GroupHeader("选择日期")
         InsetGroup {
             ListRow(title = "每月 $draft 日开始", subtitle = preview.label())
-            InsetDivider()
             BoxWithConstraints(Modifier.fillMaxWidth().padding(AbCardDensity.content)) {
                 val columns = (maxWidth.value / (48f * fontScale)).toInt().coerceIn(2, 7)
                 Column(Modifier.fillMaxWidth().selectableGroup(), verticalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
@@ -93,12 +94,20 @@ private fun MonthStartDayPage(initial: Int, clock: LedgerClock, onBack: () -> Un
                             line.forEach { day ->
                                 val chosen = draft == day
                                 val shape = RoundedCornerShape(AbRadius.chip)
-                                Box(Modifier.weight(1f).heightIn(min = 48.dp).clip(shape)
-                                    .background(if (chosen) palette.accent else palette.fill)
-                                    .selectable(selected = chosen, role = Role.RadioButton, onClick = { draft = day })
+                                val cellInteraction = remember(day) { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                                val cellBg by androidx.compose.animation.animateColorAsState(
+                                    if (chosen) palette.accent else palette.fill,
+                                    androidx.compose.animation.core.tween(if (reduceMotion) 110 else AbMotion.selection, easing = AbEasing.EaseOut),
+                                    label = "period-day-bg",
+                                )
+                                Box(Modifier.weight(1f).heightIn(min = 48.dp)
+                                    .abPressFeedback(cellInteraction, pressedScale = 0.94f, pressedAlpha = 0.8f)
+                                    .clip(shape)
+                                    .background(cellBg)
+                                    .selectable(selected = chosen, interactionSource = cellInteraction, indication = null, role = Role.RadioButton, onClick = { draft = day })
                                     .semantics { contentDescription = "每月${day}日" }
                                     .padding(vertical = AbSpacing.s, horizontal = 2.dp), contentAlignment = Alignment.Center) {
-                                    Text(day.toString(), style = AbType.body.copy(fontWeight = if (chosen) FontWeight.SemiBold else FontWeight.Normal), color = if (chosen) palette.onAccent else palette.label)
+                                    Text(day.toString(), style = AbType.body.copy(fontWeight = if (chosen) FontWeight.SemiBold else FontWeight.Normal).tabular(), color = if (chosen) palette.onAccent else palette.label)
                                 }
                             }
                             repeat(columns - line.size) { Spacer(Modifier.weight(1f)) }

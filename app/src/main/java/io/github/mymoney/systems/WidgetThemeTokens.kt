@@ -86,7 +86,7 @@ object WidgetThemeTokens {
             views.setImageViewResource(viewId, R.drawable.widget_accent_pill)
             if (surfaceStyle == WidgetSurfaceStyle.GLASS_DARK) {
                 views.setInt(viewId, "setColorFilter", palette.accent or (0xFF shl 24))
-                views.setInt(viewId, "setImageAlpha", 82)
+                views.setInt(viewId, "setImageAlpha", 168)
             } else {
                 views.setInt(viewId, "setColorFilter", palette.accentContainer or (0xFF shl 24))
                 views.setInt(viewId, "setImageAlpha", 255)

@@ -43,9 +43,12 @@
 
             <ImageView
                 android:id="@+id/widget_eye"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:padding="4dp"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:layout_marginTop="-5dp"
+                android:layout_marginEnd="-5dp"
+                android:layout_marginBottom="-5dp"
+                android:padding="9dp"
                 android:src="@drawable/ic_widget_eye_on" />
         </LinearLayout>
 
@@ -58,6 +61,8 @@
             android:autoSizeMinTextSize="13sp"
             android:autoSizeStepGranularity="1sp"
             android:autoSizeTextType="uniform"
+            android:ellipsize="end"
+            android:fontFeatureSettings="tnum"
             android:maxLines="1"
             android:text="¥0.00"
             android:textColor="@color/widget_primary"
@@ -71,6 +76,7 @@
             android:layout_marginTop="3dp"
             android:background="@drawable/widget_pill_glass_dark"
             android:ellipsize="end"
+            android:fontFeatureSettings="tnum"
             android:maxLines="1"
             android:paddingHorizontal="7dp"
             android:paddingVertical="2dp"

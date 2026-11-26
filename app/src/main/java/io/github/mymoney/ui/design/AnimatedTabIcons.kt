@@ -58,21 +58,21 @@ fun TabGlyphIcon(glyph: TabGlyph, active: Boolean, tint: Color, modifier: Modifi
         when (glyph) {
             TabGlyph.HOME -> {
                 progress.snapTo(0f)
-                progress.animateTo(1f, tween(600, easing = CubicBezierEasing(.42f, 0f, .58f, 1f)))
+                progress.animateTo(1f, tween(210, easing = AbEasing.EaseOut))
             }
             TabGlyph.CARD -> displacement.animateTo(0f, keyframes {
-                durationMillis = 700
-                0f at 0 using CubicBezierEasing(.42f, 0f, .58f, 1f)
-                -4f at 280 using CubicBezierEasing(.42f, 0f, .58f, 1f)
-                1.5f at 525 using CubicBezierEasing(.42f, 0f, .58f, 1f)
-                0f at 700
+                durationMillis = 220
+                0f at 0 using AbEasing.EaseOut
+                -2.6f at 85 using AbEasing.EaseInOut
+                0.8f at 165 using AbEasing.EaseOut
+                0f at 220
             })
             TabGlyph.PIE -> {
-                displacement.animateTo(1.1f, spring(dampingRatio = .48f, stiffness = 250f))
-                displacement.animateTo(0f, spring(dampingRatio = 1f, stiffness = 250f))
+                displacement.animateTo(1.1f, spring(dampingRatio = .56f, stiffness = 480f))
+                displacement.animateTo(0f, spring(dampingRatio = 1f, stiffness = 420f))
             }
             TabGlyph.SETTINGS -> {
-                rotation.animateTo(180f, spring(dampingRatio = .71f, stiffness = 50f))
+                rotation.animateTo(180f, spring(dampingRatio = .92f, stiffness = 420f))
                 // Six-fold symmetric gear: 180° has the same resting silhouette as 0°.
                 rotation.snapTo(0f)
             }

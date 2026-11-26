@@ -1,8 +1,10 @@
 package io.github.mymoney.data
 
+import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 
 /** The month key is never derived from a clamped previous boundary. */
 data class LedgerMonthPeriod(val month: YearMonth, val day: Int, val zone: ZoneId = ZoneId.systemDefault()) {
@@ -16,6 +18,13 @@ data class LedgerMonthPeriod(val month: YearMonth, val day: Int, val zone: ZoneI
     fun shift(amount: Long) = copy(month = month.plusMonths(amount))
     fun label(): String = "${startDate} – ${endDate}"
     fun shortLabel(): String = "${startDate.monthValue}/${startDate.dayOfMonth}–${endDate.monthValue}/${endDate.dayOfMonth}"
+    /** 从当前周期往回数到包含 [earliestMillis] 的最早账期所需的回退期数。 */
+    fun periodsBackTo(earliestMillis: Long?): Int {
+        if (earliestMillis == null) return 0
+        val earliestDate = Instant.ofEpochMilli(earliestMillis).atZone(zone).toLocalDate()
+        val earliestPeriod = containing(earliestDate, day, zone)
+        return ChronoUnit.MONTHS.between(earliestPeriod.month, month).toInt().coerceAtLeast(0)
+    }
     companion object {
         fun containing(date: LocalDate, day: Int = 1, zone: ZoneId = ZoneId.systemDefault()): LedgerMonthPeriod {
             val candidate = LedgerMonthPeriod(YearMonth.from(date), day, zone)

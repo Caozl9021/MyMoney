@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.Text
@@ -22,8 +23,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.billkit.BillDraft
 import io.github.mymoney.data.LedgerConfig
@@ -62,7 +62,8 @@ internal fun NoteFillRulesPage(
     var editor by rememberSaveable { mutableStateOf<String?>(null) }
     val currentTemplate = LedgerConfig.noteTemplate
 
-    SubPageScaffold("备注", onBack) { padding ->
+    Box(Modifier.fillMaxSize()) {
+        SubPageScaffold("备注", onBack) { padding ->
         LazyColumn(
             Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
@@ -93,7 +94,6 @@ internal fun NoteFillRulesPage(
                     ListRow(
                         title = "商品说明优先",
                         leading = { SettingsIconBadge("商品说明优先", AbIcons.Filter) },
-                        dividerAbove = true,
                         trailing = {
                             AbSwitch(config.productFirst) { checked ->
                                 if (!busy) {
@@ -129,7 +129,6 @@ internal fun NoteFillRulesPage(
                         title = "备注快捷建议",
                         subtitle = "关闭后确认卡不再展示下方建议气泡",
                         leading = { SettingsIconBadge("备注快捷建议", AbIcons.Note) },
-                        dividerAbove = true,
                         trailing = {
                             AbSwitch(suggestionsEnabled) { checked ->
                                 suggestionsEnabled = checked
@@ -145,7 +144,7 @@ internal fun NoteFillRulesPage(
                 }
             }
             (error ?: storedError)?.let { e ->
-                item { InsetGroup { ListRow(title = e) } }
+                item { InlineMessage(e, isError = true, announce = true) }
             }
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(AbLayout.headingGap)) {
@@ -157,13 +156,12 @@ internal fun NoteFillRulesPage(
                         InsetGroup { ListRow(title = "暂无商家规则") }
                     } else {
                         InsetGroup {
-                            config.rules.forEachIndexed { index, rule ->
+                            config.rules.forEach { rule ->
                                 val detail = "${ruleAppName(rule.app)} · ${noteTypeName(rule.type)} · ${rule.mode.label}" +
                                     if (rule.mode == NoteFillMode.FIXED) "：${rule.text}" else ""
                                 ListRow(
                                     title = rule.merchant,
                                     subtitle = detail,
-                                    dividerAbove = index > 0,
                                     chevron = true,
                                     onClick = { editor = rule.itemKey },
                                 )
@@ -181,13 +179,14 @@ internal fun NoteFillRulesPage(
                 )
             }
         }
-    }
-    editor?.let { key ->
-        MerchantNoteRuleEditor(
-            config.rules.firstOrNull { it.itemKey == key },
-            onClose = { editor = null },
-            onSaved = { editor = null },
-        )
+        }
+        SlideSubPageValue(value = editor, modifier = Modifier.fillMaxSize()) { key ->
+            MerchantNoteRuleEditor(
+                config.rules.firstOrNull { it.itemKey == key },
+                onClose = { editor = null },
+                onSaved = { editor = null },
+            )
+        }
     }
 }
 
@@ -196,12 +195,20 @@ private fun Modifier.backgroundForNotes(): Modifier = this.then(Modifier.backgro
 
 @Composable
 private fun NoteModeChoices(mode: NoteFillMode, onChange: (NoteFillMode) -> Unit, enabled: Boolean = true) {
-    NoteFillMode.entries.forEachIndexed { index, value ->
+    NoteFillMode.entries.forEach { value ->
         ListRow(
             title = value.label,
-            dividerAbove = index > 0,
             onClick = { if (enabled) onChange(value) },
-            trailing = { if (mode == value) Text("✓", color = LocalAbPalette.current.accent) },
+            trailing = {
+                if (mode == value) {
+                    androidx.compose.material3.Icon(
+                        imageVector = AbIcons.Check,
+                        contentDescription = "已选",
+                        tint = LocalAbPalette.current.accent,
+                        modifier = androidx.compose.ui.Modifier.size(18.dp),
+                    )
+                }
+            },
         )
     }
 }
@@ -243,9 +250,9 @@ internal fun MerchantNoteRuleEditor(initial: MerchantNoteRule?, onClose: () -> U
             }
         }
     }
-    Dialog(onDismissRequest = { close() }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-        Box(Modifier.fillMaxSize().backgroundForNotes()) {
-            SubPageScaffold(if (initial == null) "添加商家规则" else "编辑商家规则", { close() }, reserveDock = false) { padding ->
+    ActiveBackHandler(onBack = { close() })
+    Box(Modifier.fillMaxSize().backgroundForNotes()) {
+        SubPageScaffold(if (initial == null) "添加商家规则" else "编辑商家规则", { close() }) { padding ->
                 LazyColumn(
                     Modifier.fillMaxSize().imePadding(),
                     contentPadding = PaddingValues(
@@ -277,11 +284,11 @@ internal fun MerchantNoteRuleEditor(initial: MerchantNoteRule?, onClose: () -> U
                         InsetGroup {
                             NoteModeChoices(mode, { mode = it }, !busy)
                             if (mode == NoteFillMode.FIXED) {
-                                InputRow("固定备注", text, { text = NoteTemplate.limit(it) }, placeholder = "输入固定备注", dividerAbove = true)
+                                InputRow("固定备注", text, { text = NoteTemplate.limit(it) }, placeholder = "输入固定备注")
                             }
                         }
                     }
-                    error?.let { e -> item { InsetGroup { ListRow(title = e) } } }
+                    error?.let { e -> item { InlineMessage(e, isError = true, announce = true) } }
                     item {
                         PrimaryButton("保存", onClick = { commit() }, modifier = Modifier.fillMaxWidth(), enabled = !busy && invalid == null)
                     }
@@ -291,7 +298,6 @@ internal fun MerchantNoteRuleEditor(initial: MerchantNoteRule?, onClose: () -> U
                         }
                     }
                 }
-            }
         }
     }
     if (discard) AppAlertDialog(
@@ -328,7 +334,7 @@ internal fun InlineMerchantNoteEditor(draft: BillDraft, template: String, onClos
         Text("${ruleAppName(rule.app)} · ${rule.merchant}", style = AbType.footnote, color = LocalAbPalette.current.secondaryLabel)
         InsetGroup {
             NoteModeChoices(mode, { mode = it }, !busy)
-            if (mode == NoteFillMode.FIXED) InputRow("固定备注", text, { text = NoteTemplate.limit(it) }, placeholder = "输入常用备注", dividerAbove = true)
+            if (mode == NoteFillMode.FIXED) InputRow("固定备注", text, { text = NoteTemplate.limit(it) }, placeholder = "输入常用备注")
         }
         val preview = NoteFillPolicy.apply(draft.copy(note = null, noteOrigin = null), NoteFillConfig(false, listOf(rule)), template)
         Text("预览：${preview.note ?: "留空"}", style = AbType.footnote, color = LocalAbPalette.current.secondaryLabel)

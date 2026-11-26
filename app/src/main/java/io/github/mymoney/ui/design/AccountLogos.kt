@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.asImageBitmap
@@ -35,7 +36,9 @@ import io.github.mymoney.R
 object AccountLogos {
 
     // Cache normalized local resources; retain original PNGs byte-for-byte.
-    private val normalized = mutableMapOf<Int, androidx.compose.ui.graphics.ImageBitmap>()
+    private val normalized = java.util.concurrent.ConcurrentHashMap<Int, androidx.compose.ui.graphics.ImageBitmap>()
+
+    fun cachedBitmap(res: Int): androidx.compose.ui.graphics.ImageBitmap? = normalized[res]
 
     fun normalizedBitmap(resources: Resources, res: Int) = normalized.getOrPut(res) {
         val original = BitmapFactory.decodeResource(resources, res)
@@ -115,19 +118,33 @@ fun AccountAvatar(name: String, modifier: Modifier = Modifier, size: Dp = 40.dp)
     val res = key?.let(AccountLogos::resourceFor)
     if (res != null) {
         val resources = LocalContext.current.resources
-        val bitmap = remember(res, resources) { AccountLogos.normalizedBitmap(resources, res) }
-        Image(
-            bitmap = bitmap,
-            contentDescription = null,
-            modifier = modifier.size(size).clip(CircleShape),
-        )
-        return
+        val bitmap by androidx.compose.runtime.produceState(
+            initialValue = AccountLogos.cachedBitmap(res),
+            key1 = res,
+            key2 = resources,
+        ) {
+            if (value == null) {
+                value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                    AccountLogos.normalizedBitmap(resources, res)
+                }
+            }
+        }
+        val ready = bitmap
+        if (ready != null) {
+            Image(
+                bitmap = ready,
+                contentDescription = null,
+                modifier = modifier.size(size).clip(CircleShape),
+            )
+            return
+        }
     }
     val swatch = swatchFor(name)
     Box(
         modifier = modifier.size(size).clip(CircleShape).background(solidBadgeBackground(swatch)),
         contentAlignment = Alignment.Center,
     ) {
-        Text(name.take(1).ifBlank { "账" }, style = AbType.headline, color = Color.White, maxLines = 1)
+        val glyphStyle = if (size < 30.dp) AbType.footnote else AbType.headline
+        Text(name.take(1).ifBlank { "账" }, style = glyphStyle, color = Color.White, maxLines = 1)
     }
 }

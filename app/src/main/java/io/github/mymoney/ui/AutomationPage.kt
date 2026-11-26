@@ -67,7 +67,6 @@ internal fun AutomationPage(
                         health.actions.firstOrNull()?.let { action ->
                             ListRow(
                                 title = health.detail,
-                                dividerAbove = true,
                                 titleStyle = AbType.footnote,
                                 trailing = {
                                     AbTextButton(action.label, onClick = { onAction(action) })
@@ -78,7 +77,6 @@ internal fun AutomationPage(
                     ListRow(
                         title = "弹出确认卡",
                         leading = { SettingsIconBadge("弹出确认卡", AbIcons.Note) },
-                        dividerAbove = true,
                         trailing = { AbSwitch(autoConfirm, onToggleConfirm) },
                         onClick = { onToggleConfirm(!autoConfirm) },
                     )
@@ -86,7 +84,6 @@ internal fun AutomationPage(
                         ListRow(
                             title = "页面 OCR 补全",
                             leading = { SettingsIconBadge("页面 OCR 补全", AbIcons.Ocr) },
-                            dividerAbove = true,
                             trailing = {
                                 AbSwitch(ocrEnabled) { value ->
                                     if (value) showOcrPrompt = true
@@ -103,7 +100,6 @@ internal fun AutomationPage(
                         ListRow(
                             title = "超级岛提醒",
                             leading = { SettingsIconBadge("超级岛提醒", AbIcons.Note) },
-                            dividerAbove = true,
                             trailing = { AbSwitch(islandConfirm, onToggleIsland) },
                             onClick = { onToggleIsland(!islandConfirm) },
                         )
@@ -140,14 +136,12 @@ internal fun AutomationPage(
                                 color = p.secondaryLabel,
                             )
                         },
-                        dividerAbove = true,
                         chevron = true,
                         onClick = { onAction(CaptureAction.OVERLAY) },
                     )
                     ListRow(
                         title = "后台保活",
                         leading = { SettingsIconBadge("后台保活", AbIcons.Shield) },
-                        dividerAbove = true,
                         chevron = true,
                         onClick = { onNavigate(AutomationRoute.BACKGROUND) },
                     )
@@ -171,14 +165,12 @@ internal fun AutomationPage(
                         trailing = {
                             Text("$learnedCount 条", style = AbType.footnote, color = p.secondaryLabel)
                         },
-                        dividerAbove = true,
                         chevron = true,
                         onClick = { onNavigate(AutomationRoute.LEARNING) },
                     )
                     ListRow(
                         title = "餐段设置",
                         leading = { SettingsIconBadge("餐段设置", AbIcons.Clock) },
-                        dividerAbove = true,
                         chevron = true,
                         onClick = { onNavigate(AutomationRoute.MEALS) },
                     )

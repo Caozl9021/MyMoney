@@ -18,7 +18,7 @@ fun SectionLazyColumn(
     content: LazyListScope.() -> Unit,
 ) {
     LazyColumn(modifier = modifier, state = state, contentPadding = contentPadding,
-        verticalArrangement = Arrangement.Top) {
+        verticalArrangement = verticalArrangement) {
         SectionLazyScope(this).content()
     }
 }
@@ -49,11 +49,21 @@ private class SectionLazyScope(private val target: LazyListScope) : LazyListScop
         previous = role; hasItems = true
     }
     override fun items(count: Int, key: ((Int) -> Any)?, contentType: (Int) -> Any?, itemContent: @Composable LazyItemScope.(Int) -> Unit) {
-        val initial = gap(SectionRole.CARD)
+        if (count <= 0) return
+        val initialRole = contentType(0) as? SectionRole ?: SectionRole.CARD
+        val initialGap = gap(initialRole)
         target.items(count, key, contentType) { index ->
             val itemScope = this
-            Box(Modifier.fillMaxWidth().padding(top = if (index == 0) initial else AbLayout.cardGap)) { itemContent(itemScope, index) }
+            val role = contentType(index) as? SectionRole ?: SectionRole.CARD
+            val topGap = if (index == 0) initialGap else when {
+                role == SectionRole.HEADER -> AbLayout.groupGap
+                role == SectionRole.FOOTER -> AbLayout.captionGap
+                role == SectionRole.ACTION -> AbLayout.actionGap
+                else -> AbLayout.cardGap
+            }
+            Box(Modifier.fillMaxWidth().padding(top = topGap)) { itemContent(itemScope, index) }
         }
-        if (count > 0) { previous = SectionRole.CARD; hasItems = true }
+        previous = contentType(count - 1) as? SectionRole ?: SectionRole.CARD
+        hasItems = true
     }
 }

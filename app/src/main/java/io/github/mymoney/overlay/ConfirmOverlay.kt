@@ -15,6 +15,11 @@ import android.view.KeyEvent
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -237,33 +242,44 @@ object ConfirmOverlay {
             val result = card.result
             var sawConfirmForm by androidx.compose.runtime.remember(card) { androidx.compose.runtime.mutableStateOf(false) }
             androidx.compose.runtime.SideEffect { if (result == null) sawConfirmForm = true }
-            if (result != null) {
-                ConfirmResultSheet(
-                    draft = result.bill?.let(BillWriter::toDraft) ?: card.edited,
-                    title = ConfirmFeedback.saved(result.inserted),
-                    detail = ConfirmFeedback.resultDetail(result),
-                    canView = result.bill != null,
-                    onDismiss = { if (session === card) dismissOnMain() },
-                    onView = { result.bill?.let { if (BillResultActivity.open(app, it.id) && session === card) dismissOnMain() } },
-                    animateEntranceFromBottom = !sawConfirmForm,
-                )
-            } else ConfirmSheet(
-                draft = card.edited,
-                saving = card.saving,
-                errorMessage = card.error,
-                busyLabel = card.busyLabel,
-                onSave = { edited -> save(app, card, edited) },
-                onImport = { edited -> save(app, card, edited) },
-                onIgnore = {
-                    if (session === card && !card.saving) {
-                        updateHistory(card) { card.draft.historyId?.let { RecognitionStore.ignore(it) } }
-                    }
+            val reduceMotion = io.github.mymoney.ui.design.LocalReduceMotion.current
+            AnimatedContent(
+                targetState = result != null,
+                transitionSpec = {
+                    val ease = io.github.mymoney.ui.design.AbEasing.EaseOut
+                    fadeIn(tween(if (reduceMotion) 120 else 160, easing = ease)) togetherWith
+                        fadeOut(tween(110, easing = ease))
                 },
-                onDismiss = { edited -> card.edited = edited; setAside(app, card) },
-                onDraftChange = { card.edited = it },
-                onPickerBackHandler = { card.pickerBackHandler = it },
-                noteSuggestions = io.github.mymoney.ui.rememberNoteSuggestions(),
-            )
+                label = "overlay-stage",
+            ) { hasResult ->
+                if (hasResult && result != null) {
+                    ConfirmResultSheet(
+                        draft = result.bill?.let(BillWriter::toDraft) ?: card.edited,
+                        title = ConfirmFeedback.saved(result.inserted),
+                        detail = ConfirmFeedback.resultDetail(result),
+                        canView = result.bill != null,
+                        onDismiss = { if (session === card) dismissOnMain() },
+                        onView = { result.bill?.let { if (BillResultActivity.open(app, it.id) && session === card) dismissOnMain() } },
+                        animateEntranceFromBottom = !sawConfirmForm,
+                    )
+                } else ConfirmSheet(
+                    draft = card.edited,
+                    saving = card.saving,
+                    errorMessage = card.error,
+                    busyLabel = card.busyLabel,
+                    onSave = { edited -> save(app, card, edited) },
+                    onImport = { edited -> save(app, card, edited) },
+                    onIgnore = {
+                        if (session === card && !card.saving) {
+                            updateHistory(card) { card.draft.historyId?.let { RecognitionStore.ignore(it) } }
+                        }
+                    },
+                    onDismiss = { edited -> card.edited = edited; setAside(app, card) },
+                    onDraftChange = { card.edited = it },
+                    onPickerBackHandler = { card.pickerBackHandler = it },
+                    noteSuggestions = io.github.mymoney.ui.rememberNoteSuggestions(),
+                )
+            }
         }
     }
 

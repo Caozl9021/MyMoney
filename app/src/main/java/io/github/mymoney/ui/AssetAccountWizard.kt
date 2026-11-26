@@ -117,11 +117,10 @@ fun AssetAccountWizard(onBack: () -> Unit, onSaved: (String) -> Unit) {
                     item(contentType = SectionRole.HEADER) { GroupHeader("账户类型") }
                     item {
                         InsetGroup {
-                            AccountPresets.kinds.forEachIndexed { index, item ->
+                            AccountPresets.kinds.forEach { item ->
                                 ListRow(
                                     title = item.label,
                                     subtitle = item.subtitle,
-                                    dividerAbove = index > 0,
                                     chevron = true,
                                     onClick = {
                                         kind = item.kind
@@ -143,17 +142,19 @@ fun AssetAccountWizard(onBack: () -> Unit, onSaved: (String) -> Unit) {
                     item(contentType = SectionRole.HEADER) { GroupHeader("具体账户") }
                     item {
                         InsetGroup {
-                            presets.forEachIndexed { index, preset ->
+                            presets.forEach { preset ->
                                 val taken = preset.name in existingNames
                                 ListRow(
                                     title = preset.name,
-                                    subtitle = if (taken) "已添加" else null,
-                                    dividerAbove = index > 0,
                                     leading = {
                                         AccountAvatar(name = preset.name, size = AbCardDensity.settingsIcon)
                                     },
                                     trailing = {
-                                        if (taken) Text("已添加", color = LocalAbPalette.current.tertiaryLabel)
+                                        if (taken) Text(
+                                            "已添加",
+                                            style = io.github.mymoney.ui.design.AbType.footnote,
+                                            color = LocalAbPalette.current.tertiaryLabel,
+                                        )
                                     },
                                     onClick = if (taken) null else {
                                         { applyPreset(preset.name, preset.aliases, preset.kind) }

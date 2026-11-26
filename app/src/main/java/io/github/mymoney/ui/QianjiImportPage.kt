@@ -100,7 +100,8 @@ internal fun QianjiImportPage(onBack: () -> Unit) {
                         Column(Modifier.padding(start = AbSpacing.m, end = AbSpacing.m, bottom = AbSpacing.m)) {
                             if (current == null) PrimaryButton("选择文件", selectFile, Modifier.fillMaxWidth(),
                                 enabled = !busy, busy = busy, busyLabel = "正在读取…")
-                            else SecondaryButton("选择其他文件", selectFile, Modifier.fillMaxWidth(), enabled = !busy)
+                            else SecondaryButton("选择其他文件", selectFile, Modifier.fillMaxWidth(),
+                                enabled = !busy, busy = busy, busyLabel = "正在读取…")
                         }
                     }
                 }
@@ -118,13 +119,13 @@ internal fun QianjiImportPage(onBack: () -> Unit) {
                                     Text(if (finished) "本次新增" else "可导入账单", style = AbType.footnote, color = palette.secondaryLabel)
                                 }
                                 Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
-                                    Text(current.count(QianjiImport.State.READY).toString(), style = AbType.largeTitle, color = palette.label)
+                                    Text(current.count(QianjiImport.State.READY).toString(), style = AbType.largeTitle.tabular(), color = palette.label)
                                     Text("条", Modifier.padding(bottom = 4.dp), style = AbType.body, color = palette.secondaryLabel)
                                 }
                                 FlowRow(horizontalArrangement = Arrangement.spacedBy(AbSpacing.l), verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-                                    Text("重复 ${current.count(QianjiImport.State.DUPLICATE)}", style = AbType.footnote, color = palette.secondaryLabel)
-                                    Text("跳过 ${current.count(QianjiImport.State.SKIPPED)}", style = AbType.footnote, color = palette.secondaryLabel)
-                                    Text("冲突 ${current.count(QianjiImport.State.CONFLICT)}", style = AbType.footnote, color = palette.secondaryLabel)
+                                    Text("重复 ${current.count(QianjiImport.State.DUPLICATE)}", style = AbType.footnote.tabular(), color = palette.secondaryLabel)
+                                    Text("跳过 ${current.count(QianjiImport.State.SKIPPED)}", style = AbType.footnote.tabular(), color = palette.secondaryLabel)
+                                    Text("冲突 ${current.count(QianjiImport.State.CONFLICT)}", style = AbType.footnote.tabular(), color = palette.secondaryLabel)
                                 }
                             }
                             if (totals.isNotEmpty()) {
@@ -133,8 +134,8 @@ internal fun QianjiImportPage(onBack: () -> Unit) {
                                     verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
                                     listOf("EXPENSE", "INCOME", "TRANSFER").forEach { type -> totals[type]?.let { (count, cents) ->
                                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AbSpacing.m)) {
-                                            Text("${qianjiTypeLabel(type)} · $count 条", Modifier.weight(1f), style = AbType.footnote, color = palette.secondaryLabel)
-                                            Text("¥${BigDecimal(cents, 2).toPlainString()}", Modifier.weight(1f), style = AbType.footnote,
+                                            Text("${qianjiTypeLabel(type)} · $count 条", Modifier.weight(1f), style = AbType.footnote.tabular(), color = palette.secondaryLabel)
+                                            Text("¥${BigDecimal(cents, 2).toPlainString()}", Modifier.weight(1f), style = AbType.footnote.tabular(),
                                                 textAlign = TextAlign.End, color = when(type) { "EXPENSE" -> palette.expense; "INCOME" -> palette.income; else -> palette.transfer })
                                         }
                                     } }
@@ -254,7 +255,7 @@ private fun QianjiPreviewRow(item: QianjiImport.Item, finished: Boolean, expande
     val displayAmount = if (currency == "CNY") "¥$amount" else "$currency $amount".trim()
     InsetGroup {
         ListRow(title = title, subtitle = "${item.row.cells["时间"].orEmpty().take(16)} · $status",
-            trailing = { Text(displayAmount, Modifier.widthIn(max = 140.dp), style = AbType.footnote, textAlign = TextAlign.End,
+            trailing = { Text(displayAmount, Modifier.widthIn(max = 140.dp), style = AbType.footnote.tabular(), textAlign = TextAlign.End,
                 color = when(record?.type) { "EXPENSE" -> p.expense; "INCOME" -> p.income; else -> p.secondaryLabel }) }, onClick = onClick)
         if (item.state == QianjiImport.State.SKIPPED || item.state == QianjiImport.State.CONFLICT) {
             Text(item.reason, Modifier.padding(start = AbSpacing.l, end = AbSpacing.l, bottom = AbSpacing.s), style = AbType.caption1, color = p.secondaryLabel)

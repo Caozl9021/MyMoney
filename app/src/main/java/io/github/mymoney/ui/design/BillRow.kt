@@ -213,31 +213,29 @@ internal fun billIconTint(p: AbPalette, type: String, category: String? = null, 
     else -> swatchFor(displayOrNull(category) ?: displayOrNull(subCategory) ?: "未分类")
 }
 
-/** 左滑露出的删除底衬（右侧内缩弹性红胶囊 + 白色垃圾桶图标）。 */
+/** 左滑露出的删除底衬（右侧内缩正圆红色按钮 + 白色垃圾桶图标，保持等比缩放不变形）。 */
 @Composable
 fun SwipeDeleteBackground(modifier: Modifier = Modifier, progress: Float = 1f) {
     val p = LocalAbPalette.current
     val t = progress.coerceIn(0f, 1f)
-    val ease = ((t - 0.08f) / 0.92f).coerceIn(0f, 1f)
+    val ease = ((t - 0.06f) / 0.44f).coerceIn(0f, 1f)
     val scale = (0.72f + 0.28f * ease).coerceIn(0.72f, 1f)
-    val capsuleWidth = (38f + 30f * ease).dp
     val effectiveGlass = LocalLiquidGlassEnabled.current && !LocalReduceTransparency.current
     Box(
         modifier = modifier
             .fillMaxSize()
-            .padding(end = 12.dp, top = 6.dp, bottom = 6.dp),
+            .padding(end = 14.dp, top = 6.dp, bottom = 6.dp),
         contentAlignment = Alignment.CenterEnd,
     ) {
         Box(
             modifier = Modifier
-                .width(capsuleWidth)
-                .height(40.dp)
+                .size(42.dp)
                 .graphicsLayer {
                     scaleX = scale
                     scaleY = scale
-                    alpha = (ease * 1.35f).coerceIn(0f, 1f)
+                    alpha = (ease * 1.4f).coerceIn(0f, 1f)
                 }
-                .clip(RoundedCornerShape(AbRadius.capsule))
+                .clip(androidx.compose.foundation.shape.CircleShape)
                 .background(solidBadgeBackground(p.red))
                 .badgeLiquidGlaze(effectiveGlass),
             contentAlignment = Alignment.Center,
@@ -264,9 +262,19 @@ fun AmountText(
     val fontScale = LocalDensity.current.fontScale
     BoxWithConstraints(modifier) {
         val fitted = minOf(style.fontSize.value, maxWidth.value / (value.length.coerceAtLeast(1) * 0.66f * fontScale))
+            .coerceAtLeast(minFontSize)
+        val scaledTracking = if (style.letterSpacing.isSp && style.letterSpacing.value < 0f && style.fontSize.value > 0f) {
+            (style.letterSpacing.value * (fitted / style.fontSize.value)).sp
+        } else {
+            style.letterSpacing
+        }
         // 不 fillMaxWidth：文本按自身宽度落位，右列的「靠右」交给外层 Column 的
         // horizontalAlignment 完成。否则金额会把右列撑到最大宽度，左侧副信息被压窄。
-        Text(value,
-            style = style.copy(fontSize = fitted.coerceAtLeast(minFontSize).sp), color = color, maxLines = 1)
+        Text(
+            value,
+            style = style.copy(fontSize = fitted.sp, letterSpacing = scaledTracking),
+            color = color,
+            maxLines = 1,
+        )
     }
 }

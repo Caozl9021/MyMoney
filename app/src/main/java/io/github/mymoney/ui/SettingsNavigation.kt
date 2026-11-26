@@ -25,7 +25,7 @@ internal fun SettingsNavigationGroup(title: String, links: List<SettingsLink>) {
     Column(verticalArrangement = Arrangement.spacedBy(AbLayout.headingGap)) {
         GroupHeader(title)
         InsetGroup {
-            links.forEachIndexed { index, link ->
+            links.forEach { link ->
                 ListRow(
                     title = link.title,
                     subtitle = link.subtitle,
@@ -33,7 +33,6 @@ internal fun SettingsNavigationGroup(title: String, links: List<SettingsLink>) {
                     trailing = link.trailingText?.let { value ->
                         { Text(value, style = AbType.footnote, color = p.secondaryLabel) }
                     },
-                    dividerAbove = index > 0,
                     chevron = true,
                     onClick = link.onClick,
                 )

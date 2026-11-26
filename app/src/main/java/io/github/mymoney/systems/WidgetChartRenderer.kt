@@ -25,20 +25,21 @@ object WidgetChartRenderer {
     ): Bitmap {
         val rawDensity = context.resources.displayMetrics.density
         val scale = rawDensity.coerceIn(2f, 3.5f)
+        val fontScale = context.resources.configuration.fontScale.coerceIn(1f, 1.4f)
         val totalW = (size?.width ?: defaultWidthDp(bucket)).coerceAtLeast(96f)
         val totalH = (size?.height ?: defaultHeightDp(bucket)).coerceAtLeast(44f)
 
         val (horizontalReserveDp, verticalReserveDp) = when (bucket) {
             WidgetSizeBucket.STRIP_HORIZONTAL -> 30f to 34f
-            WidgetSizeBucket.SQUARE_COMPACT -> 28f to 81f
-            WidgetSizeBucket.TALL_CARD -> 30f to 122f
-            else -> 30f to 104f
+            WidgetSizeBucket.SQUARE_COMPACT -> 28f to (81f * fontScale)
+            WidgetSizeBucket.TALL_CARD -> 30f to (122f * fontScale)
+            else -> 30f to (104f * fontScale)
         }
         val chartWidthDp = (totalW - horizontalReserveDp).coerceIn(72f, 440f)
         val chartHeightDp = (totalH - verticalReserveDp).coerceIn(32f, 220f)
 
-        val wPx = (chartWidthDp * scale).roundToInt().coerceIn(160, 1280)
-        val hPx = (chartHeightDp * scale).roundToInt().coerceIn(72, 640)
+        val wPx = (chartWidthDp * scale).roundToInt().coerceIn(180, 1440)
+        val hPx = (chartHeightDp * scale).roundToInt().coerceIn(80, 720)
         val bitmap = Bitmap.createBitmap(wPx, hPx, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
 
@@ -60,8 +61,8 @@ object WidgetChartRenderer {
         val radius = barW / 2f
         val maxVal = summary.maxCents.coerceAtLeast(1L)
 
-        // Average dashed line behind tracks
-        if (summary.maxCents > 0L && summary.averageCents > 0L) {
+        // Average dashed line only across gaps between capsule tracks so dashes never bleed through translucent tracks.
+        if (!masked && summary.maxCents > 0L && summary.averageCents > 0L) {
             val avgY = plotBottom - (summary.averageCents.toFloat() / maxVal) * plotHeight
             val dashPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = palette.chartAverageLine
@@ -69,7 +70,19 @@ object WidgetChartRenderer {
                 style = Paint.Style.STROKE
                 pathEffect = DashPathEffect(floatArrayOf(4f * scale, 3f * scale), 0f)
             }
-            canvas.drawLine(0f, avgY, wPx.toFloat(), avgY, dashPaint)
+            var prevRight = 0f
+            for (i in 0 until count) {
+                val cx = slotW * i + slotW / 2f
+                val left = cx - barW / 2f
+                val right = cx + barW / 2f
+                if (left > prevRight + 1f) {
+                    canvas.drawLine(prevRight, avgY, left, avgY, dashPaint)
+                }
+                prevRight = right
+            }
+            if (wPx.toFloat() > prevRight + 1f) {
+                canvas.drawLine(prevRight, avgY, wPx.toFloat(), avgY, dashPaint)
+            }
         }
 
         val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = palette.chartTrack }

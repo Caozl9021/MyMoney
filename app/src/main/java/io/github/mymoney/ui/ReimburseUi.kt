@@ -1,7 +1,9 @@
 package io.github.mymoney.ui
 
 import android.content.Context
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -10,8 +12,10 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -25,6 +29,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -33,10 +38,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import kotlinx.coroutines.launch
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.mymoney.data.AssetAccount
@@ -44,8 +54,10 @@ import io.github.mymoney.data.AssetStore
 import io.github.mymoney.data.BillEntity
 import io.github.mymoney.data.BillWriter
 import io.github.mymoney.data.Reimburse
+import io.github.mymoney.ui.design.AbEasing
 import io.github.mymoney.ui.design.AbRadius
 import io.github.mymoney.ui.design.AbSpacing
+import io.github.mymoney.ui.design.AbSpring
 import io.github.mymoney.ui.design.AbTextButton
 import io.github.mymoney.ui.design.AbType
 import io.github.mymoney.ui.design.AppChoiceDialog
@@ -236,26 +248,30 @@ internal fun ReimburseNoticeBar(modifier: Modifier = Modifier) {
     val effectiveGlass = LocalLiquidGlassEnabled.current && !LocalReduceTransparency.current
     val clarity = LocalLiquidGlassClaritySpec.current.dialog
 
+    val scope = rememberCoroutineScope()
+    val dragOffsetY = remember { Animatable(0f) }
+
     LaunchedEffect(notice) {
         if (notice != null) {
+            dragOffsetY.snapTo(0f)
             delay(if (notice.undoBillId != null) 5_500L else 3_200L)
             if (ReimburseFeedback.notice == notice) ReimburseFeedback.clear()
         }
     }
 
     val enterSpec = if (reduceMotion) {
-        fadeIn(tween(0))
+        fadeIn(tween(150, easing = AbEasing.EaseOut))
     } else {
-        fadeIn(tween(180)) +
-            slideInVertically(spring(dampingRatio = 0.78f, stiffness = 460f)) { it / 2 } +
-            scaleIn(spring(dampingRatio = 0.78f, stiffness = 460f), initialScale = 0.92f)
+        fadeIn(tween(170, easing = AbEasing.EaseOut)) +
+            slideInVertically(spring(dampingRatio = 0.96f, stiffness = 460f)) { it / 2 } +
+            scaleIn(spring(dampingRatio = 0.96f, stiffness = 460f), initialScale = 0.92f)
     }
     val exitSpec = if (reduceMotion) {
-        fadeOut(tween(0))
+        fadeOut(tween(120, easing = AbEasing.EaseOut))
     } else {
-        fadeOut(tween(140)) +
-            slideOutVertically(tween(160)) { it / 2 } +
-            scaleOut(tween(140), targetScale = 0.92f)
+        fadeOut(tween(120, easing = AbEasing.EaseOut)) +
+            slideOutVertically(tween(140, easing = AbEasing.EaseOut)) { it / 2 } +
+            scaleOut(tween(120, easing = AbEasing.EaseOut), targetScale = 0.92f)
     }
 
     AnimatedVisibility(
@@ -278,9 +294,44 @@ internal fun ReimburseNoticeBar(modifier: Modifier = Modifier) {
         } else {
             Modifier.border(0.75.dp, palette.separator, shape)
         }
+        val density = androidx.compose.ui.platform.LocalDensity.current
         Box(
             modifier = Modifier
                 .widthIn(max = 420.dp)
+                .pointerInput(active, reduceMotion) {
+                    val tracker = VelocityTracker()
+                    val dismissPx = with(density) { 24.dp.toPx() }
+                    detectVerticalDragGestures(
+                        onDragStart = {
+                            tracker.resetTracking()
+                            scope.launch { dragOffsetY.stop() }
+                        },
+                        onDragCancel = {
+                            scope.launch {
+                                if (reduceMotion) dragOffsetY.snapTo(0f) else dragOffsetY.animateTo(0f, AbSpring.sheetFloat(false))
+                            }
+                        },
+                        onDragEnd = {
+                            val y = dragOffsetY.value
+                            val velocity = tracker.calculateVelocity().y
+                            if (y > dismissPx || velocity > 450f) {
+                                ReimburseFeedback.clear()
+                            } else {
+                                scope.launch {
+                                    if (reduceMotion) dragOffsetY.snapTo(0f) else dragOffsetY.animateTo(0f, AbSpring.sheetFloat(false))
+                                }
+                            }
+                        },
+                        onVerticalDrag = { change, dragAmount ->
+                            change.consume()
+                            val next = dragOffsetY.value + dragAmount
+                            val damped = if (next < 0f) next * 0.2f else next
+                            tracker.addPosition(change.uptimeMillis, Offset(0f, damped))
+                            scope.launch { dragOffsetY.snapTo(damped.coerceAtLeast(-24f)) }
+                        },
+                    )
+                }
+                .graphicsLayer { translationY = dragOffsetY.value }
                 .shadow(
                     elevation = if (effectiveGlass) 18.dp else 8.dp,
                     shape = shape,
@@ -307,31 +358,40 @@ internal fun ReimburseNoticeBar(modifier: Modifier = Modifier) {
                 )
                 .then(borderModifier),
         ) {
-            Row(
-                modifier = Modifier.padding(
-                    start = AbSpacing.l,
-                    end = if (active.undoBillId != null) AbSpacing.s else AbSpacing.l,
-                    top = 4.dp,
-                    bottom = 4.dp,
-                ),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
-            ) {
-                Text(
-                    active.text,
-                    style = AbType.footnote,
-                    color = palette.label,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false).padding(vertical = 8.dp),
-                )
-                active.undoBillId?.let { id ->
-                    AbTextButton("撤销", onClick = {
-                        BillWriter.updateReimbursement(context, id, Reimburse.PENDING) { result ->
-                            result.onSuccess { ReimburseFeedback.show(it, null) }
-                            result.onFailure { ReimburseFeedback.show(it.message ?: "撤销失败", null) }
-                        }
-                    })
+            AnimatedContent(
+                targetState = active.text to active.undoBillId,
+                transitionSpec = {
+                    fadeIn(tween(130, easing = AbEasing.EaseOut)) togetherWith
+                        fadeOut(tween(90, easing = AbEasing.EaseOut))
+                },
+                label = "reimburse-notice-swap",
+            ) { (text, undoId) ->
+                Row(
+                    modifier = Modifier.padding(
+                        start = AbSpacing.l,
+                        end = if (undoId != null) AbSpacing.s else AbSpacing.l,
+                        top = 4.dp,
+                        bottom = 4.dp,
+                    ),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
+                ) {
+                    Text(
+                        text,
+                        style = AbType.footnote,
+                        color = palette.label,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false).padding(vertical = 8.dp),
+                    )
+                    undoId?.let { id ->
+                        AbTextButton("撤销", onClick = {
+                            BillWriter.updateReimbursement(context, id, Reimburse.PENDING) { result ->
+                                result.onSuccess { ReimburseFeedback.show(it, null) }
+                                result.onFailure { ReimburseFeedback.show(it.message ?: "撤销失败", null) }
+                            }
+                        })
+                    }
                 }
             }
         }

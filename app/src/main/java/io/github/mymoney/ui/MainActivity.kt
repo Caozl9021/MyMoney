@@ -417,24 +417,33 @@ private fun AppContent(
     // 返回 / 侧滑：非首页 → 回首页；已在首页 → 交给系统退出（符合 Android 惯例）
     ActiveBackHandler(enabled = captureState.configured && tab != 0) { tabState.intValue = 0 }
 
-    if (!captureState.configured) {
+    AnimatedContent(
+        targetState = captureState.configured,
+        transitionSpec = {
+            val ease = io.github.mymoney.ui.design.AbEasing.EaseOut
+            fadeIn(tween(if (reduceMotion) 120 else 190, easing = ease)) togetherWith
+                fadeOut(tween(if (reduceMotion) 90 else 140, easing = ease))
+        },
+        label = "onboarding-gate",
+        modifier = Modifier.fillMaxSize(),
+    ) { configured ->
+    if (!configured) {
         CaptureModeScreen(onOrdinarySetup = {
             captureSettingsDestination = CaptureSettingsDestination.AUTOMATION
             tabState.intValue = 3
             CaptureModeManager.prepareOrdinarySetup(context)
         })
-        return
-    }
-
+    } else {
     BackSurface(enabled = detailsOpen, onBack = { detailsOpen = false }, routeKey = detailsOpen, preview = detailPreview, pixels = backPixels) {
     Box(Modifier.fillMaxSize().background(p.pageBg)) {
         AnimatedContent(
             targetState = tab,
             transitionSpec = {
+                val ease = io.github.mymoney.ui.design.AbEasing.EaseOut
                 // Moving two full pages also invalidates the glass sampling source.
                 // A brief fade keeps tab state/semantics without full-page translation.
-                fadeIn(tween(if (reduceMotion) 0 else 200)) togetherWith
-                    fadeOut(tween(if (reduceMotion) 0 else 160))
+                fadeIn(tween(if (reduceMotion) 120 else 180, easing = ease)) togetherWith
+                    fadeOut(tween(if (reduceMotion) 90 else 130, easing = ease))
             },
             label = "tabSwitch",
             modifier = Modifier.fillMaxSize(),
@@ -474,6 +483,8 @@ private fun AppContent(
                 .navigationBarsPadding()
                 .padding(start = 16.dp, end = 16.dp, bottom = 84.dp),
         )
+    }
+    }
     }
     }
 }

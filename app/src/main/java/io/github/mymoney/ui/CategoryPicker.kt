@@ -13,6 +13,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
@@ -197,11 +198,15 @@ internal fun BoxScope.CategoryPicker(
         onDispose { if (state.onHoverEnter === enter) state.onHoverEnter = null }
     }
     val currentSelect by rememberUpdatedState(onSelect)
-    val duration = if (reduce) 0 else AbMotion.fast
+    val duration = if (reduce) 130 else AbMotion.fast
     val visibleRegions = state.regions.toMap()
     LaunchedEffect(visibleRegions, state.viewport) { state.pointer?.let(state::move) }
-    AnimatedVisibility(visible = state.open, enter = fadeIn(tween(duration)), exit = fadeOut(tween(duration)),
-        modifier = Modifier.matchParentSize()) {
+    AnimatedVisibility(
+        visible = state.open,
+        enter = fadeIn(tween(duration, easing = io.github.mymoney.ui.design.AbEasing.EaseOut)),
+        exit = fadeOut(tween(if (reduce) 100 else 90, easing = io.github.mymoney.ui.design.AbEasing.EaseOut)),
+        modifier = Modifier.matchParentSize(),
+    ) {
         Box(Modifier.fillMaxSize().clickable { state.cancel() }.semantics { contentDescription = "取消二级分类选择" })
     }
     BoxWithConstraints(Modifier.matchParentSize()) {
@@ -227,8 +232,12 @@ internal fun BoxScope.CategoryPicker(
         val pivotY = ((anchorMid - y) / bubbleHeight.coerceAtLeast(1f)).coerceIn(0.15f, 0.85f)
         val origin = TransformOrigin(pivotX, pivotY)
         AnimatedVisibility(visible = state.open,
-            enter = if (reduce) fadeIn(tween(0)) else scaleIn(AbSpring.modalFloat(false), initialScale = 0.84f, transformOrigin = origin) + fadeIn(tween(110)),
-            exit = if (reduce) fadeOut(tween(0)) else scaleOut(AbSpring.morphFloat(false), targetScale = 0.86f, transformOrigin = origin) + fadeOut(tween(100)),
+            enter = if (reduce) fadeIn(tween(140, easing = io.github.mymoney.ui.design.AbEasing.EaseOut))
+            else scaleIn(androidx.compose.animation.core.spring(dampingRatio = 1f, stiffness = 560f), initialScale = 0.91f, transformOrigin = origin) +
+                fadeIn(tween(130, easing = io.github.mymoney.ui.design.AbEasing.EaseOut)),
+            exit = if (reduce) fadeOut(tween(110, easing = io.github.mymoney.ui.design.AbEasing.EaseOut))
+            else scaleOut(tween(110, easing = io.github.mymoney.ui.design.AbEasing.EaseOut), targetScale = 0.93f, transformOrigin = origin) +
+                fadeOut(tween(95, easing = io.github.mymoney.ui.design.AbEasing.EaseOut)),
             modifier = Modifier.offset { IntOffset(x.roundToInt(), y.roundToInt()) }.onSizeChanged {
                 bubbleWidth = it.width.toFloat()
                 bubbleHeight = it.height.toFloat()
@@ -262,7 +271,7 @@ internal fun BoxScope.CategoryPicker(
                     .testTag("category-inline-bubble"),
             ) {
                 if (glassBubble) {
-                    val blurDp = glassBlurRadiusDp(dialogClarity, baseDp = 20f, minDp = 12f, maxDp = 26f)
+                    val blurDp = glassBlurRadiusDp(dialogClarity, baseDp = 16f, minDp = 10f, maxDp = 20f)
                     val bubbleAlpha = glassSurfaceAlpha(0.88f, 0.86f, dark, dialogClarity)
                     Box(
                         Modifier
@@ -307,15 +316,27 @@ internal fun BoxScope.CategoryPicker(
                 }
                 request.subs.forEachIndexed { index, name -> key(name) {
                     val active = activeName == name
-                    val foreground by animateColorAsState(if (active) p.accent else p.label,
-                        tween(if (reduce) 0 else 100), label = "category-foreground")
+                    val foreground by animateColorAsState(
+                        if (active) p.accent else p.label,
+                        tween(if (reduce) 100 else 120, easing = io.github.mymoney.ui.design.AbEasing.EaseOut),
+                        label = "category-foreground",
+                    )
                     val rect = clusterCellRect(request.subs.size, index, grid, gap)
+                    val tapInteraction = remember { MutableInteractionSource() }
                     DisposableEffect(name, request) { onDispose { state.regions.remove(name) } }
                     Box(
                         Modifier.offset { IntOffset(rect.left.roundToInt(), rect.top.roundToInt()) }
                             .size(with(density) { rect.width.toDp() }, with(density) { rect.height.toDp() })
                             .onGloballyPositioned { state.regions[name] = it.boundsInRoot() }
-                            .clickable(enabled = !request.sliding) { if (state.open) { state.cancel(); currentSelect(request.group, name) } }
+                            .then(
+                                if (!request.sliding) {
+                                    Modifier
+                                        .abPressFeedback(tapInteraction, pressedScale = 0.94f, pressedAlpha = 0.78f)
+                                        .clickable(tapInteraction, indication = null) {
+                                            if (state.open) { state.cancel(); currentSelect(request.group, name) }
+                                        }
+                                } else Modifier,
+                            )
                             .semantics { selected = active; role = Role.Button; contentDescription = "二级分类：$name" },
                         contentAlignment = Alignment.Center,
                     ) {
@@ -353,15 +374,20 @@ internal fun EmptyLedgerPickerActions(label: String, enabled: Boolean, onAdd: (S
     }
     if (adding) AppDialog(title = "新增$label", onDismiss = { adding = false }) {
         Text("${label}名", style = AbType.footnote, color = p.secondaryLabel)
-        Box(
-            Modifier.fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
-                .background(p.fill)
-                .padding(horizontal = AbSpacing.m, vertical = 12.dp),
-        ) {
-            AbTextField(value = name, onValueChange = { name = it; addError = null },
-                placeholder = "例如：${label}名",
-                modifier = Modifier.fillMaxWidth())
+        InsetGroup {
+            Box(
+                Modifier.fillMaxWidth()
+                    .heightIn(min = AbSize.minTouch)
+                    .padding(horizontal = AbSpacing.l, vertical = AbSpacing.s),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                AbTextField(
+                    value = name,
+                    onValueChange = { name = it; addError = null },
+                    placeholder = "例如：${label}名",
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
         if (addError != null) InlineMessage(addError.orEmpty(), isError = true, announce = true)
         AppDialogActions(

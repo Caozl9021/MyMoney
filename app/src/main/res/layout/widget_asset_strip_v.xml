@@ -35,9 +35,12 @@
 
             <ImageView
                 android:id="@+id/widget_eye"
-                android:layout_width="22dp"
-                android:layout_height="22dp"
-                android:padding="3dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginTop="-5dp"
+                android:layout_marginEnd="-5dp"
+                android:layout_marginBottom="-5dp"
+                android:padding="8dp"
                 android:src="@drawable/ic_widget_eye_on" />
         </LinearLayout>
 
@@ -67,6 +70,8 @@
                 android:autoSizeMinTextSize="10sp"
                 android:autoSizeStepGranularity="1sp"
                 android:autoSizeTextType="uniform"
+                android:ellipsize="end"
+                android:fontFeatureSettings="tnum"
                 android:maxLines="1"
                 android:text="¥0.00"
                 android:textColor="@color/widget_primary"

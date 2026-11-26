@@ -1,8 +1,11 @@
 package io.github.mymoney.ui
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -33,6 +36,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -43,6 +47,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.editableText
@@ -53,16 +59,21 @@ import androidx.compose.ui.semantics.setText
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import io.github.mymoney.ui.design.AbEasing
 import io.github.mymoney.ui.design.AbIcons
 import io.github.mymoney.ui.design.AbRadius
+import io.github.mymoney.ui.design.AbSize
 import io.github.mymoney.ui.design.AbSpacing
+import io.github.mymoney.ui.design.AbSpring
 import io.github.mymoney.ui.design.AbTextButton
 import io.github.mymoney.ui.design.AbType
 import io.github.mymoney.ui.design.AppDialog
 import io.github.mymoney.ui.design.AppDialogActions
 import io.github.mymoney.ui.design.LocalAbPalette
 import io.github.mymoney.ui.design.LocalReduceMotion
+import io.github.mymoney.ui.design.abPressFeedback
 import io.github.mymoney.ui.design.rememberAbHaptic
+import io.github.mymoney.ui.design.tabular
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
@@ -103,6 +114,8 @@ internal fun LedgerDateTimeDialog(value: Long, onDismiss: () -> Unit, onConfirm:
             rangeStart = selected,
             rangeEnd = selected,
             onPick = { date -> day = date.toString() },
+            onPreviousMonth = { month = shown.minusMonths(1).toString() },
+            onNextMonth = { month = shown.plusMonths(1).toString() },
         )
         Row(
             Modifier.fillMaxWidth(),
@@ -167,13 +180,13 @@ internal fun LedgerRangePickerDialog(
             Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(AbRadius.capsule))
-                .background(if (isDark) Color(0x16FFFFFF) else Color(0x10767680))
+                .background(p.fill)
                 .padding(horizontal = AbSpacing.m, vertical = AbSpacing.s),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = if (endLocal != null) "$startLocal 至 $endLocal" else "$startLocal 至 待选结束日期",
-                style = AbType.footnote.copy(fontWeight = FontWeight.Medium),
+                style = AbType.footnote.copy(fontWeight = FontWeight.Medium).tabular(),
                 color = if (endLocal != null) p.label else p.accent,
             )
         }
@@ -198,6 +211,8 @@ internal fun LedgerRangePickerDialog(
                     rangeEnd = picked.toString()
                 }
             },
+            onPreviousMonth = { month = shown.minusMonths(1).toString() },
+            onNextMonth = { month = shown.plusMonths(1).toString() },
         )
         AppDialogActions(
             confirmLabel = "应用",
@@ -222,7 +237,7 @@ private fun CalendarMonthHeader(
         MonthIconAction(AbIcons.ChevronLeft, "上个月", onPrevious)
         Text(
             "${shown.year}年${shown.monthValue}月",
-            style = AbType.body.copy(fontWeight = FontWeight.SemiBold),
+            style = AbType.body.copy(fontWeight = FontWeight.SemiBold).tabular(),
             color = p.label,
             modifier = Modifier.weight(1f).wrapContentWidth(Alignment.CenterHorizontally),
         )
@@ -237,12 +252,82 @@ private fun CalendarMonthGrid(
     rangeStart: LocalDate,
     rangeEnd: LocalDate?,
     onPick: (LocalDate) -> Unit,
+    onPreviousMonth: (() -> Unit)? = null,
+    onNextMonth: (() -> Unit)? = null,
 ) {
     val p = LocalAbPalette.current
     val haptic = rememberAbHaptic()
+    val reduceMotion = LocalReduceMotion.current
+    val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
+    val dragX = remember { Animatable(0f) }
+    val latestPrev by rememberUpdatedState(onPreviousMonth)
+    val latestNext by rememberUpdatedState(onNextMonth)
     val isDark = p.pageBg.luminance() < 0.1f
     val bandColor = p.accent.copy(alpha = if (isDark) 0.24f else 0.14f)
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .then(
+                if (onPreviousMonth != null && onNextMonth != null) {
+                    Modifier.pointerInput(reduceMotion) {
+                        var totalDrag = 0f
+                        val thresholdPx = with(density) { 48.dp.toPx() }
+                        val maxVisualPx = with(density) { 32.dp.toPx() }
+                        detectHorizontalDragGestures(
+                            onDragStart = {
+                                totalDrag = 0f
+                                scope.launch { dragX.stop() }
+                            },
+                            onDragCancel = {
+                                totalDrag = 0f
+                                scope.launch {
+                                    if (reduceMotion) dragX.animateTo(0f, tween(90, easing = AbEasing.EaseOut))
+                                    else dragX.animateTo(0f, AbSpring.navigationFloat(false))
+                                }
+                            },
+                            onDragEnd = {
+                                val shift = when {
+                                    totalDrag > thresholdPx -> -1
+                                    totalDrag < -thresholdPx -> 1
+                                    else -> 0
+                                }
+                                totalDrag = 0f
+                                if (shift < 0) {
+                                    haptic.tick()
+                                    latestPrev?.invoke()
+                                } else if (shift > 0) {
+                                    haptic.tick()
+                                    latestNext?.invoke()
+                                }
+                                scope.launch {
+                                    if (reduceMotion) {
+                                        dragX.animateTo(0f, tween(90, easing = AbEasing.EaseOut))
+                                    } else if (shift != 0) {
+                                        val incoming = with(density) { 24.dp.toPx() } * if (shift < 0) -1f else 1f
+                                        dragX.snapTo(incoming)
+                                        dragX.animateTo(0f, AbSpring.navigationFloat(false))
+                                    } else {
+                                        dragX.animateTo(0f, AbSpring.navigationFloat(false))
+                                    }
+                                }
+                            },
+                        ) { change, delta ->
+                            change.consume()
+                            totalDrag += delta
+                            if (!reduceMotion) {
+                                val visual = (totalDrag * 0.34f).coerceIn(-maxVisualPx, maxVisualPx)
+                                scope.launch { dragX.snapTo(visual) }
+                            }
+                        }
+                    }
+                } else Modifier,
+            )
+            .graphicsLayer {
+                if (!reduceMotion) translationX = dragX.value
+            },
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
         Row(Modifier.fillMaxWidth()) {
             listOf("一", "二", "三", "四", "五", "六", "日").forEach { weekday ->
                 Text(
@@ -268,12 +353,14 @@ private fun CalendarMonthGrid(
                         val inRange = rangeEnd != null && rangeStart != rangeEnd && !date.isBefore(rangeStart) && !date.isAfter(rangeEnd)
                         val isToday = date == today
 
+                        val dayInteraction = remember { MutableInteractionSource() }
                         Box(
                             Modifier
                                 .weight(1f)
-                                .heightIn(min = 40.dp)
+                                .heightIn(min = AbSize.minTouch)
+                                .abPressFeedback(dayInteraction, pressedScale = 0.92f, pressedAlpha = 0.72f)
                                 .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
+                                    interactionSource = dayInteraction,
                                     indication = null,
                                 ) {
                                     haptic.tick()
@@ -322,7 +409,7 @@ private fun CalendarMonthGrid(
                                     n.toString(),
                                     style = AbType.body.copy(
                                         fontWeight = if (isEndpoint || isToday) FontWeight.SemiBold else FontWeight.Normal,
-                                    ),
+                                    ).tabular(),
                                     color = when {
                                         isEndpoint -> p.onAccent
                                         isToday -> p.accent
@@ -342,13 +429,14 @@ private fun CalendarMonthGrid(
 private fun MonthIconAction(icon: ImageVector, description: String, onClick: () -> Unit) {
     val p = LocalAbPalette.current
     val haptic = rememberAbHaptic()
-    val isDark = p.pageBg.luminance() < 0.1f
+    val interaction = remember { MutableInteractionSource() }
     Box(
         Modifier
-            .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
+            .sizeIn(minWidth = AbSize.minTouch, minHeight = AbSize.minTouch)
+            .abPressFeedback(interaction, pressedScale = 0.92f, pressedAlpha = 0.7f)
             .clip(CircleShape)
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = interaction,
                 indication = null,
             ) {
                 haptic.select()
@@ -361,7 +449,7 @@ private fun MonthIconAction(icon: ImageVector, description: String, onClick: () 
             Modifier
                 .size(32.dp)
                 .clip(CircleShape)
-                .background(if (isDark) Color(0x1FFFFFFF) else Color(0x10767680)),
+                .background(p.fill),
             contentAlignment = Alignment.Center,
         ) {
             Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp), tint = p.label)
@@ -381,7 +469,6 @@ private fun LiquidWheelTimePicker(
     onMinuteChange: (Int) -> Unit,
 ) {
     val p = LocalAbPalette.current
-    val isDark = p.pageBg.luminance() < 0.1f
     val pillShape = RoundedCornerShape(AbRadius.chip)
     Box(
         Modifier.width(142.dp).height(108.dp),
@@ -392,7 +479,7 @@ private fun LiquidWheelTimePicker(
                 .fillMaxWidth()
                 .height(36.dp)
                 .clip(pillShape)
-                .background(if (isDark) Color(0x1EFFFFFF) else Color(0x10767680)),
+                .background(p.fill),
         )
         Row(
             Modifier.fillMaxWidth(),
@@ -456,11 +543,14 @@ private fun TimeWheelColumn(
         }
     }
 
+    var programmaticSync by remember { mutableStateOf(false) }
+
     LaunchedEffect(listState) {
         snapshotFlow { centeredIndex }
             .distinctUntilChanged()
             .drop(1)
             .collect { idx ->
+                if (programmaticSync) return@collect
                 val picked = ((idx % count) + count) % count
                 haptic.tick()
                 onValueChange(picked)
@@ -472,7 +562,12 @@ private fun TimeWheelColumn(
         if (!listState.isScrollInProgress && cur != value) {
             val delta = ((value - cur + count + count / 2) % count) - count / 2
             val target = centeredIndex + delta
-            if (reduceMotion) listState.scrollToItem(target) else listState.animateScrollToItem(target)
+            programmaticSync = true
+            try {
+                if (reduceMotion) listState.scrollToItem(target) else listState.animateScrollToItem(target)
+            } finally {
+                programmaticSync = false
+            }
         }
     }
 
@@ -500,41 +595,47 @@ private fun TimeWheelColumn(
     ) {
         items(Int.MAX_VALUE) { index ->
             val number = ((index % count) + count) % count
-            val distance = abs(index - centeredIndex)
-            val isCentered = distance == 0
-            val itemScale = if (isCentered) 1.06f else 0.86f
-            val itemAlpha = when (distance) {
-                0 -> 1f
-                1 -> 0.42f
-                else -> 0.16f
-            }
+            val cellInteraction = remember { MutableInteractionSource() }
             Box(
                 Modifier
                     .fillMaxWidth()
                     .height(itemHeight)
+                    .abPressFeedback(cellInteraction, pressedScale = 0.94f, pressedAlpha = 0.72f)
                     .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
+                        interactionSource = cellInteraction,
                         indication = null,
                     ) {
-                        if (!isCentered) {
+                        if (index != centeredIndex) {
                             scope.launch {
                                 if (reduceMotion) listState.scrollToItem(index) else listState.animateScrollToItem(index)
                             }
                         }
                     }
                     .graphicsLayer {
-                        scaleX = itemScale
-                        scaleY = itemScale
-                        alpha = itemAlpha
+                        val info = listState.layoutInfo
+                        val itemInfo = info.visibleItemsInfo.firstOrNull { it.index == index }
+                        val normalizedDist = if (itemInfo != null && itemInfo.size > 0) {
+                            val viewportCenter = (info.viewportStartOffset + info.viewportEndOffset) * 0.5f
+                            val itemCenter = itemInfo.offset + itemInfo.size * 0.5f
+                            (abs(itemCenter - viewportCenter) / itemInfo.size.toFloat()).coerceIn(0f, 2f)
+                        } else {
+                            abs(index - centeredIndex).toFloat().coerceIn(0f, 2f)
+                        }
+                        val t = (1f - normalizedDist.coerceIn(0f, 1f))
+                        val smoothScale = 0.86f + 0.20f * t
+                        scaleX = smoothScale
+                        scaleY = smoothScale
+                        alpha = when {
+                            normalizedDist <= 1f -> 0.42f + 0.58f * t
+                            else -> (0.42f - 0.26f * (normalizedDist - 1f)).coerceAtLeast(0.16f)
+                        }
                     },
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = number.toString().padStart(2, '0'),
-                    style = AbType.headline.copy(
-                        fontWeight = if (isCentered) FontWeight.SemiBold else FontWeight.Normal,
-                    ),
-                    color = if (isCentered) p.label else p.secondaryLabel,
+                    style = AbType.headline.copy(fontWeight = FontWeight.Medium).tabular(),
+                    color = p.label,
                 )
             }
         }

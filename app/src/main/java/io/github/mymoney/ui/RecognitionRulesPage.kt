@@ -92,11 +92,10 @@ internal fun RecognitionRulesPage(
             if (section == RecognitionRuleSection.APPS) {
                 item {
                     InsetGroup {
-                        packages.forEachIndexed { index, pkg ->
+                        packages.forEach { pkg ->
                             val selected = pkg in whitelist
                             ListRow(
                                 title = appLabel(pkg),
-                                dividerAbove = index > 0,
                                 trailing = {
                                     AbSwitch(selected) { onToggleApp(pkg) }
                                 },
@@ -117,7 +116,6 @@ internal fun RecognitionRulesPage(
                             },
                             onClick = { LocalRuleStore.setLearningEnabled(!ruleState.learningEnabled) },
                         )
-                        InsetDivider()
                         ListRow(
                             title = "已学习",
                             trailing = {
@@ -126,7 +124,6 @@ internal fun RecognitionRulesPage(
                             chevron = true,
                             onClick = { showLearned = !showLearned },
                         )
-                        InsetDivider()
                         ListRow(
                             title = "待生效",
                             trailing = {
@@ -135,7 +132,6 @@ internal fun RecognitionRulesPage(
                             chevron = true,
                             onClick = { showPending = !showPending },
                         )
-                        InsetDivider()
                         ListRow(
                             title = "清空学习记忆",
                             destructive = true,

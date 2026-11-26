@@ -96,7 +96,7 @@ object BrandColors {
 }
 
 object BrandMotion {
-    const val COLOR_MS = 320
+    const val COLOR_MS = 220
     const val PRESS_DOWN_MS = 80
     const val PRESS_UP_MS = 180
     const val PRESSED_SCALE = .92f

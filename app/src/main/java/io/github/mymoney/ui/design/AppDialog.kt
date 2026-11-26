@@ -124,6 +124,7 @@ internal fun SheetDragGrabber(
     offsetY: Animatable<Float, *>,
     onDragOffsetChange: (Boolean, Float) -> Unit,
     onDismiss: () -> Unit,
+    onDragDismiss: ((Float) -> Unit)? = null,
 ) {
     val p = LocalAbPalette.current
     val density = LocalDensity.current
@@ -131,6 +132,8 @@ internal fun SheetDragGrabber(
     val scope = rememberCoroutineScope()
     val tracker = remember { VelocityTracker() }
     val currentDrag = remember { floatArrayOf(0f) }
+    val rawDrag = remember { floatArrayOf(0f) }
+    val maxUpOverdragPx = remember(density) { with(density) { 26.dp.toPx() } }
 
     Box(
         Modifier
@@ -141,6 +144,7 @@ internal fun SheetDragGrabber(
                 detectVerticalDragGestures(
                     onDragStart = {
                         currentDrag[0] = offsetY.value
+                        rawDrag[0] = currentDrag[0]
                         onDragOffsetChange(true, currentDrag[0])
                         tracker.resetTracking()
                         scope.launch { offsetY.stop() }
@@ -153,8 +157,8 @@ internal fun SheetDragGrabber(
                             offsetY.snapTo(released)
                             onDragOffsetChange(false, 0f)
                             when {
-                                shouldClose && enabled -> onDismiss()
-                                reduceMotion -> offsetY.snapTo(0f)
+                                shouldClose && enabled -> onDragDismiss?.invoke(velocity) ?: onDismiss()
+                                reduceMotion -> offsetY.animateTo(0f, tween(110, easing = AbEasing.EaseOut))
                                 else -> offsetY.animateTo(
                                     0f,
                                     AbSpring.sheetFloat(false),
@@ -168,12 +172,19 @@ internal fun SheetDragGrabber(
                         scope.launch {
                             offsetY.snapTo(cancelled)
                             onDragOffsetChange(false, 0f)
-                            if (reduceMotion) offsetY.snapTo(0f) else offsetY.animateTo(0f, AbSpring.sheetFloat(false))
+                            if (reduceMotion) offsetY.animateTo(0f, tween(110, easing = AbEasing.EaseOut))
+                            else offsetY.animateTo(0f, AbSpring.sheetFloat(false))
                         }
                     },
                 ) { change, delta ->
                     change.consume()
-                    currentDrag[0] = (currentDrag[0] + delta).coerceAtLeast(0f)
+                    rawDrag[0] += delta
+                    currentDrag[0] = if (rawDrag[0] < 0f) {
+                        val up = -rawDrag[0]
+                        -maxUpOverdragPx * (up / (up + maxUpOverdragPx * 1.8f))
+                    } else {
+                        rawDrag[0]
+                    }
                     tracker.addPosition(change.uptimeMillis, Offset(change.position.x, change.position.y + currentDrag[0]))
                     onDragOffsetChange(true, currentDrag[0])
                 }
@@ -314,22 +325,22 @@ internal fun AppDialog(
     val latestDismissible by rememberUpdatedState(dismissible)
     var closing by remember { mutableStateOf(false) }
 
-    val animScale = remember { Animatable(if (reduceMotion) 1f else 0.90f) }
-    val animAlpha = remember { Animatable(if (reduceMotion) 1f else 0f) }
+    val animScale = remember { Animatable(if (reduceMotion) 1f else 0.92f) }
+    val animAlpha = remember { Animatable(0f) }
 
     fun dismissAnimated() {
         if (!latestDismissible || closing) return
-        if (reduceMotion) {
-            latestOnDismiss()
-            return
-        }
         closing = true
         scope.launch {
             try {
-                val scaleJob = launch { animScale.animateTo(0.92f, tween(135)) }
-                val alphaJob = launch { animAlpha.animateTo(0f, tween(135)) }
-                scaleJob.join()
-                alphaJob.join()
+                if (reduceMotion) {
+                    animAlpha.animateTo(0f, tween(120, easing = AbEasing.EaseOut))
+                } else {
+                    val scaleJob = launch { animScale.animateTo(0.93f, tween(135, easing = AbEasing.EaseOut)) }
+                    val alphaJob = launch { animAlpha.animateTo(0f, tween(130, easing = AbEasing.EaseOut)) }
+                    scaleJob.join()
+                    alphaJob.join()
+                }
                 latestOnDismiss()
             } finally {
                 closing = false
@@ -346,10 +357,10 @@ internal fun AppDialog(
         LaunchedEffect(reduceMotion) {
             if (reduceMotion) {
                 animScale.snapTo(1f)
-                animAlpha.snapTo(1f)
+                animAlpha.animateTo(1f, tween(150, easing = AbEasing.EaseOut))
             } else {
                 launch { animScale.animateTo(1f, AbSpring.modalFloat(false)) }
-                launch { animAlpha.animateTo(1f, tween(150)) }
+                launch { animAlpha.animateTo(1f, tween(160, easing = AbEasing.EaseOut)) }
             }
         }
 
@@ -371,7 +382,7 @@ internal fun AppDialog(
         BoxWithConstraints(
             Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = targetDim * animAlpha.value))
+                .drawBehind { drawRect(Color.Black.copy(alpha = targetDim * animAlpha.value)) }
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
@@ -620,21 +631,23 @@ internal fun AppActionSheet(
     val latestOnDismiss by rememberUpdatedState(onDismiss)
 
     val offsetY = remember { Animatable(if (reduceMotion) 0f else slideStartPx) }
+    val animAlpha = remember { Animatable(if (reduceMotion) 0f else 1f) }
     var dragging by remember { mutableStateOf(false) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
     var closing by remember { mutableStateOf(false) }
-    val displayedOffset = if (dragging) dragOffset else offsetY.value
 
-    fun dismissAnimated() {
+    fun dismissAnimated(velocity: Float? = null) {
         if (closing) return
-        if (reduceMotion) {
-            latestOnDismiss()
-            return
-        }
         closing = true
         scope.launch {
             try {
-                offsetY.animateTo(slideStartPx, tween(170))
+                if (reduceMotion) {
+                    animAlpha.animateTo(0f, tween(120, easing = AbEasing.EaseOut))
+                } else if (velocity != null) {
+                    offsetY.animateTo(slideStartPx, AbSpring.sheetFloat(false), initialVelocity = velocity)
+                } else {
+                    offsetY.animateTo(slideStartPx, tween(170, easing = AbEasing.EaseOut))
+                }
                 latestOnDismiss()
             } finally {
                 closing = false
@@ -650,16 +663,21 @@ internal fun AppActionSheet(
         LaunchedEffect(reduceMotion) {
             if (reduceMotion) {
                 offsetY.snapTo(0f)
+                animAlpha.animateTo(1f, tween(150, easing = AbEasing.EaseOut))
             } else {
+                animAlpha.snapTo(1f)
                 offsetY.animateTo(0f, AbSpring.sheetFloat(false))
             }
         }
-        val scrimProgress = (1f - (displayedOffset / slideStartPx.coerceAtLeast(1f))).coerceIn(0f, 1f)
-        val dimAlpha = (if (isDark) 0.40f else 0.24f) * scrimProgress
+        val maxDim = if (isDark) 0.40f else 0.24f
         Box(
             Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = dimAlpha))
+                .drawBehind {
+                    val y = if (dragging) dragOffset else offsetY.value
+                    val progress = (1f - (y / slideStartPx.coerceAtLeast(1f))).coerceIn(0f, 1f)
+                    drawRect(Color.Black.copy(alpha = maxDim * progress * animAlpha.value))
+                }
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
@@ -674,7 +692,10 @@ internal fun AppActionSheet(
                 modifier = Modifier
                     .widthIn(max = 560.dp)
                     .fillMaxWidth()
-                    .offset { IntOffset(0, displayedOffset.roundToInt()) }
+                    .graphicsLayer {
+                        translationY = if (dragging) dragOffset else offsetY.value
+                        alpha = animAlpha.value
+                    }
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
@@ -696,6 +717,7 @@ internal fun AppActionSheet(
                                 dragOffset = nextOffset
                             },
                             onDismiss = { dismissAnimated() },
+                            onDragDismiss = { v -> dismissAnimated(v) },
                         )
                         if (title != null) {
                             Text(

@@ -131,14 +131,19 @@ internal fun GlassContextMenuHost(
 
     LaunchedEffect(state.open, state.generation, reduceMotion) {
         if (state.open) {
-            if (reduceMotion) animProgress.snapTo(1f)
-            else {
+            if (reduceMotion) {
                 animProgress.snapTo(0.02f)
-                animProgress.animateTo(1f, AbSpring.modalFloat(false))
+                animProgress.animateTo(1f, tween(140, easing = AbEasing.EaseOut))
+            } else {
+                animProgress.snapTo(0.02f)
+                animProgress.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 1f, stiffness = 560f))
             }
         } else {
-            if (reduceMotion) animProgress.snapTo(0f)
-            else animProgress.animateTo(0f, AbSpring.morphFloat(false))
+            if (reduceMotion) {
+                animProgress.animateTo(0f, tween(110, easing = AbEasing.EaseOut))
+            } else {
+                animProgress.animateTo(0f, androidx.compose.animation.core.tween(130, easing = AbEasing.EaseOut))
+            }
         }
     }
 
@@ -315,25 +320,16 @@ internal fun GlassContextMenuHost(
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                             )
                         }
-                        activeRequest.options.forEachIndexed { index, option ->
-                            if (index > 0) {
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 14.dp),
-                                    thickness = 0.5.dp,
-                                    color = p.separator.copy(alpha = 0.26f),
-                                )
-                            }
+                        activeRequest.options.forEach { option ->
                             val picked = option.key == activeRequest.selectedKey
+                            val itemInteraction = remember(option.key) { MutableInteractionSource() }
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .heightIn(min = 46.dp)
-                                    .then(
-                                        if (picked) Modifier.background(p.accent.copy(alpha = if (isDark) 0.14f else 0.08f))
-                                        else Modifier,
-                                    )
+                                    .heightIn(min = 48.dp)
+                                    .abPressFeedback(itemInteraction, pressedScale = 0.985f, pressedAlpha = 0.74f)
                                     .clickable(
-                                        interactionSource = remember { MutableInteractionSource() },
+                                        interactionSource = itemInteraction,
                                         indication = null,
                                     ) {
                                         haptic.select()

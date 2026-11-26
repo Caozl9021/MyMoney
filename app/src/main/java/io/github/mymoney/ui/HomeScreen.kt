@@ -1,7 +1,11 @@
 package io.github.mymoney.ui
 
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -34,13 +38,16 @@ import com.example.billkit.DebugBus
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -49,13 +56,18 @@ import io.github.mymoney.data.CaptureMode
 import io.github.mymoney.data.BillEntity
 import io.github.mymoney.data.RecognitionStore
 import io.github.mymoney.data.RecognitionStatus
+import io.github.mymoney.ui.design.AbEasing
 import io.github.mymoney.ui.design.AbIcons
+import io.github.mymoney.ui.design.AbSize
+import io.github.mymoney.ui.design.AbSpring
 import io.github.mymoney.ui.design.AbTextButton
 import io.github.mymoney.ui.design.AppDialog
 import io.github.mymoney.ui.design.AbRadius
 import io.github.mymoney.ui.design.AbSpacing
 import io.github.mymoney.ui.design.AbType
+import io.github.mymoney.ui.design.abPressFeedback
 import io.github.mymoney.ui.design.sectionHeader
+import io.github.mymoney.ui.design.tabular
 import io.github.mymoney.ui.design.EmptyState
 import io.github.mymoney.ui.design.GlassContextMenuHost
 import io.github.mymoney.ui.design.GroupFooter
@@ -65,6 +77,7 @@ import io.github.mymoney.ui.design.InsetGroup
 import io.github.mymoney.ui.design.ListRow
 import io.github.mymoney.ui.design.LocalAbPalette
 import io.github.mymoney.ui.design.LocalLiquidGlassEnabled
+import io.github.mymoney.ui.design.LocalReduceMotion
 import io.github.mymoney.ui.design.LocalReduceTransparency
 import io.github.mymoney.ui.design.PageScaffold
 import io.github.mymoney.ui.design.formatAmount
@@ -89,9 +102,22 @@ fun HomeScreen(
     val pendingReimburse by remember(context) {
         io.github.mymoney.data.AppDb.get(context.applicationContext).bills().observePendingReimbursement()
     }.collectAsStateWithLifecycle(io.github.mymoney.data.PendingReimbursement(0, 0))
-    val homePeriod = remember(clock, monthStartDay, periodBack) {
+    val currentHomePeriod = remember(clock, monthStartDay) {
         io.github.mymoney.data.LedgerMonthPeriod.containing(clock.date, monthStartDay, clock.zone)
-            .shift(-periodBack.toLong())
+    }
+    val earliestBillTime by remember(context) {
+        io.github.mymoney.data.AppDb.get(context.applicationContext).bills().observeEarliestTimeMillis()
+            .map { arrayOf(it) }
+    }.collectAsStateWithLifecycle(null)
+    val maxPeriodBack = remember(earliestBillTime, currentHomePeriod) {
+        earliestBillTime?.let { currentHomePeriod.periodsBackTo(it[0]) }
+    }
+    LaunchedEffect(maxPeriodBack) {
+        val limit = maxPeriodBack
+        if (limit != null && periodBack > limit) periodBack = limit
+    }
+    val homePeriod = remember(currentHomePeriod, periodBack) {
+        currentHomePeriod.shift(-periodBack.toLong())
     }
     val homePeriodKey = "${homePeriod.month}:${homePeriod.day}:${homePeriod.zone.id}"
     var visiblePeriodKey by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(homePeriodKey) }
@@ -127,6 +153,39 @@ fun HomeScreen(
     var anchorLimit by androidx.compose.runtime.saveable.rememberSaveable(homePeriodKey) { mutableIntStateOf(HOME_DAILY_PAGE_SIZE) }
     val dailyState = rememberHomeDailyState(clock, homePeriod, anchorLimit, recentRetry)
     val dailySnapshot = dailyState.snapshot
+    val reduceMotion = LocalReduceMotion.current
+    val density = LocalDensity.current
+    val dailySlideX = remember { Animatable(0f) }
+    val dailyAlpha = remember { Animatable(1f) }
+    var shownDailyPeriod by remember { mutableStateOf<io.github.mymoney.data.LedgerMonthPeriod?>(null) }
+    var pendingDailyDir by remember { mutableIntStateOf(0) }
+    LaunchedEffect(dailyState.snapshot, dailyState.period) {
+        val loadedPeriod = dailyState.period ?: return@LaunchedEffect
+        if (dailyState.snapshot == null) return@LaunchedEffect
+        if (shownDailyPeriod == null) {
+            shownDailyPeriod = loadedPeriod
+            return@LaunchedEffect
+        }
+        if (shownDailyPeriod != loadedPeriod) {
+            shownDailyPeriod = loadedPeriod
+            val dir = pendingDailyDir
+            pendingDailyDir = 0
+            if (dir != 0) {
+                if (reduceMotion) {
+                    dailySlideX.snapTo(0f)
+                    dailyAlpha.snapTo(0.35f)
+                    dailyAlpha.animateTo(1f, tween(110, easing = AbEasing.EaseOut))
+                } else {
+                    dailySlideX.snapTo(dir * with(density) { 88.dp.toPx() })
+                    dailyAlpha.snapTo(0.1f)
+                    coroutineScope {
+                        launch { dailySlideX.animateTo(0f, AbSpring.navigationFloat(false)) }
+                        launch { dailyAlpha.animateTo(1f, tween(170, easing = AbEasing.EaseOut)) }
+                    }
+                }
+            }
+        }
+    }
     val history by RecognitionStore.records.collectAsStateWithLifecycle()
     val historyReady by RecognitionStore.ready.collectAsStateWithLifecycle()
     val historyError by RecognitionStore.error.collectAsStateWithLifecycle()
@@ -175,41 +234,62 @@ fun HomeScreen(
         listState = listState,
     ) { padding ->
         Box(Modifier.fillMaxSize()) {
+        val dailyModifier = Modifier.graphicsLayer {
+            if (!reduceMotion) translationX = dailySlideX.value
+            alpha = dailyAlpha.value
+        }
         LazyColumn(
             state = listState,
             // 底部让位必须走 contentPadding —— 不能用 Modifier.padding(padding)：
             // 那会把 LazyColumn 的视口从底部削掉一截，视口之下露出整片 pageBg，
             // 悬浮胶囊正好压在这片纯色区里，看起来就是「胶囊下面一条实色横带」。
-            modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth().align(Alignment.TopCenter),
+            modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth().align(Alignment.TopCenter).clipToBounds(),
             contentPadding = PaddingValues(
-                start = AbSpacing.page,
-                end = AbSpacing.page,
                 top = padding.calculateTopPadding(),
                 bottom = padding.calculateBottomPadding(),
             ),
             verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
             homeCardItem(key = "summary") {
-                MonthlySummaryCard(clock, homePeriod, periodBack) { periodBack = it.coerceAtLeast(0) }
+                MonthlySummaryCard(clock, homePeriod, periodBack, maxBack = maxPeriodBack) {
+                    val limit = maxPeriodBack
+                    val next = it.coerceAtLeast(0).let { v -> if (limit != null) minOf(v, limit) else v }
+                    if (next != periodBack) {
+                        pendingDailyDir = if (next > periodBack) -1 else 1
+                        periodBack = next
+                    }
+                }
             }
             if (pendingReimburse.count > 0) item(key = "pending-reimburse") {
-                Text(
-                    "待报销 ${formatAmount(pendingReimburse.cents)} · ${pendingReimburse.count} 笔",
-                    style = AbType.footnote, color = p.secondaryLabel,
-                    modifier = Modifier.fillMaxWidth()
-                        .clickable(onClick = onOpenPending)
-                        .padding(horizontal = AbSpacing.m, vertical = 4.dp),
-                )
+                val pendingInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                Box(
+                    Modifier.fillMaxWidth()
+                        .padding(horizontal = AbSpacing.page)
+                        .heightIn(min = AbSize.minTouch)
+                        .clip(RoundedCornerShape(AbRadius.row))
+                        .abPressFeedback(pendingInteraction, pressedScale = 0.985f, pressedAlpha = 0.72f)
+                        .clickable(interactionSource = pendingInteraction, indication = null, onClick = onOpenPending)
+                        .padding(horizontal = AbSpacing.m),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    Text(
+                        "待报销 ${formatAmount(pendingReimburse.cents)} · ${pendingReimburse.count} 笔",
+                        style = AbType.footnote.tabular(),
+                        color = p.secondaryLabel,
+                    )
+                }
             }
             if (health.attention) homeCardItem(key = "runtime-attention") {
                 val primaryAction = health.actions.firstOrNull()
+                val attentionInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
                 Row(
                     Modifier
                         .fillMaxWidth()
                         .heightIn(min = 48.dp)
+                        .abPressFeedback(attentionInteraction, pressedScale = 0.988f, tintOverlay = true)
                         .clip(RoundedCornerShape(AbRadius.row))
                         .background(p.fill)
-                        .clickable { healthDetails = true }
+                        .clickable(interactionSource = attentionInteraction, indication = null) { healthDetails = true }
                         .padding(start = AbSpacing.m, end = if (primaryAction == null) AbSpacing.m else AbSpacing.xs),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
@@ -258,7 +338,7 @@ fun HomeScreen(
                     InsetGroup { ListRow(title = "账单读取失败", subtitle = "点此重新加载", onClick = { recentRetry++ }) }
                 }
             } else if (dailySnapshot != null && dailySnapshot.days.isEmpty()) {
-                homeCardItem(key = "empty") {
+                homeCardItem(key = "empty", modifier = dailyModifier) {
                     InsetGroup {
                         EmptyState(icon = AbIcons.Wallet,
                             title = "这个账期还没有账单",
@@ -269,15 +349,16 @@ fun HomeScreen(
             } else if (dailySnapshot != null) {
                 homeDailyCards(dailySnapshot, clock, onBillClick = { openBill(it) }, onBillLongPress = { bill, bounds ->
                     reimburseTarget = bill to bounds
-                })
+                }, itemModifier = dailyModifier)
             }
-            if (dailySnapshot != null && (dailyState.failed || dailyState.loading || dailySnapshot.hasMore)) {
-                homeCardItem(key = "daily-more") {
+            val samePeriodMore = dailyState.period == homePeriod
+            if (dailySnapshot != null && (dailyState.failed || (dailyState.loading && samePeriodMore) || dailySnapshot.hasMore)) {
+                homeCardItem(key = "daily-more", modifier = dailyModifier) {
                     InsetGroup {
                         ListRow(
                             title = when {
                                 dailyState.failed -> "加载失败 · 重试"
-                                dailyState.loading -> "正在加载…"
+                                dailyState.loading && samePeriodMore -> "正在加载…"
                                 else -> "加载更早记录"
                             },
                             subtitle = "已显示 ${dailySnapshot.loadedCount} 笔",

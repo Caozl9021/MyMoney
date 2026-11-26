@@ -38,6 +38,8 @@ object CategoryIcons {
         "local_taxi" to listOf("打车", "出租车", "网约", "滴滴"),
         "local_gas_station" to listOf("加油", "停车", "油费", "充电桩"),
         "directions_bus" to listOf("交通", "公交", "地铁", "高铁", "火车", "通勤"),
+        "account_balance_wallet" to listOf("现金", "钱包"),
+        "school" to listOf("学习", "课程", "电子书", "书", "教育", "培训"),
         "checkroom" to listOf("服饰", "衣", "鞋", "包"),
         "devices" to listOf("数码", "电子", "手机", "电脑", "电器"),
         "shopping_cart" to listOf("购物", "日用", "超市", "百货"),
@@ -52,7 +54,6 @@ object CategoryIcons {
         "fitness_center" to listOf("健身", "运动", "体育"),
         "spa" to listOf("美容", "护肤", "理发"),
         "medical_services" to listOf("医疗", "门诊", "药", "体检", "看病"),
-        "school" to listOf("学习", "课程", "书", "教育", "培训"),
         "child_care" to listOf("育儿", "孩子", "母婴", "奶粉"),
         "pets" to listOf("宠物", "猫", "狗"),
         "flight" to listOf("旅行", "机票", "酒店", "旅游"),
@@ -66,7 +67,6 @@ object CategoryIcons {
         "swap_horiz" to listOf("转账"),
         "receipt_long" to listOf("缴费", "账单", "手续费"),
         "payments" to listOf("支付", "消费"),
-        "account_balance_wallet" to listOf("现金", "钱包"),
     )
 
     /** 全部分类图标 key，供「预设分类」以外的自定义选择使用。 */

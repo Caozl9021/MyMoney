@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -48,6 +49,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -169,7 +171,8 @@ fun SettingsScreen(
 
     var pagePath by rememberSaveable { mutableStateOf(listOf(SettingsPage.ROOT)) }
     val page = pagePath.last()
-    val pageTransition = updateTransition(pagePath, label = "settingsRoute")
+    var predictiveSnapEpoch by remember { mutableIntStateOf(0) }
+    val pageTransition = key(predictiveSnapEpoch) { updateTransition(pagePath, label = "settingsRoute") }
     val visibilityChanged by rememberUpdatedState(onEditorVisibilityChanged)
     var historyDetailVisible by remember { mutableStateOf(false) }
     LaunchedEffect(page, historyDetailVisible) {
@@ -200,6 +203,12 @@ fun SettingsScreen(
     fun navigate(target: SettingsPage) {
         if (navigating || target == page) return
         rootExitGate.invalidate()
+        if (!predictiveEnabled) {
+            navigationRevision++
+            previews.keys.retainAll(pagePath.toSet())
+            pagePath = pagePath + target
+            return
+        }
         val ticket = ++navigationRevision
         navigating = true
         val origin = pagePath
@@ -303,18 +312,20 @@ fun SettingsScreen(
         contentReady = contentReady,
         preview = previews[pagePath.dropLast(1).lastOrNull()],
         pixels = backPixels,
+        onPredictiveCommit = { predictiveSnapEpoch++ },
     ) {
         val predictiveCommit = LocalPredictiveBackCommit.current
-        pageTransition.AnimatedContent(
-            modifier = Modifier.fillMaxSize().clipToBounds(),
-            transitionSpec = {
-                liquidNavigationTransition(
-                    goingBack = targetState.size < initialState.size,
-                    reduceMotion = reduceMotion,
-                    predictiveCommit = predictiveCommit,
-                )
-            },
-        ) { shownPath ->
+        key(predictiveSnapEpoch) {
+            pageTransition.AnimatedContent(
+                modifier = Modifier.fillMaxSize().clipToBounds(),
+                transitionSpec = {
+                    liquidNavigationTransition(
+                        goingBack = targetState.size < initialState.size,
+                        reduceMotion = reduceMotion,
+                        predictiveCommit = predictiveCommit,
+                    )
+                },
+            ) { shownPath ->
             val shown = shownPath.last()
             CompositionLocalProvider(
                 LocalBackActive provides (shownPath == pagePath),
@@ -480,8 +491,8 @@ fun SettingsScreen(
                         SettingsPage.EXPORT_HELP -> SettingsContentPage("导入说明", back) {
                             InsetGroup {
                                 ListRow(title = "1 · 对齐名称", subtitle = "分类和账户名需与 iCost 对应，转账另一账户在 iCost 内补选。")
-                                ListRow(title = "2 · 导出分享", subtitle = "选择周期范围生成 CSV 并分享到 iCost。", dividerAbove = true)
-                                ListRow(title = "3 · 退款限制", subtitle = "iCost 不支持退款，含退款的范围请改用完整备份。", dividerAbove = true)
+                                ListRow(title = "2 · 导出分享", subtitle = "选择周期范围生成 CSV 并分享到 iCost。")
+                                ListRow(title = "3 · 退款限制", subtitle = "iCost 不支持退款，含退款的范围请改用完整备份。")
                             }
                         }
 
@@ -508,6 +519,7 @@ fun SettingsScreen(
                     }
                 }
             }
+        }
         }
     }
 }
@@ -587,7 +599,6 @@ private fun BackgroundKeepAlivePage(
                         )
                     },
                     chevron = true,
-                    dividerAbove = true,
                     onClick = {
                         runCatching {
                             context.startActivity(
@@ -609,7 +620,6 @@ private fun BackgroundKeepAlivePage(
                             )
                         },
                         chevron = manufacturer.hasSpecialSettings,
-                        dividerAbove = true,
                         onClick = {
                             val intent = AccessibilityEnhancer.resolveAutoStartIntent(context, manufacturer)
                             if (intent != null) {
@@ -630,7 +640,6 @@ private fun BackgroundKeepAlivePage(
                         )
                     },
                     chevron = true,
-                    dividerAbove = true,
                     onClick = {
                         if (notifyGranted) {
                             openNotificationChannelSettings(context)
@@ -712,7 +721,6 @@ private fun ExportPage(onBack: () -> Unit, onOpenHelp: () -> Unit) {
                 )
                 ListRow(
                     title = "最近 50 条",
-                    dividerAbove = true,
                     chevron = true,
                     onClick = { run { CostShare.shareRecent(context, limit = 50) } },
                 )
@@ -780,7 +788,6 @@ private fun AppearancePage(
                 )
                 ListRow(
                     title = "预测性返回",
-                    dividerAbove = true,
                     trailing = {
                         AbSwitch(prefs.getBoolean(Appearance.PREDICTIVE_BACK, Appearance.DEFAULT_PREDICTIVE_BACK)) {
                             prefs.edit().putBoolean(Appearance.PREDICTIVE_BACK, it).apply()
@@ -789,7 +796,6 @@ private fun AppearancePage(
                 )
                 ListRow(
                     title = "液态玻璃",
-                    dividerAbove = true,
                     chevron = true,
                     trailing = {
                         Text(
@@ -806,8 +812,6 @@ private fun AppearancePage(
                 )
                 ListRow(
                     title = "桌面小组件",
-                    subtitle = "速记、七日柱图与资产报销看板",
-                    dividerAbove = true,
                     chevron = true,
                     onClick = onOpenWidgets,
                 )
@@ -841,13 +845,7 @@ private fun WidgetsSettingsPage(onBack: () -> Unit) {
         SectionColumn(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(padding).padding(horizontal = AbSpacing.page),
         ) {
-            Text(
-                text = "添加后可在桌面长按组件边框自由拖拽缩放，系统会自动切换对应尺寸排版。",
-                style = AbType.footnote,
-                color = p.secondaryLabel,
-            )
-
-            GroupHeader("小组件默认材质")
+            GroupHeader("默认材质")
             Segmented(
                 options = io.github.mymoney.systems.WidgetSurfaceStyle.entries.map { it.title },
                 selected = io.github.mymoney.systems.WidgetSurfaceStyle.entries.indexOf(surfaceStyle),
@@ -858,68 +856,34 @@ private fun WidgetsSettingsPage(onBack: () -> Unit) {
                     io.github.mymoney.systems.SystemIntegration.refresh(context)
                 },
             )
-            Text(
-                text = "「暗透玻璃」更贴合深色/桌面半透明文件夹质感；资产看板也可按实例单独覆盖。",
-                style = AbType.caption1,
-                color = p.secondaryLabel,
-            )
 
             data class WidgetSpec(
                 val title: String,
-                val sizes: String,
-                val desc: String,
                 val cls: Class<*>,
             )
             val specs = remember {
                 listOf(
-                    WidgetSpec(
-                        title = "极速记账",
-                        sizes = "默认 2×1 · 支持 1×1 / 1×2 / 2×1 / 2×2",
-                        desc = "品牌图标与主题色加号，全卡片任意位置点击直接弹出透明确认卡记一笔。",
-                        cls = io.github.mymoney.systems.QuickEntryWidget::class.java,
-                    ),
-                    WidgetSpec(
-                        title = "七日支出趋势",
-                        sizes = "默认 3×2 · 支持 2×1～4×1 纯柱图及 2×2～4×2",
-                        desc = "3×2/4×2 带星期标签，2×2 精简去日期，横条纯柱状图；轻点直达统计页。",
-                        cls = io.github.mymoney.systems.SevenDayExpenseWidget::class.java,
-                    ),
-                    WidgetSpec(
-                        title = "资产与报销看板",
-                        sizes = "默认 2×2 · 支持 1×1～4×2 全尺寸",
-                        desc = "可按实例配置混合/纯资产/纯报销模式与材质，分区直达资产与待报销。",
-                        cls = io.github.mymoney.systems.AssetReimburseWidget::class.java,
-                    ),
-                    WidgetSpec(
-                        title = "本期支出",
-                        sizes = "固定 2×1",
-                        desc = "紧凑展示本期原支出与右侧加号速记，轻点卡片进首页，点加号直接弹出确认卡。",
-                        cls = io.github.mymoney.systems.MonthlyExpenseWidget::class.java,
-                    ),
+                    WidgetSpec("极速记账", io.github.mymoney.systems.QuickEntryWidget::class.java),
+                    WidgetSpec("七日支出趋势", io.github.mymoney.systems.SevenDayExpenseWidget::class.java),
+                    WidgetSpec("资产与报销看板", io.github.mymoney.systems.AssetReimburseWidget::class.java),
+                    WidgetSpec("本期支出", io.github.mymoney.systems.MonthlyExpenseWidget::class.java),
                 )
             }
 
-            specs.forEach { spec ->
-                InsetGroup {
-                    Column(
-                        Modifier.fillMaxWidth().padding(AbCardDensity.content),
-                        verticalArrangement = Arrangement.spacedBy(AbSpacing.s),
-                    ) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Text(spec.title, style = AbType.headline, color = p.label)
-                            Text(spec.sizes, style = AbType.caption1, color = p.accent)
-                        }
-                        Text(spec.desc, style = AbType.footnote, color = p.secondaryLabel)
-                        Spacer(Modifier.height(2.dp))
-                        SecondaryButton(
-                            text = if (pinSupported) "添加到桌面" else "查看添加方式",
-                            onClick = { pin(spec.cls, spec.title) },
-                        )
-                    }
+            GroupHeader("添加到桌面")
+            InsetGroup {
+                specs.forEach { spec ->
+                    ListRow(
+                        title = spec.title,
+                        trailing = {
+                            Text(
+                                text = if (pinSupported) "添加" else "说明",
+                                style = AbType.footnote,
+                                color = p.accent,
+                            )
+                        },
+                        onClick = { pin(spec.cls, spec.title) },
+                    )
                 }
             }
         }
@@ -957,22 +921,42 @@ private fun LiquidGlassSettingsPage(onBack: () -> Unit) {
             var previewBaseBlurDp by remember { mutableFloatStateOf(4.5f) }
             val reduceTransparency = LocalReduceTransparency.current
 
+            fun toggleLiquidGlass(enabled: Boolean) {
+                prefs.edit().putBoolean(Appearance.LIQUID_GLASS, enabled).apply()
+                io.github.mymoney.systems.SystemIntegration.refresh(context)
+            }
+            fun togglePerZone(enabled: Boolean) {
+                val editor = prefs.edit().putBoolean(Appearance.LIQUID_GLASS_PER_ZONE_CLARITY, enabled)
+                if (enabled && !prefs.contains(Appearance.CLARITY_DOCK)) {
+                    dockClarity = clarity
+                    headerClarity = clarity
+                    sheetClarity = clarity
+                    dialogClarity = clarity
+                    editor.putFloat(Appearance.CLARITY_DOCK, clarity)
+                        .putFloat(Appearance.CLARITY_HEADER, clarity)
+                        .putFloat(Appearance.CLARITY_SHEET, clarity)
+                        .putFloat(Appearance.CLARITY_DIALOG, clarity)
+                }
+                editor.apply()
+            }
+            val reduceMotion = LocalReduceMotion.current
+
             InsetGroup {
                 ListRow(
                     title = "液态玻璃",
+                    onClick = { toggleLiquidGlass(!liquidGlass) },
                     trailing = {
-                        AbSwitch(liquidGlass) {
-                            prefs.edit().putBoolean(Appearance.LIQUID_GLASS, it).apply()
-                            io.github.mymoney.systems.SystemIntegration.refresh(context)
-                        }
+                        AbSwitch(liquidGlass) { toggleLiquidGlass(it) }
                     },
                 )
             }
 
             AnimatedVisibility(
                 visible = liquidGlass && !reduceTransparency,
-                enter = expandVertically(AbSpring.morphSize(LocalReduceMotion.current)) + fadeIn(tween(if (LocalReduceMotion.current) 0 else AbMotion.fast)),
-                exit = shrinkVertically(AbSpring.morphSize(LocalReduceMotion.current)) + fadeOut(tween(if (LocalReduceMotion.current) 0 else AbMotion.fast)),
+                enter = if (reduceMotion) fadeIn(tween(140, easing = AbEasing.EaseOut))
+                else expandVertically(AbSpring.morphSize(false)) + fadeIn(tween(150, easing = AbEasing.EaseOut)),
+                exit = if (reduceMotion) fadeOut(tween(110, easing = AbEasing.EaseOut))
+                else shrinkVertically(AbSpring.morphSize(false)) + fadeOut(tween(100, easing = AbEasing.EaseOut)),
             ) {
                 Column(
                     Modifier.fillMaxWidth(),
@@ -1011,32 +995,21 @@ private fun LiquidGlassSettingsPage(onBack: () -> Unit) {
                             baseDark = previewBaseDark,
                             baseBlurDp = previewBaseBlurDp,
                         )
-                        InsetDivider()
                         ListRow(
                             title = "分区域单独调节",
+                            onClick = { togglePerZone(!perZonePref) },
                             trailing = {
-                                AbSwitch(perZonePref) { enabled ->
-                                    val editor = prefs.edit().putBoolean(Appearance.LIQUID_GLASS_PER_ZONE_CLARITY, enabled)
-                                    if (enabled && !prefs.contains(Appearance.CLARITY_DOCK)) {
-                                        dockClarity = clarity
-                                        headerClarity = clarity
-                                        sheetClarity = clarity
-                                        dialogClarity = clarity
-                                        editor.putFloat(Appearance.CLARITY_DOCK, clarity)
-                                            .putFloat(Appearance.CLARITY_HEADER, clarity)
-                                            .putFloat(Appearance.CLARITY_SHEET, clarity)
-                                            .putFloat(Appearance.CLARITY_DIALOG, clarity)
-                                    }
-                                    editor.apply()
-                                }
+                                AbSwitch(perZonePref) { togglePerZone(it) }
                             },
                         )
                     }
 
                     AnimatedVisibility(
                         visible = perZonePref,
-                        enter = expandVertically(AbSpring.morphSize(LocalReduceMotion.current)) + fadeIn(tween(if (LocalReduceMotion.current) 0 else AbMotion.fast)),
-                        exit = shrinkVertically(AbSpring.morphSize(LocalReduceMotion.current)) + fadeOut(tween(if (LocalReduceMotion.current) 0 else AbMotion.fast)),
+                        enter = if (reduceMotion) fadeIn(tween(140, easing = AbEasing.EaseOut))
+                        else expandVertically(AbSpring.morphSize(false)) + fadeIn(tween(150, easing = AbEasing.EaseOut)),
+                        exit = if (reduceMotion) fadeOut(tween(110, easing = AbEasing.EaseOut))
+                        else shrinkVertically(AbSpring.morphSize(false)) + fadeOut(tween(100, easing = AbEasing.EaseOut)),
                     ) {
                         InsetGroup {
                             ClaritySliderRow(
@@ -1053,7 +1026,6 @@ private fun LiquidGlassSettingsPage(onBack: () -> Unit) {
                                     prefs.edit().putFloat(Appearance.CLARITY_DOCK, next).apply()
                                 },
                             )
-                            InsetDivider()
                             ClaritySliderRow(
                                 label = "页面悬浮元素",
                                 value = headerClarity,
@@ -1068,7 +1040,6 @@ private fun LiquidGlassSettingsPage(onBack: () -> Unit) {
                                     prefs.edit().putFloat(Appearance.CLARITY_HEADER, next).apply()
                                 },
                             )
-                            InsetDivider()
                             ClaritySliderRow(
                                 label = "底部弹出卡",
                                 value = sheetClarity,
@@ -1083,7 +1054,6 @@ private fun LiquidGlassSettingsPage(onBack: () -> Unit) {
                                     prefs.edit().putFloat(Appearance.CLARITY_SHEET, next).apply()
                                 },
                             )
-                            InsetDivider()
                             ClaritySliderRow(
                                 label = "弹窗与浮出菜单",
                                 value = dialogClarity,
@@ -1160,9 +1130,9 @@ private fun ClaritySliderRow(
             Text(label, style = AbType.body, color = p.label, modifier = Modifier.weight(1f))
             Text(
                 clarityLabel,
-                style = AbType.footnote,
+                style = AbType.footnote.tabular(),
                 color = p.secondaryLabel,
-                modifier = Modifier.width(38.dp),
+                modifier = Modifier.widthIn(min = 42.dp),
                 textAlign = androidx.compose.ui.text.style.TextAlign.End,
             )
         }
@@ -1229,7 +1199,7 @@ private fun ClarityLivePreviewStrip(
             Box(Modifier.size(20.dp).clip(CircleShape).background(Color(0xFFE04F5F)))
         }
         val paneAlpha = glassSurfaceAlpha(baseLight, baseDark, isDark, clarity)
-        val previewBlurDp = glassBlurRadiusDp(clarity, baseDp = baseBlurDp, minDp = 1.8f, maxDp = maxOf(11f, baseBlurDp + 6f))
+        val previewBlurDp = glassBlurRadiusDp(clarity, baseDp = baseBlurDp.coerceAtMost(14f), minDp = 1.8f, maxDp = 16f)
         val glassTintColor = if (isDark) p.cardBg else Color.White
         Box(
             Modifier
@@ -1360,7 +1330,6 @@ private fun BackupPage(onBack: () -> Unit, onRestored: (Backup.SettingsSnapshot?
                 if (recoveryPoint != null) {
                     ListRow(
                         title = "导出最近恢复前快照",
-                        dividerAbove = true,
                         chevron = true,
                         onClick = { if (!busy) exportRecovery.launch("MyMoney-pre-restore.json") },
                     )
@@ -1368,7 +1337,6 @@ private fun BackupPage(onBack: () -> Unit, onRestored: (Backup.SettingsSnapshot?
                 ListRow(
                     title = "从备份恢复",
                     subtitle = if (busy) "处理中…" else null,
-                    dividerAbove = true,
                     chevron = true,
                     onClick = { if (!busy) openLauncher.launch(arrayOf("*/*")) },
                 )
@@ -1475,9 +1443,9 @@ private fun PageDebugPage(onBack: () -> Unit) {
                 GroupHeader("最近识别")
                 InsetGroup {
                     ListRow(title = "应用", subtitle = debug!!.packageName)
-                    ListRow(title = "页面", subtitle = debug!!.activityClass ?: "—", dividerAbove = true)
-                    ListRow(title = "来源", subtitle = debug!!.source, dividerAbove = true)
-                    ListRow(title = "结论", subtitle = debug!!.outcome, dividerAbove = true)
+                    ListRow(title = "页面", subtitle = debug!!.activityClass ?: "—")
+                    ListRow(title = "来源", subtitle = debug!!.source)
+                    ListRow(title = "结论", subtitle = debug!!.outcome)
                 }
                 GroupHeader("页面文本")
                 Box(

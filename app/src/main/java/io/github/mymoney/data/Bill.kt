@@ -128,6 +128,9 @@ interface BillDao {
     @Query("SELECT COUNT(*) FROM bills")
     fun observeCount(): Flow<Int>
 
+    @Query("SELECT MIN(timeMillis) FROM bills")
+    fun observeEarliestTimeMillis(): Flow<Long?>
+
     /** 识别历史只核对身份集合，不受明细窗口或首页条数限制。 */
     @Query("SELECT id FROM bills ORDER BY id")
     fun observeIds(): Flow<List<Long>>

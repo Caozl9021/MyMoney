@@ -15,12 +15,20 @@ import androidx.compose.ui.unit.sp
  */
 private const val TNUM = "tnum"
 
-private fun TextStyle.tabular() = copy(
+/** 启用等宽数字（tnum），避免金额、百分比、计数与时间变动时横向抖动。 */
+fun TextStyle.tabular() = copy(
     fontFeatureSettings = TNUM,
     lineHeightStyle = LineHeightStyle(
         alignment = LineHeightStyle.Alignment.Center,
         trim = LineHeightStyle.Trim.None,
     ),
+)
+
+/** 大展示数字按当前字号等比应用 -0.02em 负字距，并保留等宽数字。 */
+fun TextStyle.displayTracking(fontSizeSp: Float) = copy(
+    fontSize = fontSizeSp.sp,
+    letterSpacing = (-0.02f * fontSizeSp).sp,
+    fontFeatureSettings = TNUM,
 )
 
 object AbType {
@@ -98,7 +106,7 @@ object AbType {
     // ---- 等宽数字（金额专用） ----
 
     /** 首页月度支出主数字 34 Bold */
-    val amountHero = largeTitle.tabular()
+    val amountHero = largeTitle.copy(letterSpacing = (-0.68).sp).tabular()
 
     /** 统计卡里的中等金额 22 Bold */
     val amountTitle = title2.tabular()

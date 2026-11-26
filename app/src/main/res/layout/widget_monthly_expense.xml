@@ -57,6 +57,8 @@
                 android:autoSizeMinTextSize="12sp"
                 android:autoSizeStepGranularity="1sp"
                 android:autoSizeTextType="uniform"
+                android:ellipsize="end"
+                android:fontFeatureSettings="tnum"
                 android:maxLines="1"
                 android:text="—"
                 android:textColor="@color/widget_primary"
@@ -66,11 +68,12 @@
 
         <ImageView
             android:id="@+id/widget_add"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginStart="4dp"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_marginStart="2dp"
+            android:layout_marginEnd="-6dp"
             android:contentDescription="记一笔"
-            android:padding="6dp"
+            android:padding="12dp"
             android:src="@drawable/ic_widget_add" />
     </LinearLayout>
 </FrameLayout>

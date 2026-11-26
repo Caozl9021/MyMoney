@@ -120,4 +120,14 @@ class LedgerMonthPeriodTest {
         }
         assertEquals(1,Backup.decode(Backup.encode(snap.copy(ledger=ledger.copy(monthStartDay=1)))).ledger!!.monthStartDay)
     }
+    @Test fun periodsBackToComputesExactOffsetAcrossCustomBoundaries() {
+        val current = period("2026-11-26", 25)
+        assertEquals(0, current.periodsBackTo(null))
+        assertEquals(0, current.periodsBackTo(current.fromMillis))
+        val prev = current.shift(-1)
+        assertEquals(1, current.periodsBackTo(prev.fromMillis))
+        val older = current.shift(-4)
+        assertEquals(4, current.periodsBackTo(older.toMillis - 1))
+        assertEquals(0, current.periodsBackTo(current.shift(2).fromMillis))
+    }
 }

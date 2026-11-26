@@ -1,6 +1,8 @@
 package io.github.mymoney.ui.design
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Box
@@ -13,6 +15,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
@@ -28,7 +31,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 /**
  * 长按后上下拖动重排。拖动期间用本地顺序，避免父列表刷新导致 from/to 错位。
@@ -47,14 +50,17 @@ fun <T> DragReorderColumn(
     val reduceMotion = LocalReduceMotion.current
     val haptic = rememberAbHaptic()
     val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
     val fallbackPx = remember(estimatedItemHeight, density) { with(density) { estimatedItemHeight.toPx() } }
     var localItems by remember { mutableStateOf(items) }
     var draggingKey by remember { mutableStateOf<Any?>(null) }
+    var settlingKey by remember { mutableStateOf<Any?>(null) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
+    val settleOffset = remember { Animatable(0f) }
     var measuredHeights by remember { mutableStateOf(mapOf<Any, Int>()) }
 
     LaunchedEffect(items) {
-        if (draggingKey == null) localItems = items
+        if (draggingKey == null && settlingKey == null) localItems = items
     }
 
     fun indexOfKey(k: Any?): Int = if (k == null) -1 else localItems.indexOfFirst { keyOf(it) == k }
@@ -71,23 +77,29 @@ fun <T> DragReorderColumn(
             val itemKey = keyOf(item)
             key(itemKey) {
                 val isDragging = draggingKey == itemKey
+                val isSettling = settlingKey == itemKey
                 val liftProgress by animateFloatAsState(
                     targetValue = if (isDragging) 1f else 0f,
-                    animationSpec = tween(if (reduceMotion) 0 else AbMotion.fast),
+                    animationSpec = if (reduceMotion) tween(110, easing = AbEasing.EaseOut) else spring(dampingRatio = 1f, stiffness = 500f),
                     label = "drag-lift",
                 )
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .zIndex(if (isDragging) 1f else 0f)
+                        .zIndex(if (isDragging || isSettling) 1f else 0f)
                         .onSizeChanged { size ->
                             if (measuredHeights[itemKey] != size.height) {
                                 measuredHeights = measuredHeights + (itemKey to size.height)
                             }
                         }
                         .graphicsLayer {
-                            if (isDragging || liftProgress > 0f) {
-                                translationY = if (isDragging) dragOffset else 0f
+                            val activeY = when {
+                                isDragging -> dragOffset
+                                isSettling -> settleOffset.value
+                                else -> 0f
+                            }
+                            if (isDragging || isSettling || liftProgress > 0f) {
+                                translationY = activeY
                                 // 轻微内缩横向宽度以露出四角圆角与细微边缘阴影，不使用 Android RenderNode 大黑影
                                 scaleX = 1f - 0.016f * liftProgress
                                 scaleY = 1f + 0.01f * liftProgress
@@ -125,43 +137,88 @@ fun <T> DragReorderColumn(
                                 drawContent()
                             }
                         }
-                        .pointerInput(itemKey) {
+                        .pointerInput(itemKey, reduceMotion) {
                             detectDragGesturesAfterLongPress(
                                 onDragStart = {
                                     haptic.select()
+                                    val startOffset = if (settlingKey == itemKey) settleOffset.value else 0f
+                                    scope.launch { settleOffset.stop() }
+                                    settlingKey = null
                                     draggingKey = itemKey
-                                    dragOffset = 0f
+                                    dragOffset = startOffset
                                 },
                                 onDragEnd = {
+                                    val released = dragOffset
+                                    val releasedKey = draggingKey
                                     draggingKey = null
                                     dragOffset = 0f
+                                    if (releasedKey != null && kotlin.math.abs(released) > 0.5f && !reduceMotion) {
+                                        settlingKey = releasedKey
+                                        scope.launch {
+                                            settleOffset.snapTo(released)
+                                            settleOffset.animateTo(0f, spring(dampingRatio = 1f, stiffness = 480f))
+                                            if (settlingKey == releasedKey) settlingKey = null
+                                        }
+                                    } else {
+                                        settlingKey = null
+                                    }
                                 },
                                 onDragCancel = {
+                                    val released = dragOffset
+                                    val releasedKey = draggingKey
                                     draggingKey = null
                                     dragOffset = 0f
+                                    if (releasedKey != null && kotlin.math.abs(released) > 0.5f && !reduceMotion) {
+                                        settlingKey = releasedKey
+                                        scope.launch {
+                                            settleOffset.snapTo(released)
+                                            settleOffset.animateTo(0f, spring(dampingRatio = 1f, stiffness = 480f))
+                                            if (settlingKey == releasedKey) settlingKey = null
+                                        }
+                                    } else {
+                                        settlingKey = null
+                                    }
                                 },
                                 onDrag = { change, dragAmount ->
                                     change.consume()
-                                    val from = indexOfKey(draggingKey)
+                                    var from = indexOfKey(draggingKey)
                                     if (from < 0) return@detectDragGesturesAfterLongPress
-                                    dragOffset += dragAmount.y
-                                    val step = heightAt(from).coerceAtLeast(1f)
-                                    val delta = (dragOffset / step).roundToInt()
-                                    val target = (from + delta).coerceIn(0, localItems.lastIndex)
-                                    if (target != from) {
-                                        var consumed = 0f
-                                        if (target > from) {
-                                            for (i in from until target) consumed += heightAt(i)
-                                        } else {
-                                            for (i in target until from) consumed -= heightAt(i)
-                                        }
+                                    val atTopBound = from == 0 && dragOffset <= 0f && dragAmount.y < 0f
+                                    val atBottomBound = from == localItems.lastIndex && dragOffset >= 0f && dragAmount.y > 0f
+                                    dragOffset += if (atTopBound || atBottomBound) dragAmount.y * 0.25f else dragAmount.y
+                                    var reordered = false
+                                    while (from < localItems.lastIndex) {
+                                        val neighborH = heightAt(from + 1).coerceAtLeast(1f)
+                                        if (dragOffset <= neighborH * 0.5f) break
                                         val next = localItems.toMutableList().also {
-                                            it.add(target, it.removeAt(from))
+                                            it.add(from + 1, it.removeAt(from))
                                         }
                                         localItems = next
-                                        dragOffset -= consumed
+                                        dragOffset -= neighborH
+                                        from += 1
+                                        reordered = true
+                                    }
+                                    while (from > 0) {
+                                        val neighborH = heightAt(from - 1).coerceAtLeast(1f)
+                                        if (dragOffset >= -neighborH * 0.5f) break
+                                        val next = localItems.toMutableList().also {
+                                            it.add(from - 1, it.removeAt(from))
+                                        }
+                                        localItems = next
+                                        dragOffset += neighborH
+                                        from -= 1
+                                        reordered = true
+                                    }
+                                    if (from == 0 && dragOffset < 0f) {
+                                        val maxOver = heightAt(0) * 0.35f
+                                        dragOffset = dragOffset.coerceAtLeast(-maxOver)
+                                    } else if (from == localItems.lastIndex && dragOffset > 0f) {
+                                        val maxOver = heightAt(from) * 0.35f
+                                        dragOffset = dragOffset.coerceAtMost(maxOver)
+                                    }
+                                    if (reordered) {
                                         haptic.tick()
-                                        onReorder(next)
+                                        onReorder(localItems)
                                     }
                                 },
                             )

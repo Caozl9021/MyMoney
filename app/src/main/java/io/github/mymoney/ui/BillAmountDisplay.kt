@@ -35,7 +35,12 @@ internal fun BillAmountDisplay(cents: Long, type: String, modifier: Modifier = M
         Row(Modifier.onGloballyPositioned { boundsChanged?.invoke(it.boundsInRoot()) }
             .graphicsLayer { alpha = if (hidden) 0f else 1f }, verticalAlignment = Alignment.CenterVertically) {
             Text("¥", style = AbType.amountTitle, color = amountTint(p, type), modifier = Modifier.padding(end = 6.dp))
-            Text(text, style = AbType.amountEntry.copy(fontSize = fitted), color = amountTint(p, type), maxLines = 1)
+            Text(
+                text,
+                style = AbType.amountEntry.displayTracking(fitted.value),
+                color = amountTint(p, type),
+                maxLines = 1,
+            )
         }
     }
 }

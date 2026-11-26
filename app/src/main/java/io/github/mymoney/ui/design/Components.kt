@@ -291,6 +291,7 @@ fun ListRow(
 ) {
     val p = LocalAbPalette.current
     val haptic = rememberAbHaptic()
+    val rowInteraction = remember(onClick != null) { MutableInteractionSource() }
     Column(Modifier.fillMaxWidth()) {
         if (dividerAbove) InsetDivider(inset = if (leading != null) AbCardDensity.leadingInset else AbSize.separatorInset)
         Row(
@@ -299,13 +300,19 @@ fun ListRow(
                 .heightIn(min = AbSize.minTouch)
                 .then(
                     if (onClick != null) {
-                        Modifier.clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                        ) {
-                            haptic.select()
-                            onClick()
-                        }
+                        Modifier
+                            .abPressFeedback(
+                                interactionSource = rowInteraction,
+                                pressedScale = 0.992f,
+                                pressedAlpha = 0.76f,
+                            )
+                            .clickable(
+                                interactionSource = rowInteraction,
+                                indication = null,
+                            ) {
+                                haptic.select()
+                                onClick()
+                            }
                     } else Modifier,
                 )
                 .padding(horizontal = AbSpacing.l, vertical = AbCardDensity.rowVertical),
@@ -442,8 +449,8 @@ private fun SwitchCanvas(
         }
     }
 
-    val boxWidth = if (compact) 46.dp else 60.dp
-    val boxHeight = if (compact) 34.dp else 48.dp
+    val boxWidth = if (compact) 48.dp else 60.dp
+    val boxHeight = 48.dp
     val trackWidthDp = if (compact) 42.dp else 56.dp
     val trackHeightDp = if (compact) 22.dp else 28.dp
     val pillWidthDp = if (compact) 26.dp else 34.dp
@@ -836,7 +843,7 @@ fun Segmented(
             liftY.snapTo(0f)
             lens.snapTo(0f)
             dragSqueeze.snapTo(0f)
-            position.animateTo(target.toFloat(), tween(AbMotion.selection, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+            position.animateTo(target.toFloat(), tween(AbMotion.selection, easing = AbEasing.EaseOut))
         } else if (fromDrag || changed) {
             val targetPos = target.toFloat()
             coroutineScope {
@@ -1818,12 +1825,12 @@ private fun ActionButton(
     val isDark = p.pageBg.luminance() < 0.1f
     val animatedScale by animateFloatAsState(
         if (pressed && canClick) 0.965f else 1f,
-        animationSpec = if (reduceMotion) snap() else spring(dampingRatio = 0.68f, stiffness = 520f),
+        animationSpec = if (reduceMotion) tween(90, easing = AbEasing.EaseOut) else spring(dampingRatio = 0.68f, stiffness = 520f),
         label = "button-press",
     )
     val pressHighlight by animateFloatAsState(
         if (pressed && canClick) 1f else 0f,
-        animationSpec = if (reduceMotion) snap() else tween(90),
+        animationSpec = tween(if (reduceMotion) 80 else 90, easing = AbEasing.EaseOut),
         label = "button-highlight",
     )
     val shape = RoundedCornerShape(AbRadius.capsule)
@@ -1945,7 +1952,7 @@ fun AbTextButton(
     val reduceMotion = LocalReduceMotion.current
     val scale by animateFloatAsState(
         if (pressed && enabled && !reduceMotion) 0.96f else 1f,
-        animationSpec = if (reduceMotion) snap() else spring(dampingRatio = 0.72f, stiffness = 540f),
+        animationSpec = if (reduceMotion) tween(90, easing = AbEasing.EaseOut) else spring(dampingRatio = 0.72f, stiffness = 540f),
         label = "text-btn-press",
     )
     val resolvedColor = (color ?: p.accent).let { if (enabled) it else p.secondaryLabel }
@@ -2047,6 +2054,40 @@ fun EmptyState(
     }
 }
 
+@Composable
+fun Modifier.abPressFeedback(
+    interactionSource: MutableInteractionSource,
+    enabled: Boolean = true,
+    pressedScale: Float = 0.97f,
+    pressedAlpha: Float = 1f,
+    tintOverlay: Boolean = false,
+): Modifier {
+    val pressed by interactionSource.collectIsPressedAsState()
+    val reduceMotion = LocalReduceMotion.current
+    val active = pressed && enabled
+    val scale by animateFloatAsState(
+        targetValue = if (active && !reduceMotion) pressedScale else 1f,
+        animationSpec = if (reduceMotion) tween(90, easing = AbEasing.EaseOut) else spring(dampingRatio = 0.72f, stiffness = 560f),
+        label = "ab-press-scale",
+    )
+    val pressProgress by animateFloatAsState(
+        targetValue = if (active) 1f else 0f,
+        animationSpec = tween(if (reduceMotion) 80 else 110, easing = AbEasing.EaseOut),
+        label = "ab-press-progress",
+    )
+    val effectivePressedAlpha = if (tintOverlay && pressedAlpha == 1f) 0.78f else pressedAlpha
+    val alphaDelta = (1f - effectivePressedAlpha).coerceIn(0f, 1f)
+    return this.graphicsLayer {
+        if (!reduceMotion && pressedScale != 1f) {
+            scaleX = scale
+            scaleY = scale
+        }
+        if (alphaDelta > 0f) {
+            alpha = 1f - alphaDelta * pressProgress
+        }
+    }
+}
+
 /** 横向滚动的一组胶囊（账户 / 二级分类）。 */
 @Composable
 fun CapsuleChip(
@@ -2058,18 +2099,25 @@ fun CapsuleChip(
 ) {
     val p = LocalAbPalette.current
     val isDark = p.pageBg.luminance() < 0.1f
+    val reduceMotion = LocalReduceMotion.current
+    val interaction = remember { MutableInteractionSource() }
     val c = tint ?: p.accent
     val targetBg = if (selected) c.copy(alpha = if (isDark) 0.30f else 0.16f) else p.fill
-    val bg by animateColorAsState(targetBg, animationSpec = tween(if (LocalReduceMotion.current) 0 else AbMotion.selection), label = "chip-bg")
+    val bg by animateColorAsState(
+        targetBg,
+        animationSpec = tween(if (reduceMotion) 120 else AbMotion.selection, easing = AbEasing.EaseOut),
+        label = "chip-bg",
+    )
     val fg = if (selected && tint == null) c else p.label
     val shape = RoundedCornerShape(AbRadius.capsule)
     Box(
         modifier = modifier
             .heightIn(min = 48.dp)
+            .abPressFeedback(interactionSource = interaction, pressedScale = 0.96f, pressedAlpha = 0.85f)
             .clip(shape)
             .background(bg)
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = interaction,
                 indication = null,
                 onClick = onClick,
             )
@@ -2148,6 +2196,8 @@ fun AbTextField(
     modifier: Modifier = Modifier,
     placeholder: String = "",
     singleLine: Boolean = true,
+    keyboardType: androidx.compose.ui.text.input.KeyboardType =
+        androidx.compose.ui.text.input.KeyboardType.Text,
     imeAction: androidx.compose.ui.text.input.ImeAction =
         androidx.compose.ui.text.input.ImeAction.Done,
     onDone: (() -> Unit)? = null,
@@ -2159,7 +2209,10 @@ fun AbTextField(
         singleLine = singleLine,
         textStyle = AbType.body.copy(color = p.label),
         cursorBrush = androidx.compose.ui.graphics.SolidColor(p.accent),
-        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = imeAction),
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+            keyboardType = keyboardType,
+            imeAction = imeAction,
+        ),
         keyboardActions = androidx.compose.foundation.text.KeyboardActions(
             onDone = { onDone?.invoke() },
         ),

@@ -41,17 +41,23 @@
 
             <ImageView
                 android:id="@+id/widget_tune"
-                android:layout_width="22dp"
-                android:layout_height="22dp"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:layout_marginTop="-6dp"
+                android:layout_marginEnd="4dp"
+                android:layout_marginBottom="-6dp"
                 android:contentDescription="配置小组件"
-                android:padding="3dp"
+                android:padding="9dp"
                 android:src="@drawable/ic_widget_tune" />
 
             <ImageView
                 android:id="@+id/widget_eye"
-                android:layout_width="22dp"
-                android:layout_height="22dp"
-                android:padding="3dp"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:layout_marginTop="-6dp"
+                android:layout_marginEnd="-6dp"
+                android:layout_marginBottom="-6dp"
+                android:padding="9dp"
                 android:src="@drawable/ic_widget_eye_on" />
         </LinearLayout>
 
@@ -71,6 +77,8 @@
                 android:autoSizeMinTextSize="14sp"
                 android:autoSizeStepGranularity="1sp"
                 android:autoSizeTextType="uniform"
+                android:ellipsize="end"
+                android:fontFeatureSettings="tnum"
                 android:maxLines="1"
                 android:text="¥0.00"
                 android:textColor="@color/widget_primary"
@@ -98,6 +106,7 @@
                 android:layout_height="wrap_content"
                 android:layout_gravity="center_vertical"
                 android:ellipsize="end"
+                android:fontFeatureSettings="tnum"
                 android:maxLines="1"
                 android:paddingHorizontal="9dp"
                 android:paddingVertical="6dp"

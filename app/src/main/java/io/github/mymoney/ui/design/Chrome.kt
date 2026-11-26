@@ -187,41 +187,43 @@ fun LargeTitleBar(
                         }
                     }
                 }
-                if (!reduce && LocalHeaderBackdrop.current != null) {
-                    SubcomposeLayout(Modifier.alpha(compactAlpha)) { constraints ->
-                        val raw = subcompose("measure") {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
-                                verticalAlignment = Alignment.CenterVertically,
-                                content = actions,
-                            )
-                        }.map { it.measure(constraints.copy(minWidth = 0, minHeight = 0)) }
-                        val hasContent = raw.any { it.width > 0 }
-                        if (!hasContent) {
-                            layout(0, 0) {}
-                        } else {
-                            val pill = subcompose("capsule") {
-                                HeaderGlassCapsule(Modifier.heightIn(min = 38.dp)) {
-                                    Row(
-                                        Modifier.padding(horizontal = AbSpacing.xs),
-                                        horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        content = actions,
-                                    )
-                                }
+                if (compactAlpha > 0.01f) {
+                    if (!reduce && LocalHeaderBackdrop.current != null) {
+                        SubcomposeLayout(Modifier.alpha(compactAlpha)) { constraints ->
+                            val raw = subcompose("measure") {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    content = actions,
+                                )
                             }.map { it.measure(constraints.copy(minWidth = 0, minHeight = 0)) }
-                            val w = pill.maxOfOrNull { it.width } ?: 0
-                            val h = pill.maxOfOrNull { it.height } ?: 0
-                            layout(w, h) { pill.forEach { it.placeRelative(0, 0) } }
+                            val hasContent = raw.any { it.width > 0 }
+                            if (!hasContent) {
+                                layout(0, 0) {}
+                            } else {
+                                val pill = subcompose("capsule") {
+                                    HeaderGlassCapsule(Modifier.heightIn(min = 38.dp)) {
+                                        Row(
+                                            Modifier.padding(horizontal = AbSpacing.xs),
+                                            horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            content = actions,
+                                        )
+                                    }
+                                }.map { it.measure(constraints.copy(minWidth = 0, minHeight = 0)) }
+                                val w = pill.maxOfOrNull { it.width } ?: 0
+                                val h = pill.maxOfOrNull { it.height } ?: 0
+                                layout(w, h) { pill.forEach { it.placeRelative(0, 0) } }
+                            }
                         }
+                    } else {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.alpha(compactAlpha),
+                            content = actions,
+                        )
                     }
-                } else {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.alpha(compactAlpha),
-                        content = actions,
-                    )
                 }
             }
 
@@ -246,11 +248,13 @@ fun LargeTitleBar(
                             Text(subtitle, style = AbType.footnote, color = p.secondaryLabel)
                         }
                     }
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
-                        verticalAlignment = Alignment.CenterVertically,
-                        content = actions,
-                    )
+                    if (largeAlpha > 0.01f) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(AbSpacing.s),
+                            verticalAlignment = Alignment.CenterVertically,
+                            content = actions,
+                        )
+                    }
                 }
             }
         }
@@ -1174,7 +1178,7 @@ private fun TabCell(
     val targetScale = if (active) 1f else 0.92f
     val iconScale = animateFloatAsState(
         targetValue = targetScale,
-        animationSpec = if (reduceMotion) snap() else spring(dampingRatio = 0.72f, stiffness = 480f),
+        animationSpec = if (reduceMotion) tween(100, easing = AbEasing.EaseOut) else spring(dampingRatio = 0.72f, stiffness = 480f),
         label = "tabIconSize",
     )
     Column(
@@ -1571,15 +1575,37 @@ fun SlideSubPage(
 ) {
     val reduceMotion = LocalReduceMotion.current
     val spec = AbSpring.navigationOffset(reduceMotion)
+    var wasVisible by remember { mutableStateOf(visible) }
+    val outerCommit = LocalOuterPredictiveBackCommit.current
+    val predictiveExitDir = remember(visible) {
+        val dir = if (wasVisible && !visible && !outerCommit) PredictiveBackSignal.consumeFresh() else null
+        wasVisible = visible
+        dir
+    }
     androidx.compose.animation.AnimatedVisibility(
         visible = visible,
         modifier = modifier,
-        enter = androidx.compose.animation.slideInHorizontally(spec) { it } +
-            if (reduceMotion) androidx.compose.animation.fadeIn(snap()) else androidx.compose.animation.fadeIn(tween(80)),
-        exit = androidx.compose.animation.slideOutHorizontally(spec) { it } +
-            if (reduceMotion) androidx.compose.animation.fadeOut(snap()) else androidx.compose.animation.fadeOut(tween(150)),
+        enter = if (reduceMotion) {
+            androidx.compose.animation.fadeIn(tween(150, easing = AbEasing.EaseOut))
+        } else {
+            androidx.compose.animation.slideInHorizontally(spec) { it } +
+                androidx.compose.animation.fadeIn(tween(120, easing = AbEasing.EaseOut))
+        },
+        exit = when {
+            outerCommit -> androidx.compose.animation.ExitTransition.None
+            reduceMotion -> androidx.compose.animation.fadeOut(tween(120, easing = AbEasing.EaseOut))
+            predictiveExitDir != null ->
+                androidx.compose.animation.slideOutHorizontally(spec) { width ->
+                    predictiveExitDir * (width * 0.48f).toInt()
+                } + androidx.compose.animation.fadeOut(tween(165, easing = AbEasing.EaseOut))
+            else ->
+                androidx.compose.animation.slideOutHorizontally(spec) { it } +
+                    androidx.compose.animation.fadeOut(tween(110, easing = AbEasing.EaseOut))
+        },
     ) {
-        content()
+        androidx.compose.runtime.CompositionLocalProvider(LocalPredictiveSlideHost provides true) {
+            content()
+        }
     }
 }
 

@@ -106,9 +106,19 @@ internal fun FloatingPageScaffold(
                 Row(Modifier.fillMaxWidth().padding(start = AbSpacing.page, end = AbSpacing.page,
                     top = statusTop + AbSpacing.xs).heightIn(min = headerHeight), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(AbSpacing.m)) {
+                    val titleInteraction = remember(onTitleClick != null) { androidx.compose.foundation.interaction.MutableInteractionSource() }
                     Box(Modifier.heightIn(min = headerHeight)
-                        .then(if (onTitleClick == null) Modifier else Modifier.clickable(
-                            onClickLabel = "查看自动记账模式", onClick = onTitleClick))
+                        .then(
+                            if (onTitleClick == null) Modifier
+                            else Modifier
+                                .abPressFeedback(titleInteraction, pressedScale = 0.96f, pressedAlpha = 0.78f)
+                                .clickable(
+                                    interactionSource = titleInteraction,
+                                    indication = null,
+                                    onClickLabel = "查看自动记账模式",
+                                    onClick = onTitleClick,
+                                ),
+                        )
                         .semantics(mergeDescendants = true) {}, contentAlignment = Alignment.Center) {
                         HeaderGlassCapsule(Modifier.heightIn(min = capsuleHeight)) {
                             Text(title, style = AbType.title2.copy(fontSize = 20.sp, lineHeight = 24.sp, fontWeight = FontWeight.Medium),

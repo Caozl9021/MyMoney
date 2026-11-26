@@ -4,7 +4,14 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -15,15 +22,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.core.content.pm.PackageInfoCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.mymoney.data.update.AppUpdateStore
 import io.github.mymoney.data.update.GitHubAppUpdates
+import io.github.mymoney.ui.design.AbEasing
 import io.github.mymoney.ui.design.AbIcons
 import io.github.mymoney.ui.design.GroupFooter
 import io.github.mymoney.ui.design.InsetGroup
 import io.github.mymoney.ui.design.ListRow
+import io.github.mymoney.ui.design.LocalAbPalette
+import io.github.mymoney.ui.design.LocalReduceMotion
 import io.github.mymoney.ui.design.PrimaryButton
 import io.github.mymoney.ui.design.SecondaryButton
 import io.github.mymoney.ui.design.SettingsIconBadge
@@ -71,7 +83,6 @@ fun AppUpdatePage(onBack: () -> Unit, onOpenDebug: () -> Unit = {}) {
                 ListRow(
                     title = "更新",
                     subtitle = status,
-                    dividerAbove = true,
                 )
             }
         }
@@ -87,7 +98,6 @@ fun AppUpdatePage(onBack: () -> Unit, onOpenDebug: () -> Unit = {}) {
                     title = "更新说明",
                     subtitle = candidate.manifest.notes.ifBlank { "无" },
                     subtitleMaxLines = 20,
-                    dividerAbove = true,
                 )
             }
         }
@@ -97,10 +107,30 @@ fun AppUpdatePage(onBack: () -> Unit, onOpenDebug: () -> Unit = {}) {
                 text = "检查中…", onClick = {}, modifier = Modifier.fillMaxWidth(), enabled = false, busy = true,
             )
             AppUpdateStore.Status.DOWNLOADING -> {
+                val animatedProgress by animateFloatAsState(
+                    targetValue = state.progress.coerceIn(0, 100) / 100f,
+                    animationSpec = if (LocalReduceMotion.current) tween(90, easing = AbEasing.EaseOut)
+                    else tween(180, easing = AbEasing.EaseOut),
+                    label = "update-download-progress",
+                )
                 PrimaryButton(
                     text = "下载中 ${state.progress}%", onClick = {}, modifier = Modifier.fillMaxWidth(),
                     enabled = false, busy = true, busyLabel = "下载中 ${state.progress}%",
                 )
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(100.dp))
+                        .background(LocalAbPalette.current.fill),
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth(animatedProgress)
+                            .fillMaxHeight()
+                            .background(LocalAbPalette.current.accent, RoundedCornerShape(100.dp)),
+                    )
+                }
                 SecondaryButton(
                     text = "取消下载", onClick = { AppUpdateStore.cancelDownload() },
                     modifier = Modifier.fillMaxWidth(),
@@ -194,5 +224,5 @@ private fun openReleases(context: Context) {
     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(GitHubAppUpdates.RELEASES_URL)).apply {
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
-    context.startActivity(intent)
+    runCatching { context.startActivity(intent) }
 }

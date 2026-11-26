@@ -8,6 +8,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -22,14 +24,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.mymoney.R
 import io.github.mymoney.systems.AssetReimburseWidget
 import io.github.mymoney.systems.AssetWidgetMode
 import io.github.mymoney.systems.WidgetPrefs
 import io.github.mymoney.systems.WidgetSurfaceStyle
+import io.github.mymoney.systems.WidgetThemeTokens
 import io.github.mymoney.ui.design.*
 
 /**
@@ -93,12 +98,14 @@ private fun WidgetConfigureScreen(
     onConfirm: (AssetWidgetMode, WidgetSurfaceStyle, Boolean) -> Unit,
 ) {
     val p = LocalAbPalette.current
+    val context = LocalContext.current
+    val reduceMotion = LocalReduceMotion.current
     val isDark = p.pageBg.luminance() < 0.1f
     var mode by remember { mutableStateOf(initialMode) }
     var surface by remember { mutableStateOf(initialSurface) }
     var masked by remember { mutableStateOf(initialMasked) }
 
-    SubPageScaffold(title = "配置资产看板", onBack = onCancel) { padding ->
+    SubPageScaffold(title = "配置资产看板", onBack = onCancel, reserveDock = false) { padding ->
         Column(
             Modifier
                 .fillMaxSize()
@@ -112,26 +119,28 @@ private fun WidgetConfigureScreen(
                     .verticalScroll(rememberScrollState()),
             ) {
                 GroupHeader("实时预览")
-                val cardBg = when (surface) {
-                    WidgetSurfaceStyle.GLASS_DARK -> Color(0x62161618)
-                    WidgetSurfaceStyle.GLASS_LIGHT -> Color(0x8CFFFFFF)
-                    WidgetSurfaceStyle.SOLID -> p.cardBg
-                }
-                val borderColor = when (surface) {
-                    WidgetSurfaceStyle.GLASS_DARK -> Color(0x30FFFFFF)
-                    WidgetSurfaceStyle.GLASS_LIGHT -> Color(0xB8FFFFFF)
-                    WidgetSurfaceStyle.SOLID -> p.separator
-                }
-                val previewPrimaryText = when (surface) {
-                    WidgetSurfaceStyle.GLASS_DARK -> Color(0xFFF5F5F7)
-                    WidgetSurfaceStyle.GLASS_LIGHT -> Color(0xFF1C1C1E)
-                    WidgetSurfaceStyle.SOLID -> p.label
-                }
-                val previewSecondaryText = when (surface) {
-                    WidgetSurfaceStyle.GLASS_DARK -> Color(0xCCFFFFFF)
-                    WidgetSurfaceStyle.GLASS_LIGHT -> Color(0xFF55555A)
-                    WidgetSurfaceStyle.SOLID -> p.secondaryLabel
-                }
+                val widgetPalette = remember(context, surface, p.accent) { WidgetThemeTokens.palette(context, surface) }
+                val colorSpec = remember(reduceMotion) { tween<Color>(if (reduceMotion) 110 else AbMotion.selection, easing = AbEasing.EaseOut) }
+                val cardBg by animateColorAsState(
+                    when (surface) {
+                        WidgetSurfaceStyle.GLASS_DARK -> Color(0xB3161618)
+                        WidgetSurfaceStyle.GLASS_LIGHT -> Color(0xC7FFFFFF)
+                        WidgetSurfaceStyle.SOLID -> p.cardBg
+                    },
+                    colorSpec,
+                    label = "preview-card-bg",
+                )
+                val borderColor by animateColorAsState(
+                    when (surface) {
+                        WidgetSurfaceStyle.GLASS_DARK -> Color(0x30FFFFFF)
+                        WidgetSurfaceStyle.GLASS_LIGHT -> Color(0xB8FFFFFF)
+                        WidgetSurfaceStyle.SOLID -> p.separator
+                    },
+                    colorSpec,
+                    label = "preview-border",
+                )
+                val previewPrimaryText = Color(widgetPalette.primaryText)
+                val previewSecondaryText = Color(widgetPalette.secondaryText)
                 Box(
                     Modifier
                         .fillMaxWidth()
@@ -173,18 +182,26 @@ private fun WidgetConfigureScreen(
                                 mode == AssetWidgetMode.REIMBURSE_ONLY -> "¥640.00"
                                 else -> "¥42,850.00"
                             },
-                            style = AbType.title2.copy(fontWeight = FontWeight.Bold),
+                            style = AbType.title2.copy(fontWeight = FontWeight.Bold).tabular(),
                             color = previewPrimaryText,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
-                        val pillBg = when {
-                            surface == WidgetSurfaceStyle.GLASS_DARK && mode == AssetWidgetMode.MIXED -> Color(0x38FFFFFF)
-                            surface == WidgetSurfaceStyle.GLASS_DARK -> Color(0x24FFFFFF)
-                            mode == AssetWidgetMode.MIXED -> androidx.compose.material3.MaterialTheme.colorScheme.primaryContainer
-                            else -> Color(0x18000000).takeIf { !isDark } ?: p.fill
-                        }
+                        val pillBg by animateColorAsState(
+                            when {
+                                surface == WidgetSurfaceStyle.GLASS_DARK && mode == AssetWidgetMode.MIXED ->
+                                    Color(widgetPalette.accent).copy(alpha = 168f / 255f)
+                                surface == WidgetSurfaceStyle.GLASS_DARK -> Color(0x28FFFFFF)
+                                mode == AssetWidgetMode.MIXED -> Color(widgetPalette.accentContainer)
+                                surface == WidgetSurfaceStyle.GLASS_LIGHT -> Color(0x14000000)
+                                else -> Color(0x18000000).takeIf { !isDark } ?: p.fill
+                            },
+                            colorSpec,
+                            label = "preview-pill-bg",
+                        )
                         val pillFg = when {
                             surface == WidgetSurfaceStyle.GLASS_DARK -> Color.White
-                            mode == AssetWidgetMode.MIXED -> androidx.compose.material3.MaterialTheme.colorScheme.onPrimaryContainer
+                            mode == AssetWidgetMode.MIXED -> Color(widgetPalette.onAccentContainer)
                             else -> previewPrimaryText
                         }
                         Box(
@@ -200,9 +217,10 @@ private fun WidgetConfigureScreen(
                                     AssetWidgetMode.ASSET_ONLY -> if (masked) "资产 ¥**** · 负债 ¥****" else "资产 ¥45,000 · 负债 ¥2,150"
                                     AssetWidgetMode.REIMBURSE_ONLY -> if (masked) "2 笔待核 · 本月 ¥****" else "2 笔待核 · 本月 ¥3,120"
                                 },
-                                style = AbType.caption1.copy(fontWeight = FontWeight.SemiBold),
+                                style = AbType.caption1.copy(fontWeight = FontWeight.SemiBold).tabular(),
                                 color = pillFg,
                                 maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                         }
                     }

@@ -38,16 +38,17 @@ internal data class HomeDailyState(
     val snapshot: HomeDailySnapshot? = null,
     val loading: Boolean = true,
     val failed: Boolean = false,
+    val period: io.github.mymoney.data.LedgerMonthPeriod? = null,
 )
 
-/** Keep successfully loaded cards on screen during pagination and retry. A timezone change starts fresh. */
+/** Keep successfully loaded cards on screen during pagination, period switches, and retry. */
 @Composable
 internal fun rememberHomeDailyState(clock: LedgerClock, period: io.github.mymoney.data.LedgerMonthPeriod, anchorLimit: Int, retry: Int): HomeDailyState {
     val context = LocalContext.current.applicationContext
     val dao = remember(context) { AppDb.get(context).bills() }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val boundary = remember(dao, period) { HomeDailyBoundary() }
-    var state by remember(dao, period) { mutableStateOf(HomeDailyState()) }
+    var state by remember(dao) { mutableStateOf(HomeDailyState()) }
     LaunchedEffect(dao, lifecycle, period, anchorLimit, retry) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             state = state.copy(loading = true, failed = false)
@@ -58,7 +59,7 @@ internal fun rememberHomeDailyState(clock: LedgerClock, period: io.github.mymone
                     observeFrom = { from -> dao.observeRange(from, period.toMillis) },
                     fromInclusive = period.fromMillis, toExclusive = period.toMillis,
                 )
-                    .collect { state = HomeDailyState(snapshot = it, loading = false) }
+                    .collect { state = HomeDailyState(snapshot = it, loading = false, period = period) }
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
@@ -70,9 +71,9 @@ internal fun rememberHomeDailyState(clock: LedgerClock, period: io.github.mymone
 }
 
 /** Non-daily home sections keep a uniform card gap while daily segments have no seams. */
-internal fun LazyListScope.homeCardItem(key: Any, content: @Composable () -> Unit) {
+internal fun LazyListScope.homeCardItem(key: Any, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     item(key = key) {
-        Column(Modifier.fillMaxWidth().padding(bottom = AbCardDensity.gap)) { content() }
+        Column(Modifier.fillMaxWidth().then(modifier).padding(horizontal = AbSpacing.page).padding(bottom = AbCardDensity.gap)) { content() }
     }
 }
 
@@ -83,11 +84,13 @@ internal fun LazyListScope.homeDailyCards(
     clock: LedgerClock,
     onBillClick: (Long) -> Unit,
     onBillLongPress: (BillEntity, Rect?) -> Unit = { _, _ -> },
+    itemModifier: Modifier = Modifier,
 ) {
     snapshot.days.forEach { day ->
         item(key = "home-day-${day.date}", contentType = "home-day-header") {
             val p = LocalAbPalette.current
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = AbRadius.group, topEnd = AbRadius.group))
+            Column(Modifier.fillMaxWidth().then(itemModifier).padding(horizontal = AbSpacing.page)
+                .clip(RoundedCornerShape(topStart = AbRadius.group, topEnd = AbRadius.group))
                 .background(p.cardBg)) {
                 HomeDailyHeader(day, clock)
                 InsetDivider(inset = AbCardDensity.content)
@@ -97,15 +100,23 @@ internal fun LazyListScope.homeDailyCards(
             val last = index == day.bills.lastIndex
             val shape = RoundedCornerShape(bottomStart = if (last) AbRadius.group else 0.dp,
                 bottomEnd = if (last) AbRadius.group else 0.dp)
-            var rowBounds by remember { mutableStateOf<Rect?>(null) }
-            Column(Modifier.fillMaxWidth().padding(bottom = if (last) AbCardDensity.gap else 0.dp)
+            val boundsHolder = remember { arrayOfNulls<Rect>(1) }
+            val rowInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+            Column(Modifier.fillMaxWidth().then(itemModifier).padding(horizontal = AbSpacing.page)
+                .padding(bottom = if (last) AbCardDensity.gap else 0.dp)
                 .clip(shape).background(LocalAbPalette.current.cardBg)
-                .onGloballyPositioned { rowBounds = it.boundsInRoot() }) {
-                BillListRow(bill, modifier = Modifier.combinedClickable(
-                    onClick = { onBillClick(bill.id) },
-                    onLongClick = if (io.github.mymoney.data.Reimburse.eligible(bill)) ({ onBillLongPress(bill, rowBounds) }) else null,
-                ))
-                if (!last) InsetDivider(inset = AbSpacing.l + AbCardDensity.icon + AbSpacing.m)
+                .onGloballyPositioned { boundsHolder[0] = it.boundsInRoot() }) {
+                BillListRow(
+                    bill,
+                    modifier = Modifier
+                        .abPressFeedback(rowInteraction, pressedScale = 0.99f, pressedAlpha = 0.76f)
+                        .combinedClickable(
+                            interactionSource = rowInteraction,
+                            indication = null,
+                            onClick = { onBillClick(bill.id) },
+                            onLongClick = if (io.github.mymoney.data.Reimburse.eligible(bill)) ({ onBillLongPress(bill, boundsHolder[0]) }) else null,
+                        ),
+                )
             }
         }
     }
@@ -117,7 +128,7 @@ private fun HomeDailyHeader(day: HomeDailyDay, clock: LedgerClock) {
     val date = day.date.format(DateTimeFormatter.ofPattern("MM/dd")) +
         if (day.date.year != clock.date.year) " · ${day.date.year}" else ""
     val amount = "支出 ${formatAmount(day.expenseCents)}"
-    val style = AbType.subhead.copy(fontWeight = FontWeight.SemiBold)
+    val style = AbType.subhead.copy(fontWeight = FontWeight.SemiBold).tabular()
     val measure = rememberTextMeasurer()
     BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = AbCardDensity.content, vertical = AbCardDensity.headerVertical)) {
         val density = androidx.compose.ui.platform.LocalDensity.current

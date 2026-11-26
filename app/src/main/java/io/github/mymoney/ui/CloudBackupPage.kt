@@ -2,9 +2,15 @@ package io.github.mymoney.ui
 
 import android.content.ClipboardManager
 import android.content.Context
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -68,6 +74,7 @@ internal fun CloudBackupPage(
     var needsAuthorization by remember { mutableStateOf(!config.paired) }
     var busyKind by remember { mutableStateOf<CloudBackupBusy?>(null) }
     val busy = busyKind != null
+    SettingsRootExitHandler(enabled = busy) { /* Match the existing busy back guard. */ }
     var message by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
     // 扫码：先本地扫出一串 → 校验/确认后才 connect（确认前不联网、不改配置）。
@@ -218,18 +225,7 @@ internal fun CloudBackupPage(
         if (!historyLoaded && (verified || config.paired)) operate(CloudBackupBusy.HISTORY) { loadHistory() }
     }
 
-    if (showScanner) {
-        QrScannerScreen(
-            onDecoded = { raw ->
-                showScanner = false
-                scannedText = raw
-                scannedError = ""
-            },
-            onCancel = { showScanner = false },
-            onPermissionDenied = { showScanner = false; showPermissionHint = true },
-        )
-        return
-    }
+    val reduceMotion = LocalReduceMotion.current
     scannedText?.let { raw ->
         val invite = remember(raw) { runCatching { FamilyInvite.parse(raw) }.getOrNull() }
         val okCode = invite != null && FamilyInvite.isConnectCode(invite)
@@ -246,17 +242,17 @@ internal fun CloudBackupPage(
                 } else scannedText = null
             },
         )
-        return
     }
     if (showPermissionHint) {
         CameraPermissionDialog(onDismiss = { showPermissionHint = false })
     }
 
-    SettingsContentPage(when (destination) {
-        CloudBackupDestination.HISTORY -> "历史备份"
-        CloudBackupDestination.CONNECTION -> "连接管理"
-        CloudBackupDestination.HOME -> "云备份"
-    }, onBack = onBack) {
+    Box(Modifier.fillMaxSize()) {
+        SettingsContentPage(when (destination) {
+            CloudBackupDestination.HISTORY -> "历史备份"
+            CloudBackupDestination.CONNECTION -> "连接管理"
+            CloudBackupDestination.HOME -> "云备份"
+        }, onBack = onBack) {
         if (destination == CloudBackupDestination.HOME) {
             InsetGroup {
                 ListRow(
@@ -268,7 +264,7 @@ internal fun CloudBackupPage(
                     },
                     subtitle = config.deviceName.ifBlank { null },
                 )
-                if (!needsAuthorization) ListRow(title = "最近备份", subtitle = lastBackup, dividerAbove = true)
+                if (!needsAuthorization) ListRow(title = "最近备份", subtitle = lastBackup)
                 if (!needsAuthorization) {
                     val realtimeStatus = when {
                         !realtimeEnabled -> "已关闭"
@@ -280,7 +276,6 @@ internal fun CloudBackupPage(
                     ListRow(
                         title = "实时同步",
                         subtitle = realtimeStatus,
-                        dividerAbove = true,
                         trailing = {
                             AbSwitch(realtimeEnabled) { checked ->
                                 realtimeEnabled = checked
@@ -342,11 +337,11 @@ internal fun CloudBackupPage(
                 PrimaryButton(text = "添加新设备", enabled = !busy, onClick = { operate { finishConnection(null) } }, modifier = Modifier.fillMaxWidth())
                 GroupHeader("接替原设备")
                 InsetGroup {
-                    pending.sources.forEachIndexed { index, source ->
+                    pending.sources.forEach { source ->
                         ListRow(title = source.name, subtitle = "${source.deviceId.take(8)} · 最近使用 ${source.lastSeenAt?.let(::cloudBackupDate) ?: "未知"}" +
                             (if (source.lastBackupAt != null) "\n最近备份 ${cloudBackupDate(source.lastBackupAt)}" else "\n尚无备份") +
                             (if (source.revoked) " · 已退出" else "") + (if (source.archived) " · 已归档" else ""),
-                            dividerAbove = index > 0, chevron = true, onClick = { if (!busy) sourceToReplace = source })
+                            chevron = true, onClick = { if (!busy) sourceToReplace = source })
                     }
                 }
                 AbTextButton("取消连接", enabled = !busy, onClick = { operate { CloudBackupCoordinator.cancelEnrollment(context); enrollment = null; needsAuthorization = true } })
@@ -367,7 +362,7 @@ internal fun CloudBackupPage(
                 // Offline entries stay enabled: a failed connection must not lock the user out
                 // of the local backup file screen or diagnostics.
                 ListRow(title = "本地备份文件", chevron = true, onClick = onOpenLocalFiles)
-                ListRow(title = "诊断信息", subtitle = if (showDiagnostics) diagnostics else null, dividerAbove = true,
+                ListRow(title = "诊断信息", subtitle = if (showDiagnostics) diagnostics else null,
                     chevron = true, onClick = {
                         showDiagnostics = !showDiagnostics
                         if (showDiagnostics) operate {
@@ -390,10 +385,10 @@ internal fun CloudBackupPage(
                     })
                 }
             }
-            InsetGroup { entries.forEachIndexed { index, entry ->
+            InsetGroup { entries.forEach { entry ->
                 val picked = entry.id in selected
                 ListRow(title = cloudBackupDate(entry.snapshotAt), subtitle = "${entry.billCount}笔 · ${cloudBackupSize(entry.sizeBytes)}\n服务器接收：${cloudBackupDate(entry.uploadedAt)}",
-                    dividerAbove = index > 0, chevron = !managing,
+                    chevron = !managing,
                     trailing = if (picked) { { Text("已选") } } else null,
                     onClick = {
                         if (managing) {
@@ -473,11 +468,14 @@ internal fun CloudBackupPage(
     detailEntry?.let { entry ->
         val preparing = preparePhase != PreparePhase.IDLE
         AppDialog(title = "备份详情", onDismiss = { if (!busy && !preparing) detailEntry = null }) {
-            Text("${cloudBackupDate(entry.snapshotAt)}\n账单 ${entry.billCount}笔 · ${cloudBackupSize(entry.sizeBytes)}\n服务器接收：${cloudBackupDate(entry.uploadedAt)}")
+            Text(
+                "${cloudBackupDate(entry.snapshotAt)}\n账单 ${entry.billCount}笔 · ${cloudBackupSize(entry.sizeBytes)}\n服务器接收：${cloudBackupDate(entry.uploadedAt)}",
+                style = AbType.body.tabular(),
+            )
             when (preparePhase) {
                 PreparePhase.DOWNLOADING -> {
                     val pct = if (progressTotal > 0) (progressReceived * 100 / progressTotal).toInt() else 0
-                    Text("正在下载备份… ${cloudBackupSize(progressReceived)} / ${cloudBackupSize(progressTotal)}（$pct%）")
+                    Text("正在下载备份… ${cloudBackupSize(progressReceived)} / ${cloudBackupSize(progressTotal)}（$pct%）", style = AbType.footnote.tabular())
                 }
                 PreparePhase.VERIFYING -> Text("正在校验…")
                 PreparePhase.PARSING -> Text("正在解析…")
@@ -494,6 +492,22 @@ internal fun CloudBackupPage(
                     busy = busy,
                 )
             }
+        }
+    }
+        AnimatedVisibility(
+            visible = showScanner,
+            enter = fadeIn(tween(if (reduceMotion) 140 else 200, easing = AbEasing.EaseOut)),
+            exit = fadeOut(tween(if (reduceMotion) 110 else 150, easing = AbEasing.EaseOut)),
+        ) {
+            QrScannerScreen(
+                onDecoded = { raw ->
+                    showScanner = false
+                    scannedText = raw
+                    scannedError = ""
+                },
+                onCancel = { showScanner = false },
+                onPermissionDenied = { showScanner = false; showPermissionHint = true },
+            )
         }
     }
     // AA1 step 2/3: content preview after download, then final restore confirmation.

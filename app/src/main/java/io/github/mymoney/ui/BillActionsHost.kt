@@ -95,7 +95,6 @@ fun BillActionsHost(
     var parentId by remember(billId) { mutableStateOf<Long?>(null) }
     val assetAccounts by io.github.mymoney.data.AssetStore.accounts.collectAsStateWithLifecycle()
     val allBills by remember(dao) { dao.observeRange(Long.MIN_VALUE, Long.MAX_VALUE) }.collectAsStateWithLifecycle(initialValue = emptyList())
-    var amountBounds by remember(billId) { mutableStateOf<Rect?>(null) }
     val scrollState = rememberLazyListState()
     val visibilityChanged by rememberUpdatedState(onEditorVisibilityChanged)
     val close by rememberUpdatedState(onClose)
@@ -169,19 +168,21 @@ fun BillActionsHost(
                                     ) {
                                         val receiptBg by animateColorAsState(
                                             targetValue = if (isReimbursable) reimburseBlue else Color.Transparent,
-                                            animationSpec = tween(if (reduceMotion) 0 else AbMotion.selection),
+                                            animationSpec = tween(if (reduceMotion) 110 else AbMotion.selection, easing = AbEasing.EaseOut),
                                             label = "receipt-bg",
                                         )
                                         val receiptFg by animateColorAsState(
                                             targetValue = if (isReimbursable) Color.White else p.label,
-                                            animationSpec = tween(if (reduceMotion) 0 else AbMotion.selection),
+                                            animationSpec = tween(if (reduceMotion) 110 else AbMotion.selection, easing = AbEasing.EaseOut),
                                             label = "receipt-fg",
                                         )
+                                        val receiptInteraction = remember { MutableInteractionSource() }
                                         Box(
                                             Modifier
-                                                .size(width = 44.dp, height = 48.dp)
+                                                .size(width = 48.dp, height = 48.dp)
+                                                .abPressFeedback(receiptInteraction, pressedScale = 0.92f, pressedAlpha = 0.72f)
                                                 .clickable(
-                                                    interactionSource = remember { MutableInteractionSource() },
+                                                    interactionSource = receiptInteraction,
                                                     indication = null,
                                                     role = Role.Button,
                                                 ) {
@@ -211,14 +212,16 @@ fun BillActionsHost(
                                         }
                                         AnimatedVisibility(
                                             visible = isReimbursable,
-                                            enter = if (reduceMotion) fadeIn(snap()) else expandHorizontally(AbSpring.morphSize(false)) + fadeIn(tween(150)),
-                                            exit = if (reduceMotion) fadeOut(snap()) else shrinkHorizontally(AbSpring.morphSize(false)) + fadeOut(tween(110)),
+                                            enter = if (reduceMotion) fadeIn(tween(140, easing = AbEasing.EaseOut)) else expandHorizontally(AbSpring.morphSize(false)) + fadeIn(tween(150, easing = AbEasing.EaseOut)),
+                                            exit = if (reduceMotion) fadeOut(tween(110, easing = AbEasing.EaseOut)) else shrinkHorizontally(AbSpring.morphSize(false)) + fadeOut(tween(110, easing = AbEasing.EaseOut)),
                                         ) {
+                                            val statusInteraction = remember { MutableInteractionSource() }
                                             Row(
                                                 Modifier
                                                     .height(48.dp)
+                                                    .abPressFeedback(statusInteraction, pressedScale = 0.96f, pressedAlpha = 0.72f)
                                                     .clickable(
-                                                        interactionSource = remember { MutableInteractionSource() },
+                                                        interactionSource = statusInteraction,
                                                         indication = null,
                                                         role = Role.Button,
                                                     ) {
@@ -259,12 +262,14 @@ fun BillActionsHost(
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     if (canEdit) {
+                                        val editInteraction = remember { MutableInteractionSource() }
                                         Box(
                                             Modifier
                                                 .size(width = 48.dp, height = 48.dp)
+                                                .abPressFeedback(editInteraction, enabled = !deleting, pressedScale = 0.92f, pressedAlpha = 0.65f)
                                                 .clip(CircleShape)
                                                 .clickable(
-                                                    interactionSource = remember { MutableInteractionSource() },
+                                                    interactionSource = editInteraction,
                                                     indication = null,
                                                     enabled = !deleting,
                                                     role = Role.Button,
@@ -289,12 +294,14 @@ fun BillActionsHost(
                                                 .background(p.separator.copy(alpha = 0.45f)),
                                         )
                                     }
+                                    val trashInteraction = remember { MutableInteractionSource() }
                                     Box(
                                         Modifier
                                             .size(width = 48.dp, height = 48.dp)
+                                            .abPressFeedback(trashInteraction, enabled = !deleting, pressedScale = 0.92f, pressedAlpha = 0.65f)
                                             .clip(CircleShape)
                                             .clickable(
-                                                interactionSource = remember { MutableInteractionSource() },
+                                                interactionSource = trashInteraction,
                                                 indication = null,
                                                 enabled = !deleting,
                                                 role = Role.Button,
@@ -390,8 +397,7 @@ fun BillActionsHost(
                                         }
                                         Box(
                                             Modifier
-                                                .widthIn(min = 84.dp, max = 188.dp)
-                                                .onGloballyPositioned { amountBounds = it.boundsInRoot() },
+                                                .widthIn(min = 84.dp, max = 188.dp),
                                             contentAlignment = Alignment.CenterEnd,
                                         ) {
                                             AmountText(
@@ -510,8 +516,8 @@ fun BillActionsHost(
                                         val reduceRecognitionMotion = LocalReduceMotion.current
                                         AnimatedVisibility(
                                             visible = recognitionExpanded,
-                                            enter = if (reduceRecognitionMotion) fadeIn(snap()) else expandVertically(AbSpring.morphSize(false)) + fadeIn(tween(160)),
-                                            exit = if (reduceRecognitionMotion) fadeOut(snap()) else shrinkVertically(AbSpring.morphSize(false)) + fadeOut(tween(120)),
+                                            enter = if (reduceRecognitionMotion) fadeIn(tween(140, easing = AbEasing.EaseOut)) else expandVertically(AbSpring.morphSize(false)) + fadeIn(tween(160, easing = AbEasing.EaseOut)),
+                                            exit = if (reduceRecognitionMotion) fadeOut(tween(110, easing = AbEasing.EaseOut)) else shrinkVertically(AbSpring.morphSize(false)) + fadeOut(tween(120, easing = AbEasing.EaseOut)),
                                         ) {
                                             Column(Modifier.fillMaxWidth()) {
                                                 InsetDivider()
@@ -566,7 +572,9 @@ fun BillActionsHost(
                 busyLabel = "处理中…",
             )
         }
-        parentId?.let { id -> BillActionsHost(id, onClose = { parentId = null }) }
+        SlideSubPageValue(value = parentId, modifier = Modifier.fillMaxSize().zIndex(6f)) { id ->
+            BillActionsHost(id, onClose = { parentId = null })
+        }
         var retainedTransferBill by remember(billId) { mutableStateOf<BillEntity?>(null) }
         if (editing && editorWasTransfer && bill != null && deletedSnapshot == null) retainedTransferBill = bill
         SlideSubPage(
@@ -601,20 +609,24 @@ private fun BillDetailRow(
     onClick: (() -> Unit)? = null,
 ) {
     val p = LocalAbPalette.current
+    val interaction = remember(onClick != null) { MutableInteractionSource() }
     Row(
         Modifier
             .fillMaxWidth()
             .then(
                 if (onClick != null) {
-                    Modifier.clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        role = Role.Button,
-                        onClick = onClick,
-                    )
+                    Modifier
+                        .heightIn(min = AbSize.minTouch)
+                        .abPressFeedback(interaction, pressedScale = 0.99f, tintOverlay = true)
+                        .clickable(
+                            interactionSource = interaction,
+                            indication = null,
+                            role = Role.Button,
+                            onClick = onClick,
+                        )
                 } else Modifier,
             )
-            .padding(horizontal = AbSpacing.l, vertical = 6.dp),
+            .padding(horizontal = AbSpacing.l, vertical = if (onClick != null) 12.dp else 6.dp),
         horizontalArrangement = Arrangement.spacedBy(AbSpacing.m),
         verticalAlignment = Alignment.Top,
     ) {
@@ -625,7 +637,7 @@ private fun BillDetailRow(
         )
         Text(
             text = value?.takeIf { it.isNotBlank() } ?: "未提供",
-            style = AbType.subhead,
+            style = AbType.subhead.tabular(),
             color = valueColor ?: p.label,
             textAlign = TextAlign.End,
             modifier = Modifier.weight(1f),

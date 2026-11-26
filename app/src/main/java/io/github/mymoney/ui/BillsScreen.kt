@@ -318,26 +318,25 @@ fun BillsScreen(requestAdd: Int = 0, applyPendingFilter: Boolean = false, onPend
                                         )
                                         Column(
                                             (if (reduceMotion) Modifier else Modifier.animateItem(
-                                                fadeInSpec = tween(AbMotion.fast),
-                                                placementSpec = tween(AbMotion.fast),
-                                                fadeOutSpec = tween(AbMotion.fast),
+                                                fadeInSpec = tween(AbMotion.fast, easing = AbEasing.EaseOut),
+                                                placementSpec = AbSpring.morphOffset(false),
+                                                fadeOutSpec = tween(100, easing = AbEasing.EaseOut),
                                             ))
                                                 .fillMaxWidth()
                                                 .padding(bottom = if (last) AbCardDensity.gap else 0.dp)
                                                 .clip(shape)
                                                 .background(p.cardBg),
                                         ) {
-                                            var rowBounds by remember { mutableStateOf<Rect?>(null) }
+                                            val boundsHolder = remember { arrayOfNulls<Rect>(1) }
                                             SwipeableBillRow(
                                                 bill,
-                                                modifier = Modifier.onGloballyPositioned { rowBounds = it.boundsInRoot() },
+                                                modifier = Modifier.onGloballyPositioned { boundsHolder[0] = it.boundsInRoot() },
                                                 onAmountBounds = {},
                                                 hideAmount = false,
                                                 onEdit = { openBill(bill.id); newSource = null },
                                                 onDelete = { deleteId = bill.id },
-                                                onLongPress = { if (Reimburse.eligible(bill)) reimburseTarget = bill to rowBounds },
+                                                onLongPress = { if (Reimburse.eligible(bill)) reimburseTarget = bill to boundsHolder[0] },
                                             )
-                                            if (!last) InsetDivider(inset = AbSpacing.l + AbCardDensity.icon + AbSpacing.m)
                                         }
                                     }
                                 }
@@ -406,16 +405,32 @@ private fun LedgerCardDayHeader(day: LocalDate, dayBills: List<BillEntity>, cloc
         refund > 0L -> "退款 ${formatAmount(refund)}" to p.refund
         else -> "支出 ${formatAmount(0L)}" to p.secondaryLabel
     }
-    val style = AbType.subhead.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
-    Row(
+    val style = AbType.subhead.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold).tabular()
+    val measure = androidx.compose.ui.text.rememberTextMeasurer()
+    BoxWithConstraints(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = AbCardDensity.content, vertical = AbCardDensity.headerVertical),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(date, style = style, color = p.label)
-        Text(amountText, style = style, color = amountColor)
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        val needed = measure.measure(androidx.compose.ui.text.AnnotatedString(date), style = style, softWrap = false).size.width +
+            measure.measure(androidx.compose.ui.text.AnnotatedString(amountText), style = style, softWrap = false).size.width +
+            with(density) { AbSpacing.l.roundToPx() }
+        if (needed <= constraints.maxWidth) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(date, style = style, color = p.label)
+                Text(amountText, style = style, color = amountColor)
+            }
+        } else {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(AbSpacing.xs)) {
+                Text(date, style = style, color = p.label)
+                Text(amountText, style = style, color = amountColor, textAlign = androidx.compose.ui.text.style.TextAlign.End, modifier = Modifier.fillMaxWidth())
+            }
+        }
     }
 }
 
@@ -435,14 +450,29 @@ private fun SwipeableBillRow(
     val reduceMotion = LocalReduceMotion.current
     if (reduceMotion) {
         Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            BillListRow(bill, modifier = Modifier.weight(1f).combinedClickable(onClick = onEdit, onLongClick = onLongPress),
-                onAmountBounds = onAmountBounds, hideAmount = hideAmount)
+            val rowInteraction = remember { MutableInteractionSource() }
+            val deleteInteraction = remember { MutableInteractionSource() }
+            BillListRow(
+                bill,
+                modifier = Modifier
+                    .weight(1f)
+                    .abPressFeedback(rowInteraction, pressedScale = 0.99f, tintOverlay = true)
+                    .combinedClickable(
+                        interactionSource = rowInteraction,
+                        indication = null,
+                        onClick = onEdit,
+                        onLongClick = onLongPress,
+                    ),
+                onAmountBounds = onAmountBounds,
+                hideAmount = hideAmount,
+            )
             Box(
                 Modifier
                     .size(48.dp)
+                    .abPressFeedback(deleteInteraction, pressedScale = 0.92f, pressedAlpha = 0.65f)
                     .clip(CircleShape)
                     .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
+                        interactionSource = deleteInteraction,
                         indication = null,
                         role = Role.Button,
                     ) {
@@ -478,7 +508,9 @@ private fun SwipeableBillRow(
         if (nowCrossed && !crossedThreshold) haptic.tick()
         crossedThreshold = nowCrossed
     }
-    val rowCorner = if (offsetPx > with(density) { 2.dp.toPx() }) 16.dp else 0.dp
+    val cornerThresholdPx = remember(density) { with(density) { 12.dp.toPx() } }
+    val rowCorner = (((offsetPx / cornerThresholdPx).coerceIn(0f, 1f)) * 16f).dp
+    val rowInteraction = remember { MutableInteractionSource() }
 
     SwipeToDismissBox(
         state = state,
@@ -493,7 +525,19 @@ private fun SwipeableBillRow(
                 .clip(RoundedCornerShape(topEnd = rowCorner, bottomEnd = rowCorner))
                 .background(LocalAbPalette.current.cardBg),
         ) {
-            BillListRow(bill, modifier = Modifier.combinedClickable(onClick = onEdit, onLongClick = onLongPress), onAmountBounds = onAmountBounds, hideAmount = hideAmount)
+            BillListRow(
+                bill,
+                modifier = Modifier
+                    .abPressFeedback(rowInteraction, pressedScale = 0.99f, tintOverlay = true)
+                    .combinedClickable(
+                        interactionSource = rowInteraction,
+                        indication = null,
+                        onClick = onEdit,
+                        onLongClick = onLongPress,
+                    ),
+                onAmountBounds = onAmountBounds,
+                hideAmount = hideAmount,
+            )
         }
     }
 }

@@ -60,6 +60,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -107,12 +108,16 @@ import io.github.mymoney.ui.design.AppDialogActions
 import io.github.mymoney.ui.design.GlassBottomSheetBox
 import io.github.mymoney.ui.design.floatingSheetViewportPadding
 import io.github.mymoney.ui.design.amountTint
+import io.github.mymoney.ui.design.AbEasing
 import io.github.mymoney.ui.design.AbIcons
 import io.github.mymoney.ui.design.AbMotion
 import io.github.mymoney.ui.design.AbRadius
 import io.github.mymoney.ui.design.AbSpacing
 import io.github.mymoney.ui.design.AbTextButton
 import io.github.mymoney.ui.design.AbType
+import io.github.mymoney.ui.design.abPressFeedback
+import io.github.mymoney.ui.design.displayTracking
+import io.github.mymoney.ui.design.tabular
 import io.github.mymoney.ui.design.LocalAbPalette
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.layer.drawLayer
@@ -343,17 +348,25 @@ fun ConfirmSheet(
     val density = LocalDensity.current
     val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
     val offsetY = remember { Animatable(if (reduceMotion || sharedAmountProgress != null) 0f else screenHeightPx) }
+    val animAlpha = remember { Animatable(if (reduceMotion && sharedAmountProgress == null) 0f else 1f) }
     var dragging by remember { mutableStateOf(false) }
     var dragOffset by remember { mutableStateOf(0f) }
-    val displayedOffset = if (dragging) dragOffset else offsetY.value
     LaunchedEffect(reduceMotion, sharedAmountProgress == null) {
-        if (reduceMotion || sharedAmountProgress != null) offsetY.snapTo(0f)
-        else offsetY.animateTo(0f, io.github.mymoney.ui.design.AbSpring.sheetFloat(false))
+        if (reduceMotion && sharedAmountProgress == null) {
+            offsetY.snapTo(0f)
+            animAlpha.animateTo(1f, tween(140, easing = io.github.mymoney.ui.design.AbEasing.EaseOut))
+        } else if (sharedAmountProgress != null) {
+            animAlpha.snapTo(1f)
+            offsetY.snapTo(0f)
+        } else {
+            animAlpha.snapTo(1f)
+            offsetY.animateTo(0f, io.github.mymoney.ui.design.AbSpring.sheetFloat(false))
+        }
     }
     LaunchedEffect(editorExiting, sharedAmountProgress == null, reduceMotion) {
         if (editorExiting && sharedAmountProgress == null) {
-            if (reduceMotion) offsetY.snapTo(screenHeightPx)
-            else offsetY.animateTo(screenHeightPx, tween(185))
+            if (reduceMotion) animAlpha.animateTo(0f, tween(110, easing = io.github.mymoney.ui.design.AbEasing.EaseOut))
+            else offsetY.animateTo(screenHeightPx, tween(180, easing = io.github.mymoney.ui.design.AbEasing.EaseOut))
         }
     }
 
@@ -367,18 +380,25 @@ fun ConfirmSheet(
             dragging = false
             dragOffset = 0f
             offsetY.snapTo(0f)
+            animAlpha.snapTo(1f)
             closing = false
         }
     }
 
-    fun closeAnimated(then: () -> Unit) {
+    fun closeAnimated(dragVelocity: Float? = null, then: () -> Unit) {
         if (locked || closing) return
         closing = true
         if (managedEditorExit) { then(); return }
         closeJob = scope.launch {
             var delivered = false
             try {
-                offsetY.animateTo(screenHeightPx, tween(if (reduceMotion) 0 else AbMotion.normal))
+                if (reduceMotion) {
+                    animAlpha.animateTo(0f, tween(110, easing = io.github.mymoney.ui.design.AbEasing.EaseOut))
+                } else if (dragVelocity != null) {
+                    offsetY.animateTo(screenHeightPx, io.github.mymoney.ui.design.AbSpring.sheetFloat(false), initialVelocity = dragVelocity)
+                } else {
+                    offsetY.animateTo(screenHeightPx, tween(180, easing = io.github.mymoney.ui.design.AbEasing.EaseOut))
+                }
                 delivered = true
                 then()
             } finally {
@@ -386,28 +406,34 @@ fun ConfirmSheet(
             }
         }
     }
-    fun requestClose(action: () -> Unit) {
+    fun requestClose(dragVelocity: Float? = null, action: () -> Unit) {
         if (locked) return
         if (editableDetails && editorFieldsChanged(draft, current(), amount.text)) {
             discardAction = action
             discardPrompt = true
-        } else closeAnimated(action)
+        } else closeAnimated(dragVelocity, action)
     }
-    fun dismiss() { if (locked) return; if (timeOpen) { timeOpen = false; return }; if (noteFillOpen) { noteFillOpen=false; return }; if (detailsOpen) { detailsOpen=false; return }; if (picker.open) picker.cancel() else { haptic.select(); requestClose { onDismiss(current()) } } }
-    fun ignore() { if (!locked) { haptic.warn(); requestClose(onIgnore) } }
+    fun dismiss(dragVelocity: Float? = null) {
+        if (locked) return
+        if (timeOpen) { timeOpen = false; return }
+        if (noteFillOpen) { noteFillOpen = false; return }
+        if (detailsOpen) { detailsOpen = false; return }
+        if (picker.open) picker.cancel()
+        else { haptic.select(); requestClose(dragVelocity) { onDismiss(current()) } }
+    }
+    fun ignore() { if (!locked) { haptic.warn(); requestClose(action = onIgnore) } }
     LaunchedEffect(discardPrompt) {
         if (discardPrompt && offsetY.value > 0f) {
-            if (reduceMotion) offsetY.snapTo(0f) else offsetY.animateTo(0f, io.github.mymoney.ui.design.AbSpring.sheetFloat(false))
+            if (reduceMotion) offsetY.animateTo(0f, tween(110, easing = io.github.mymoney.ui.design.AbEasing.EaseOut))
+            else offsetY.animateTo(0f, io.github.mymoney.ui.design.AbSpring.sheetFloat(false))
         }
     }
     if (discardPrompt) DiscardChangesDialog(onContinue = { discardPrompt = false; discardAction = null },
-        onDiscard = { val action = discardAction; discardPrompt = false; discardAction = null; if (action != null) closeAnimated(action) })
+        onDiscard = { val action = discardAction; discardPrompt = false; discardAction = null; if (action != null) closeAnimated(then = action) })
     // 悬浮窗没有 OnBackPressedDispatcher（宿主在 View 层自己接返回键），只在 Activity 宿主里注册
     if (androidx.activity.compose.LocalOnBackPressedDispatcherOwner.current != null) {
         ActiveBackHandler { if (!locked) dismiss() }
     }
-
-    val scrimAlpha = (0.32f * (1f - (displayedOffset / (screenHeightPx * 0.7f)))).coerceIn(0f, 0.32f)
 
     val pickerBackdrop = rememberGraphicsLayer()
     val usePickerGlass = android.os.Build.VERSION.SDK_INT >= 31 &&
@@ -425,7 +451,12 @@ fun ConfirmSheet(
         ) {
         // 压暗层：识别草稿回待确认；编辑器由宿主处理取消。
         Box(
-            Modifier.fillMaxSize().background(Color.Black.copy(alpha = scrimAlpha * (sharedAmountProgress ?: 1f)))
+            Modifier.fillMaxSize()
+                .drawBehind {
+                    val y = if (dragging) dragOffset else offsetY.value
+                    val base = (0.32f * (1f - (y / (screenHeightPx * 0.7f).coerceAtLeast(1f)))).coerceIn(0f, 0.32f)
+                    drawRect(Color.Black.copy(alpha = base * animAlpha.value * (sharedAmountProgress ?: 1f)))
+                }
                 .clickable(remember { MutableInteractionSource() }, indication = null, enabled = !locked) { dismiss() }
                 .semantics { contentDescription = if (editableDetails) "取消编辑" else "关闭，稍后在待处理里查看" },
         )
@@ -442,8 +473,10 @@ fun ConfirmSheet(
                 backdropOrigin = backdropOrigin,
                 modifier = Modifier
                     .widthIn(max = 560.dp).fillMaxWidth()
-                    .offset { IntOffset(0, displayedOffset.roundToInt()) }
-                    .graphicsLayer { alpha = sharedAmountProgress ?: 1f }
+                    .graphicsLayer {
+                        translationY = if (dragging) dragOffset else offsetY.value
+                        alpha = animAlpha.value * (sharedAmountProgress ?: 1f)
+                    }
                     .heightIn(max = maxHeight * 0.92f)
                     .testTag("confirm-sheet"),
             ) {
@@ -456,6 +489,7 @@ fun ConfirmSheet(
                         dragOffset = nextOffset
                     },
                     onDismiss = { if (!locked) dismiss() },
+                    onDragDismiss = { v -> if (!locked) dismiss(v) },
                 )
 
                 val assetAccount = assetAccounts.firstOrNull { it.name == account }
@@ -487,7 +521,7 @@ fun ConfirmSheet(
                                 fontSize = AbType.amountEntry.fontSize / density.fontScale.coerceAtLeast(1f))
                             val naturalWidth = amountMeasurer.measure(amount.text.ifBlank { "0.00" }, preferredAmountStyle, maxLines = 1, softWrap = false).size.width
                             val fit = if (amountWidth > 0) ((amountWidth - 2f) / naturalWidth.coerceAtLeast(1)).coerceIn(0.1f, 1f) else 1f
-                            val amountStyle = preferredAmountStyle.copy(fontSize = preferredAmountStyle.fontSize * fit)
+                            val amountStyle = preferredAmountStyle.displayTracking(preferredAmountStyle.fontSize.value * fit)
                             SideEffect { if (amountWidth > 0) onAmountFontSize?.invoke(amountStyle.fontSize) }
                             BasicTextField(
                                 value = amount,
@@ -522,8 +556,11 @@ fun ConfirmSheet(
                                     }
                                 },
                             )
+                            val ignoreInteraction = remember { MutableInteractionSource() }
                             Box(Modifier.heightIn(min = 48.dp).widthIn(min = 48.dp)
-                                .clickable(enabled = !locked) { ignore() }.semantics { role = Role.Button; contentDescription = if (editableDetails) "取消编辑" else "忽略，可在记录历史重新打开" },
+                                .abPressFeedback(ignoreInteraction, enabled = !locked, pressedScale = 0.95f, pressedAlpha = 0.65f)
+                                .clickable(interactionSource = ignoreInteraction, indication = null, enabled = !locked) { ignore() }
+                                .semantics { role = Role.Button; contentDescription = if (editableDetails) "取消编辑" else "忽略，可在记录历史重新打开" },
                                 contentAlignment = Alignment.Center) { Text(ignoreLabel, style = AbType.footnote, color = p.secondaryLabel) }
                         }
                         if (amountInvalid) Text("请输入有效金额", color = p.red, style = AbType.caption1,
@@ -643,12 +680,20 @@ fun ConfirmSheet(
                         }
                     }
                     Row(Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xl), verticalAlignment = Alignment.CenterVertically) {
+                        val timeInteraction = remember { MutableInteractionSource() }
+                        val canPickTime = editableDetails || type == BillType.TRANSFER
                         Row(Modifier.weight(1f).heightIn(min = 48.dp)
-                            .then(if (editableDetails || type == BillType.TRANSFER) Modifier.clickable(enabled = !locked) { picker.cancel(); timeOpen = true }
-                                .semantics { role = Role.Button; contentDescription = "选择记账日期和时间" } else Modifier),
+                            .then(
+                                if (canPickTime) {
+                                    Modifier
+                                        .abPressFeedback(timeInteraction, enabled = !locked, pressedScale = 0.985f, pressedAlpha = 0.72f)
+                                        .clickable(interactionSource = timeInteraction, indication = null, enabled = !locked) { picker.cancel(); timeOpen = true }
+                                        .semantics { role = Role.Button; contentDescription = "选择记账日期和时间" }
+                                } else Modifier,
+                            ),
                             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
                             Text("时间", style = AbType.caption1, color = p.secondaryLabel)
-                            Text(SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(timeMillis)), style = AbType.footnote, color = p.label)
+                            Text(SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(timeMillis)), style = AbType.footnote.tabular(), color = p.label)
                         }
                         AbTextButton(
                             text = if (detailsOpen) "收起" else "更多",
@@ -658,7 +703,13 @@ fun ConfirmSheet(
                     }
                     if (editableDetails && timeMillis > System.currentTimeMillis() && assetAccount?.initialized == true)
                         Text("保存即更新当前余额", style = AbType.caption1, color = p.secondaryLabel, modifier = Modifier.padding(horizontal = AbSpacing.xl))
-                    AnimatedVisibility(visible = detailsOpen) {
+                    AnimatedVisibility(
+                        visible = detailsOpen,
+                        enter = if (reduceMotion) fadeIn(tween(140, easing = AbEasing.EaseOut))
+                        else expandVertically(tween(220, easing = AbEasing.EaseOut)) + fadeIn(tween(180, easing = AbEasing.EaseOut)),
+                        exit = if (reduceMotion) fadeOut(tween(110, easing = AbEasing.EaseOut))
+                        else shrinkVertically(tween(180, easing = AbEasing.EaseOut)) + fadeOut(tween(130, easing = AbEasing.EaseOut)),
+                    ) {
                         Column(Modifier.fillMaxWidth().padding(horizontal = AbSpacing.xl), verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
                             Text("来源信息", style = AbType.caption1, color = p.secondaryLabel)
                             if (visualEditable) {
@@ -765,8 +816,11 @@ fun ConfirmSheet(
 @Composable
 private fun ReceiptSummaryRow(label: String, value: String, expanded: Boolean, enabled: Boolean, onClick: () -> Unit) {
     val p = LocalAbPalette.current
+    val interaction = remember { MutableInteractionSource() }
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(enabled = enabled, onClick = onClick)
+        Modifier.fillMaxWidth().heightIn(min = 48.dp)
+            .abPressFeedback(interaction, enabled = enabled, pressedScale = 0.99f, tintOverlay = true)
+            .clickable(interactionSource = interaction, indication = null, enabled = enabled, onClick = onClick)
             .padding(horizontal = AbSpacing.l, vertical = AbSpacing.s)
             .semantics { role = Role.Button; contentDescription = "$label：$value，点击修改"; stateDescription = if (expanded) "已展开" else "已收起" },
         verticalAlignment = Alignment.CenterVertically,
@@ -902,11 +956,11 @@ private fun ChipRow(
 private fun SheetChip(text: String, selected: Boolean, tint: Color?, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) {
     val p = LocalAbPalette.current
     val isDark = p.pageBg.luminance() < 0.1f
-    val duration = if (LocalReduceMotion.current) 0 else AbMotion.selection
+    val duration = if (LocalReduceMotion.current) 120 else AbMotion.selection
     val c = tint ?: p.accent
     val bg by androidx.compose.animation.animateColorAsState(
         if (selected) c.copy(alpha = if (isDark) 0.30f else 0.16f) else p.fill,
-        tween(duration),
+        tween(duration, easing = AbEasing.EaseOut),
         label = "chip-bg",
     )
     val fg by androidx.compose.animation.animateColorAsState(
@@ -915,13 +969,15 @@ private fun SheetChip(text: String, selected: Boolean, tint: Color?, modifier: M
             selected && tint == null -> c
             else -> p.label
         },
-        tween(duration),
+        tween(duration, easing = AbEasing.EaseOut),
         label = "chip-fg",
     )
     val shape = RoundedCornerShape(AbRadius.capsule)
+    val interaction = remember { MutableInteractionSource() }
     Box(
         modifier.heightIn(min = 48.dp)
-            .clickable(remember { MutableInteractionSource() }, indication = null, enabled = enabled, onClick = onClick)
+            .abPressFeedback(interaction, enabled = enabled, pressedScale = 0.955f, pressedAlpha = 0.82f)
+            .clickable(interaction, indication = null, enabled = enabled, onClick = onClick)
             .semantics { this.selected = selected; role = Role.Tab; stateDescription = if (selected) "已选中" else "未选中" },
         contentAlignment = Alignment.Center,
     ) {
@@ -946,9 +1002,11 @@ private fun SuggestionBubble(text: String, accent: Boolean = false, enabled: Boo
     val p = LocalAbPalette.current
     val isDark = p.pageBg.luminance() < 0.1f
     val shape = RoundedCornerShape(AbRadius.capsule)
+    val interaction = remember { MutableInteractionSource() }
     Box(
         Modifier.heightIn(min = 48.dp)
-            .clickable(remember { MutableInteractionSource() }, indication = null, enabled = enabled, onClick = onClick)
+            .abPressFeedback(interaction, enabled = enabled, pressedScale = 0.955f, pressedAlpha = 0.82f)
+            .clickable(interaction, indication = null, enabled = enabled, onClick = onClick)
             .semantics { role = Role.Button; contentDescription = if (accent) "撤销建议" else "用作备注：$text" },
         contentAlignment = Alignment.Center,
     ) {
