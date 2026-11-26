@@ -1,8 +1,8 @@
 # 麦米 My Money
 
-> 当前已发布版本 **1.11.3/166**（2026-11-24 用户验收通过，已发 [GitHub Release `v1.11.3`](https://github.com/Caozl9021/MyMoney/releases/tag/v1.11.3)）：替换为纯白底麦穗品牌图标与单色矢量轮廓，取消设置内可替换桌面图标并改为独立四色主题（默认蓝色），同步云备份 Web 站点图标。说明见 [UI 组件说明](docs/UI_COMPONENTS.md) 与 [更新日志](CHANGELOG.md)，验收见 [验收记录](docs/ACCEPTANCE.md)。
+> 当前已发布版本 **1.11.4/167**（2026-11-26 用户验收通过，已发 [GitHub Release `v1.11.4`](https://github.com/Caozl9021/MyMoney/releases/tag/v1.11.4)）：包含全应用交互动效升级、3D 预测性返回全向退场、统计页周↔月柱环 1 对 1 变形 / 圆环双模式与汇总滚变、以及首页汇总卡自适应三点分页引导。说明见 [UI 组件说明](docs/UI_COMPONENTS.md) 与 [更新日志](CHANGELOG.md)，验收见 [验收记录](docs/ACCEPTANCE.md)。
 >
-> 更早版本 **1.11.2/165**（2026-11-24 已发 [GitHub Release `v1.11.2`](https://github.com/Caozl9021/MyMoney/releases/tag/v1.11.2)）、**1.11.1/164**（2026-11-20 已发 [GitHub Release `v1.11.1`](https://github.com/Caozl9021/MyMoney/releases/tag/v1.11.1)）、**1.10.3/162**（2026-11-14 已发 [GitHub Release `v1.10.3`](https://github.com/Caozl9021/MyMoney/releases/tag/v1.10.3)）。
+> 更早版本 **1.11.3/166**（2026-11-24 已发 [GitHub Release `v1.11.3`](https://github.com/Caozl9021/MyMoney/releases/tag/v1.11.3)）、**1.11.2/165**（2026-11-24 已发 [GitHub Release `v1.11.2`](https://github.com/Caozl9021/MyMoney/releases/tag/v1.11.2)）、**1.11.1/164**（2026-11-20 已发 [GitHub Release `v1.11.1`](https://github.com/Caozl9021/MyMoney/releases/tag/v1.11.1)）、**1.10.3/162**（2026-11-14 已发 [GitHub Release `v1.10.3`](https://github.com/Caozl9021/MyMoney/releases/tag/v1.10.3)）。
 
 ## 版本说明（1.10.3/162 及近期基线）
 
