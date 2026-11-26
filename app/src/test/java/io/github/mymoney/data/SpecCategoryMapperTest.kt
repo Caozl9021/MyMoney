@@ -20,15 +20,14 @@ class SpecCategoryMapperTest {
     private fun i(name: String) = SpecCategoryMapper.resolve(name, BillType.INCOME, income)
 
     @Test
-    fun `规格三餐一族落到项目餐饮`() {
+    fun `规格三餐一族落到项目餐饮与咖啡茶饮`() {
         assertEquals("餐饮" to "三餐", e("三餐"))
         assertEquals("餐饮" to "早餐", e("早餐"))
         assertEquals("餐饮" to "午餐", e("午餐"))
         assertEquals("餐饮" to "晚餐", e("晚餐"))
         assertEquals("餐饮" to "夜宵", e("夜宵"))
-        // 项目清单里没有早茶/下午茶这两个二级，归到咖啡茶饮而不是丢掉
-        assertEquals("餐饮" to "咖啡茶饮", e("早茶"))
-        assertEquals("餐饮" to "咖啡茶饮", e("下午茶"))
+        assertEquals("咖啡茶饮" to "饮品", e("早茶"))
+        assertEquals("咖啡茶饮" to "饮品", e("下午茶"))
     }
 
     @Test
@@ -40,7 +39,7 @@ class SpecCategoryMapperTest {
         assertEquals("娱乐" to "电影", e("电影"))
         assertEquals("人情" to "红包", e("发红包"))
         assertEquals("通讯" to "话费", e("话费网费"))
-        assertEquals("购物" to "数码", e("电器数码"))
+        assertEquals("数码" to "配件", e("电器数码"))
     }
 
     @Test
@@ -65,11 +64,11 @@ class SpecCategoryMapperTest {
         assertEquals("工资" to null, i("工资"))
         assertEquals("退款" to null, i("退款"))
         assertEquals("红包" to null, i("收红包"))
-        // 规格的「公积金」「外快」在项目清单里没有对应组，归到其他/奖金而不是丢弃
+        // 规格的「公积金」在项目清单里没有对应组，归到其他；「外快」归到兼职副业
         assertEquals("其他" to null, i("公积金"))
-        assertEquals("奖金" to null, i("外快"))
+        assertEquals("兼职副业" to "外快", i("外快"))
         // 理财一族统一归到理财收益
-        assertEquals("理财收益" to null, i("基金"))
+        assertEquals("理财收益" to "基金", i("基金"))
         assertEquals("理财收益" to null, i("快赎理财"))
     }
 

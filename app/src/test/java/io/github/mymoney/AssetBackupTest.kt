@@ -187,4 +187,40 @@ class AssetBackupTest {
         assertEquals(orphanHistory, Backup.decode(Backup.encode(orphanHistory)))
     }
 
+    @Test fun extendedAccountFieldsRoundTripAndLegacyAssetsDefaultCleanly() {
+        val credit = AssetAccount(
+            id = "cc-1",
+            name = "招行信用卡",
+            kind = "CREDIT",
+            aliases = "[\"招商信用卡\"]",
+            sortOrder = 0,
+            archived = false,
+            included = true,
+            initialized = true,
+            createdAt = 1L,
+            updatedAt = 2L,
+            quickSelect = false,
+            cardTail = "8899",
+            creditLimitCents = 3_000_000L,
+            billingDay = 7,
+            repaymentDay = 25,
+            iconKey = "credit_card",
+            colorHex = "#3B82F6",
+        )
+        val snap = Backup.Snapshot(
+            exportedAt = 10L,
+            bills = emptyList(),
+            ledger = null,
+            settings = null,
+            assets = AssetSnapshot(listOf(credit), listOf(entry("open", "cc-1", -150_000L))),
+        )
+        assertEquals(snap, Backup.decode(Backup.encode(snap)))
+
+        val legacyJson = """{"format":12,"bills":[],"assets":{"accounts":[{"id":"a1","name":"钱包","kind":"PAYMENT","aliases":[],"sortOrder":0,"archived":false,"included":true,"initialized":false,"createdAt":1,"updatedAt":1}],"entries":[]}}"""
+        val decodedLegacy = Backup.decode(legacyJson).assets!!.accounts.single()
+        assertTrue(decodedLegacy.quickSelect)
+        assertNull(decodedLegacy.cardTail)
+        assertNull(decodedLegacy.creditLimitCents)
+    }
+
 }

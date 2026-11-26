@@ -122,4 +122,31 @@ class LedgerPayloadCodecTest {
         val income = decoded["incomeCategories"] as List<*>
         assertEquals("工资", (income[0] as Map<*, *>)["name"])
     }
+
+    @Test
+    fun accountRoundTripsWithExtendedCreditAndStyleFields() {
+        val original = io.github.mymoney.data.AssetAccount(
+            id = "acc-credit",
+            name = "中信信用卡",
+            kind = "CREDIT",
+            aliases = "[\"中信\"]",
+            sortOrder = 2,
+            archived = false,
+            included = true,
+            initialized = true,
+            createdAt = 1000L,
+            updatedAt = 2000L,
+            quickSelect = false,
+            cardTail = "4321",
+            creditLimitCents = 5_000_000L,
+            billingDay = 10,
+            repaymentDay = 28,
+            iconKey = "credit_card",
+            colorHex = "#DC2626",
+        )
+        val decoded = LedgerPayloadCodec.decodeAccount(
+            MiniJson.decode(MiniJson.encode(LedgerPayloadCodec.encodeAccount(original))) as Map<*, *>,
+        )
+        assertEquals(original, decoded)
+    }
 }

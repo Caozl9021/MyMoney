@@ -3,6 +3,7 @@ package io.github.mymoney.data
 import android.content.Context
 import android.content.SharedPreferences
 import com.example.billkit.BillDraft
+import com.example.billkit.BillType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,5 +35,21 @@ object LocalRuleStore {
     @Synchronized fun clearPending() { save(LearningRules.clearPending(snapshot())) }
     @Synchronized fun deletePending(key: String) { save(LearningRules.deletePending(snapshot(), key)) }
     @Synchronized fun clearLearned() { save(snapshot().copy(learned = emptyList(), pending = emptyList())) }
+    @Synchronized fun renameCategory(type: BillType, oldName: String, newName: String) {
+        val current = snapshot()
+        val matchTypes = if (type == BillType.INCOME) setOf(BillType.INCOME) else setOf(BillType.EXPENSE, BillType.REFUND)
+        val nextLearned = current.learned.map { rule ->
+            if (rule.type in matchTypes && rule.category == oldName) rule.copy(category = newName) else rule
+        }
+        if (nextLearned != current.learned) save(current.copy(learned = nextLearned))
+    }
+    @Synchronized fun renameSubCategory(type: BillType, groupName: String, oldSub: String, newSub: String) {
+        val current = snapshot()
+        val matchTypes = if (type == BillType.INCOME) setOf(BillType.INCOME) else setOf(BillType.EXPENSE, BillType.REFUND)
+        val nextLearned = current.learned.map { rule ->
+            if (rule.type in matchTypes && rule.category == groupName && rule.subCategory == oldSub) rule.copy(subCategory = newSub) else rule
+        }
+        if (nextLearned != current.learned) save(current.copy(learned = nextLearned))
+    }
     private fun save(snapshot: LocalRuleSnapshot) { prefs?.edit()?.putString("local_rules_v1", LocalRuleCodec.encode(snapshot))?.apply(); mutable.value = snapshot }
 }

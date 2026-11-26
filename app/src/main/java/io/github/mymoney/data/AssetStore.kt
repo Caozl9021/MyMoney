@@ -185,9 +185,19 @@ object AssetStore {
         included: Boolean = true,
         positionCents: Long = 0L,
         reason: String = "开通账户",
+        quickSelect: Boolean = true,
+        cardTail: String? = null,
+        creditLimitCents: Long? = null,
+        billingDay: Int? = null,
+        repaymentDay: Int? = null,
+        iconKey: String? = null,
+        colorHex: String? = null,
     ): String = withContext(Dispatchers.IO) {
         awaitReady()
         val trimmed = name.trim()
+        val cleanTail = cardTail?.trim()?.takeIf { it.isNotEmpty() }
+        val cleanIcon = iconKey?.trim()?.takeIf { it.isNotEmpty() }
+        val cleanColor = colorHex?.trim()?.takeIf { it.isNotEmpty() }
         require(trimmed.isNotEmpty()) { "请输入账户名称" }
         require(reason.isNotBlank()) { "请填写开通原因" }
         require(positionCents != Long.MIN_VALUE) { "金额超出范围" }
@@ -201,6 +211,13 @@ object AssetStore {
                     aliases = aliases,
                     included = included,
                     archived = false,
+                    quickSelect = quickSelect,
+                    cardTail = cleanTail,
+                    creditLimitCents = creditLimitCents,
+                    billingDay = billingDay,
+                    repaymentDay = repaymentDay,
+                    iconKey = cleanIcon,
+                    colorHex = cleanColor,
                     updatedAt = now,
                 )
                 db.assets().upsertAccount(restored)
@@ -223,6 +240,13 @@ object AssetStore {
                         aliases = aliases,
                         included = included,
                         initialized = true,
+                        quickSelect = quickSelect,
+                        cardTail = cleanTail,
+                        creditLimitCents = creditLimitCents,
+                        billingDay = billingDay,
+                        repaymentDay = repaymentDay,
+                        iconKey = cleanIcon,
+                        colorHex = cleanColor,
                         updatedAt = now,
                     ),
                 )
@@ -257,16 +281,34 @@ object AssetStore {
             db.assets().upsertAccount(updated)
         }; refresh()
     }
-    suspend fun deleteEmptyAccount(id: String) = withContext(Dispatchers.IO) {
+    /** 永久删除账户及其余额流水；关联的历史账单保留记录，仅解除账户 ID 绑定与余额联动。 */
+    suspend fun deleteAccount(id: String) = withContext(Dispatchers.IO) {
         awaitReady()
-        db.withTransaction {
-            val account = db.assets().account(id) ?: error("账户不存在")
-            require(!account.initialized && db.assets().entries().none { it.accountId == id } &&
-                db.bills().allOnce().none { it.accountId == id || it.transferAccountId == id || it.account == account.name } &&
-                db.recognitions().allOnce().none { it.account == account.name }) { "此账户已有记录，请使用归档" }
+        val now = System.currentTimeMillis()
+        val touchedBills = db.withTransaction {
+            val allAccounts = db.assets().accounts()
+            val allEntries = db.assets().entries()
+            val allBills = db.bills().allOnce()
+            val plan = buildAccountDeletionPlan(id, allAccounts, allEntries, allBills, now)
+            plan.deleteEntryIds.forEach { entryId -> db.assets().deleteEntry(entryId) }
+            plan.updateEntries.forEach { updated -> db.assets().updateEntry(updated) }
+            plan.updateBills.forEach { bill -> db.bills().update(bill) }
             db.assets().deleteAccount(id)
+            AssetMath.validate(AssetSnapshot(db.assets().accounts(), db.assets().entries()))
+            plan.updateBills
         }
         refresh()
+        if (::appContext.isInitialized && touchedBills.isNotEmpty()) {
+            val synced = touchedBills.filter { it.syncId.isNotBlank() }
+            if (synced.isNotEmpty()) {
+                synced.forEach { bill ->
+                    runCatching {
+                        io.github.mymoney.data.ledgersync.LedgerSyncRepository.enqueueBill(appContext, bill, deleted = false)
+                    }
+                }
+                io.github.mymoney.data.ledgersync.RealtimeSyncTrigger.notifyChanged(appContext)
+            }
+        }
     }
     suspend fun setArchived(accountId: String, archived: Boolean) {
         awaitReady(); val row = withContext(Dispatchers.IO) { db.assets().account(accountId) } ?: error("账户不存在")
@@ -301,7 +343,15 @@ object AssetStore {
     }
     suspend fun resolveAccount(db: AppDb, name: String?): AssetAccount? {
         if (name.isNullOrBlank()) return null
-        return db.assets().accounts().filter { !it.archived && (it.name == name.trim() || name.trim() in AssetMath.aliases(it)) }.singleOrNull()
+        val trimmed = name.trim()
+        val active = db.assets().accounts().filter { !it.archived }
+        active.filter { it.name == trimmed || trimmed in AssetMath.aliases(it) }.singleOrNull()?.let { return it }
+        val tail = AccountNormalizer.tailDigits(trimmed)
+        if (tail.isNotEmpty()) {
+            active.filter { it.cardTail == tail && AccountNormalizer.sameAccount(trimmed, it.name) }
+                .singleOrNull()?.let { return it }
+        }
+        return null
     }
     /** Caller owns the surrounding Room transaction, including the final BillEntity write. */
     suspend fun syncBill(db: AppDb, before: BillEntity?, after: BillEntity?, forceLink: Boolean = false): BillEntity? {
@@ -439,4 +489,81 @@ object AssetStore {
         }
         db.assets().putMeta(AssetMeta("open-unset-v1", "complete"))
     }
+}
+
+internal data class AccountDeletionPlan(
+    val deleteEntryIds: List<String>,
+    val updateEntries: List<AssetEntry>,
+    val updateBills: List<BillEntity>,
+    val remainingSnapshot: AssetSnapshot,
+)
+
+/**
+ * 计算永久删除账户 [accountId] 的事务变更计划：
+ * - 删除被删账户名下的全部流水；
+ * - 跨账户转账或异卡报销产生的对方账户流水保留净额并转为独立 ADJUSTMENT，避免对方余额突跳；
+ * - 解除关联账单对该账户 ID 的绑定与余额联动，账单本身及文字账户名完整保留。
+ */
+internal fun buildAccountDeletionPlan(
+    accountId: String,
+    accounts: List<AssetAccount>,
+    entries: List<AssetEntry>,
+    bills: List<BillEntity>,
+    now: Long = System.currentTimeMillis(),
+): AccountDeletionPlan {
+    val target = accounts.firstOrNull { it.id == accountId } ?: error("账户不存在")
+    val affectedBills = bills.filter {
+        it.accountId == accountId || it.transferAccountId == accountId || it.reimburseAccountId == accountId
+    }
+    val affectedBillKeys = affectedBills.mapNotNull { it.assetKey.takeIf(String::isNotBlank) }.toSet()
+
+    val deleteIds = mutableListOf<String>()
+    val updateEntries = mutableListOf<AssetEntry>()
+    val remainingEntries = mutableListOf<AssetEntry>()
+
+    val ownEntries = entries.filter { it.accountId == accountId }
+    ownEntries.forEach { deleteIds.add(it.id) }
+
+    val otherEntries = entries.filter { it.accountId != accountId }
+    val otherAffected = if (affectedBillKeys.isEmpty()) emptyList() else otherEntries.filter { it.billKey in affectedBillKeys }
+    val otherAffectedIds = otherAffected.map { it.id }.toSet()
+    val reversedOtherIds = otherAffected.mapNotNull { it.reversalOf }.toSet()
+
+    otherEntries.forEach { entry ->
+        if (entry.billKey !in affectedBillKeys) {
+            remainingEntries.add(entry)
+        } else if (entry.id in reversedOtherIds || entry.reversalOf in otherAffectedIds) {
+            deleteIds.add(entry.id)
+        } else {
+            val detached = entry.copy(
+                kind = "ADJUSTMENT",
+                billKey = null,
+                reversalOf = null,
+                note = entry.note.ifBlank { "原关联账户「${target.name}」已删除" },
+                updatedAt = now,
+            )
+            updateEntries.add(detached)
+            remainingEntries.add(detached)
+        }
+    }
+
+    val updateBills = affectedBills.map { bill ->
+        bill.copy(
+            accountId = if (bill.accountId == accountId) null else bill.accountId,
+            transferAccountId = if (bill.transferAccountId == accountId) null else bill.transferAccountId,
+            reimburseAccountId = if (bill.reimburseAccountId == accountId) null else bill.reimburseAccountId,
+            assetLinked = false,
+            updatedAt = now,
+        )
+    }
+
+    val remainingAccounts = accounts.filterNot { it.id == accountId }
+    val remainingSnapshot = AssetSnapshot(remainingAccounts, remainingEntries)
+    AssetMath.validate(remainingSnapshot)
+    return AccountDeletionPlan(
+        deleteEntryIds = deleteIds,
+        updateEntries = updateEntries,
+        updateBills = updateBills,
+        remainingSnapshot = remainingSnapshot,
+    )
 }

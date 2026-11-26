@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -2237,6 +2238,9 @@ fun InputRow(
     modifier: Modifier = Modifier,
     placeholder: String = "",
     dividerAbove: Boolean = false,
+    labelWidth: Dp = Dp.Unspecified,
+    keyboardType: androidx.compose.ui.text.input.KeyboardType =
+        androidx.compose.ui.text.input.KeyboardType.Text,
     onDone: (() -> Unit)? = null,
 ) {
     val p = LocalAbPalette.current
@@ -2250,11 +2254,17 @@ fun InputRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(AbSpacing.m),
         ) {
-            Text(label, style = AbType.body, color = p.label)
+            Text(
+                label,
+                style = AbType.body,
+                color = p.label,
+                modifier = if (labelWidth != Dp.Unspecified) Modifier.widthIn(min = labelWidth) else Modifier,
+            )
             AbTextField(
                 value = value,
                 onValueChange = onValueChange,
                 placeholder = placeholder,
+                keyboardType = keyboardType,
                 modifier = Modifier.weight(1f),
                 onDone = onDone,
             )

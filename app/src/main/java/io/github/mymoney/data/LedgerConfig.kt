@@ -1,12 +1,17 @@
 package io.github.mymoney.data
 
 import android.content.Context
+import androidx.room.withTransaction
 import com.example.billkit.BillType
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
-/** 一级分类 + 它下面的二级分类（二级可为空） */
+/** 一级分类 + 它下面的二级分类（二级可为空）+ 可选自定义图标与配色 */
 data class CategoryGroup(
     val name: String,
     val subs: List<String> = emptyList(),
+    val iconKey: String? = null,
+    val colorHex: String? = null,
 )
 
 /**
@@ -26,24 +31,34 @@ object LedgerConfig {
     private const val KEY_NOTE_TEMPLATE = "note_template"
 
     val DEFAULT_EXPENSE = listOf(
-        CategoryGroup("餐饮", listOf("三餐", "早餐", "午餐", "晚餐", "夜宵", "外卖", "咖啡茶饮", "零食")),
-        CategoryGroup("交通", listOf("公交地铁", "打车", "加油停车")),
-        CategoryGroup("购物", listOf("日用品", "服饰", "数码")),
-        CategoryGroup("居住", listOf("房租", "水电燃气", "物业")),
-        CategoryGroup("娱乐", listOf("电影", "游戏", "会员")),
-        CategoryGroup("医疗", listOf("门诊", "药品")),
-        CategoryGroup("人情", listOf("红包", "礼物")),
-        CategoryGroup("学习", listOf("课程", "书籍")),
-        CategoryGroup("通讯", listOf("话费", "宽带")),
-        CategoryGroup("其他"),
+        CategoryGroup("餐饮", listOf("三餐", "早餐", "午餐", "晚餐", "夜宵", "外卖", "零食", "买菜水果")),
+        CategoryGroup("咖啡茶饮", listOf("咖啡", "奶茶", "饮品", "酒水")),
+        CategoryGroup("交通", listOf("公交地铁", "打车", "高铁火车", "加油停车", "保养洗车")),
+        CategoryGroup("购物", listOf("日用品", "超市", "网购", "快递", "家居")),
+        CategoryGroup("服饰", listOf("衣服", "鞋帽", "箱包配饰")),
+        CategoryGroup("美妆护肤", listOf("护肤", "彩妆", "理发美容")),
+        CategoryGroup("数码", listOf("手机", "电脑", "配件", "软件应用")),
+        CategoryGroup("居住", listOf("房租", "房贷", "水电燃气", "物业", "宽带")),
+        CategoryGroup("娱乐", listOf("电影", "游戏", "会员订阅", "聚会")),
+        CategoryGroup("运动健身", listOf("健身房", "运动装备", "球类游泳")),
+        CategoryGroup("医疗", listOf("门诊", "药品", "体检", "齿科")),
+        CategoryGroup("学习", listOf("课程", "书籍", "考试培训")),
+        CategoryGroup("通讯", listOf("话费", "流量")),
+        CategoryGroup("旅行", listOf("机票", "酒店", "门票")),
+        CategoryGroup("人情", listOf("红包", "礼物", "请客")),
+        CategoryGroup("宠物", listOf("粮食", "用品", "医疗")),
+        CategoryGroup("育儿", listOf("奶粉", "尿布", "玩具", "早教")),
+        CategoryGroup("其他", listOf("公益", "罚款", "手续费")),
     )
 
     val DEFAULT_INCOME = listOf(
-        CategoryGroup("工资"),
-        CategoryGroup("奖金"),
-        CategoryGroup("红包"),
-        CategoryGroup("理财收益"),
-        CategoryGroup("退款"),
+        CategoryGroup("工资", listOf("基本工资", "绩效", "补贴")),
+        CategoryGroup("奖金", listOf("年终奖", "提成")),
+        CategoryGroup("兼职副业", listOf("外快", "稿费", "接单")),
+        CategoryGroup("理财收益", listOf("利息", "基金", "股票", "分红")),
+        CategoryGroup("红包", listOf("微信红包", "礼金")),
+        CategoryGroup("报销", listOf("差旅报销", "医疗报销")),
+        CategoryGroup("退款", listOf("退货退款", "返现")),
         CategoryGroup("其他"),
     )
 
@@ -55,16 +70,41 @@ object LedgerConfig {
 
     private var prefs: android.content.SharedPreferences? = null
     private var appContext: Context? = null
+    @Volatile private var styleCache: Map<String, Pair<String?, String?>> = emptyMap()
 
     fun init(context: Context) {
         if (prefs == null) {
             appContext = context.applicationContext
             prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             migrateOldFlatLists()
+            refreshStyleCache()
         }
     }
 
     private fun p(): android.content.SharedPreferences = prefs ?: error("LedgerConfig.init 未调用")
+
+    private fun refreshStyleCache() {
+        val currentPrefs = prefs ?: return
+        val map = LinkedHashMap<String, Pair<String?, String?>>()
+        val exp = LedgerListCodec.readGroups(runCatching { currentPrefs.getString(KEY_EXPENSE, null) }.getOrNull(), DEFAULT_EXPENSE)
+        val inc = LedgerListCodec.readGroups(runCatching { currentPrefs.getString(KEY_INCOME, null) }.getOrNull(), DEFAULT_INCOME)
+        (inc + exp).forEach { g ->
+            if (g.iconKey != null || g.colorHex != null) {
+                map[g.name] = g.iconKey to g.colorHex
+            }
+        }
+        styleCache = map
+    }
+
+    fun customIconKey(category: String?): String? {
+        if (category.isNullOrBlank()) return null
+        return styleCache[category]?.first
+    }
+
+    fun customColorHex(category: String?): String? {
+        if (category.isNullOrBlank()) return null
+        return styleCache[category]?.second
+    }
 
     // ---------- 分类 ----------
 
@@ -79,7 +119,150 @@ object LedgerConfig {
         else -> expenseGroups
     }
 
-    fun addGroup(type: BillType, name: String) = writeGroups(type, groupsFor(type) + CategoryGroup(name.trim()))
+    fun addGroup(type: BillType, name: String, iconKey: String? = null, colorHex: String? = null) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return
+        val existing = groupsFor(type)
+        if (existing.any { it.name == trimmed }) return
+        val cleanIcon = iconKey?.trim()?.takeIf { it.isNotEmpty() }
+        val cleanColor = colorHex?.trim()?.takeIf { it.isNotEmpty() }
+        writeGroups(type, existing + CategoryGroup(trimmed, emptyList(), cleanIcon, cleanColor))
+    }
+
+    fun updateGroupStyle(type: BillType, name: String, iconKey: String?, colorHex: String?) {
+        val cleanIcon = iconKey?.trim()?.takeIf { it.isNotEmpty() }
+        val cleanColor = colorHex?.trim()?.takeIf { it.isNotEmpty() }
+        writeGroups(type, groupsFor(type).map {
+            if (it.name == name) it.copy(iconKey = cleanIcon, colorHex = cleanColor) else it
+        })
+    }
+
+    fun mergePresetGroups(type: BillType, presets: List<CategoryGroup>) {
+        val current = groupsFor(type).toMutableList()
+        val indexByName = current.mapIndexed { i, g -> g.name to i }.toMap().toMutableMap()
+        presets.forEach { preset ->
+            val trimmed = preset.name.trim()
+            if (trimmed.isEmpty()) return@forEach
+            val existingIdx = indexByName[trimmed]
+            if (existingIdx == null) {
+                indexByName[trimmed] = current.size
+                current += preset.copy(name = trimmed, subs = preset.subs.map(String::trim).filter(String::isNotEmpty).distinct())
+            } else {
+                val existing = current[existingIdx]
+                val mergedSubs = (existing.subs + preset.subs.map(String::trim).filter(String::isNotEmpty)).distinct()
+                current[existingIdx] = existing.copy(subs = mergedSubs)
+            }
+        }
+        writeGroups(type, current)
+    }
+
+    suspend fun countBillsForCategory(context: Context, type: BillType, category: String): Int = withContext(Dispatchers.IO) {
+        val types = if (type == BillType.INCOME) listOf("INCOME") else listOf("EXPENSE", "REFUND")
+        AppDb.get(context).bills().countByCategory(category, types)
+    }
+
+    suspend fun countBillsForSubCategory(context: Context, type: BillType, category: String, subCategory: String): Int = withContext(Dispatchers.IO) {
+        val types = if (type == BillType.INCOME) listOf("INCOME") else listOf("EXPENSE", "REFUND")
+        AppDb.get(context).bills().countBySubCategory(category, subCategory, types)
+    }
+
+    suspend fun renameGroup(
+        context: Context,
+        type: BillType,
+        oldName: String,
+        newName: String,
+        iconKey: String?,
+        colorHex: String?,
+    ): Int = withContext(Dispatchers.IO) {
+        val trimmed = newName.trim()
+        require(trimmed.isNotEmpty()) { "请输入分类名称" }
+        val current = groupsFor(type)
+        require(current.any { it.name == oldName }) { "原分类不存在" }
+        if (trimmed != oldName) {
+            require(current.none { it.name == trimmed }) { "已存在同名分类「$trimmed」" }
+        }
+        val cleanIcon = iconKey?.trim()?.takeIf { it.isNotEmpty() }
+        val cleanColor = colorHex?.trim()?.takeIf { it.isNotEmpty() }
+        val updatedBills: List<BillEntity>
+        val renamedCount: Int
+        if (trimmed != oldName) {
+            val app = context.applicationContext
+            val db = AppDb.get(app)
+            val types = if (type == BillType.INCOME) listOf("INCOME") else listOf("EXPENSE", "REFUND")
+            val now = System.currentTimeMillis()
+            val affectedIds = db.withTransaction {
+                val ids = db.bills().idsByCategory(oldName, types)
+                db.bills().renameCategory(oldName, trimmed, types, now)
+                db.recognitions().renameCategory(oldName, trimmed, types, now)
+                ids
+            }
+            updatedBills = affectedIds.mapNotNull { db.bills().byId(it) }
+            renamedCount = updatedBills.size
+            runCatching { LocalRuleStore.renameCategory(type, oldName, trimmed) }
+            updatedBills.forEach { bill ->
+                if (bill.syncId.isNotBlank()) {
+                    runCatching { io.github.mymoney.data.ledgersync.LedgerSyncRepository.enqueueBill(app, bill, deleted = false) }
+                }
+            }
+            if (updatedBills.isNotEmpty()) {
+                runCatching { io.github.mymoney.data.ledgersync.RealtimeSyncTrigger.notifyChanged(app) }
+            }
+        } else {
+            renamedCount = 0
+        }
+        writeGroups(type, current.map {
+            if (it.name == oldName) it.copy(name = trimmed, iconKey = cleanIcon, colorHex = cleanColor) else it
+        })
+        renamedCount
+    }
+
+    suspend fun renameSubCategory(
+        context: Context,
+        type: BillType,
+        groupName: String,
+        oldSub: String,
+        newSub: String,
+    ): Int = withContext(Dispatchers.IO) {
+        val trimmed = newSub.trim()
+        require(trimmed.isNotEmpty()) { "请输入二级分类名称" }
+        val current = groupsFor(type)
+        val group = current.firstOrNull { it.name == groupName } ?: error("所属分类不存在")
+        require(oldSub in group.subs) { "原二级分类不存在" }
+        if (trimmed != oldSub) {
+            require(trimmed !in group.subs) { "已存在同名二级分类「$trimmed」" }
+        }
+        val renamedCount: Int
+        if (trimmed != oldSub) {
+            val app = context.applicationContext
+            val db = AppDb.get(app)
+            val types = if (type == BillType.INCOME) listOf("INCOME") else listOf("EXPENSE", "REFUND")
+            val now = System.currentTimeMillis()
+            val affectedIds = db.withTransaction {
+                val ids = db.bills().idsBySubCategory(groupName, oldSub, types)
+                db.bills().renameSubCategory(groupName, oldSub, trimmed, types, now)
+                db.recognitions().renameSubCategory(groupName, oldSub, trimmed, types, now)
+                ids
+            }
+            val updatedBills = affectedIds.mapNotNull { db.bills().byId(it) }
+            renamedCount = updatedBills.size
+            runCatching { LocalRuleStore.renameSubCategory(type, groupName, oldSub, trimmed) }
+            updatedBills.forEach { bill ->
+                if (bill.syncId.isNotBlank()) {
+                    runCatching { io.github.mymoney.data.ledgersync.LedgerSyncRepository.enqueueBill(app, bill, deleted = false) }
+                }
+            }
+            if (updatedBills.isNotEmpty()) {
+                runCatching { io.github.mymoney.data.ledgersync.RealtimeSyncTrigger.notifyChanged(app) }
+            }
+        } else {
+            renamedCount = 0
+        }
+        writeGroups(type, current.map {
+            if (it.name != groupName) it
+            else it.copy(subs = it.subs.map { s -> if (s == oldSub) trimmed else s }.distinct())
+        })
+        renamedCount
+    }
 
     fun removeGroup(type: BillType, name: String) =
         writeGroups(type, groupsFor(type).filterNot { it.name == name })
@@ -194,6 +377,7 @@ object LedgerConfig {
             .remove(KEY_EXPENSE).remove(KEY_INCOME)
             .remove(KEY_OLD_EXPENSE).remove(KEY_OLD_INCOME)
             .apply()
+        refreshStyleCache()
         notifyMetaChanged()
     }
 
@@ -217,6 +401,7 @@ object LedgerConfig {
     private fun writeGroups(type: BillType, groups: List<CategoryGroup>) {
         val key = if (type == BillType.INCOME) KEY_INCOME else KEY_EXPENSE
         p().edit().putString(key, LedgerListCodec.encodeGroups(groups)).apply()
+        refreshStyleCache()
         notifyMetaChanged()
     }
 

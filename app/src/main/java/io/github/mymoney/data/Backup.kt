@@ -15,7 +15,7 @@ package io.github.mymoney.data
  */
 object Backup {
 
-    const val FORMAT = 12
+    const val FORMAT = 13
     const val KIND = "MyMoneyBackup"
 
     data class Bill(
@@ -150,8 +150,18 @@ object Backup {
         }
         snapshot.ledger?.let { l ->
             root["ledger"] = linkedMapOf(
-                "expense" to l.expense.map { g -> linkedMapOf("n" to g.name, "s" to g.subs) },
-                "income" to l.income.map { g -> linkedMapOf("n" to g.name, "s" to g.subs) },
+                "expense" to l.expense.map { g ->
+                    linkedMapOf<String, Any?>("n" to g.name, "s" to g.subs).apply {
+                        g.iconKey?.let { put("i", it) }
+                        g.colorHex?.let { put("c", it) }
+                    }
+                },
+                "income" to l.income.map { g ->
+                    linkedMapOf<String, Any?>("n" to g.name, "s" to g.subs).apply {
+                        g.iconKey?.let { put("i", it) }
+                        g.colorHex?.let { put("c", it) }
+                    }
+                },
                 "accounts" to l.accounts,
                 "noteTemplate" to l.noteTemplate,
                 "localRules" to l.localRules?.let { MiniJson.decode(LocalRuleCodec.encode(it)) },
@@ -401,7 +411,9 @@ object Backup {
         (raw as? List<*> ?: throw IllegalArgumentException("分类必须为数组")).map { item ->
             val m = item as? Map<*, *> ?: throw IllegalArgumentException("分类无效")
             val name = m.str("n")?.takeIf { it.isNotBlank() } ?: throw IllegalArgumentException("分类名称无效")
-            CategoryGroup(name, if (m.containsKey("s")) strictStrings(m["s"]) else emptyList())
+            val iconKey = m.optionalAssetText("i")?.trim()?.takeIf { it.isNotEmpty() }
+            val colorHex = m.optionalAssetText("c")?.trim()?.takeIf { it.isNotEmpty() }
+            CategoryGroup(name, if (m.containsKey("s")) strictStrings(m["s"]) else emptyList(), iconKey, colorHex)
         }
 
     private fun Map<*, *>.optionalAssetText(key: String): String? = when (val raw = this[key]) {

@@ -260,6 +260,24 @@ interface BillDao {
     @Query("SELECT * FROM bills WHERE syncId = :syncId LIMIT 1")
     suspend fun bySyncId(syncId: String): BillEntity?
 
+    @Query("SELECT COUNT(*) FROM bills WHERE category = :category AND type IN (:types)")
+    suspend fun countByCategory(category: String, types: List<String>): Int
+
+    @Query("SELECT id FROM bills WHERE category = :category AND type IN (:types)")
+    suspend fun idsByCategory(category: String, types: List<String>): List<Long>
+
+    @Query("UPDATE bills SET category = :newName, updatedAt = :updatedAt WHERE category = :oldName AND type IN (:types)")
+    suspend fun renameCategory(oldName: String, newName: String, types: List<String>, updatedAt: Long): Int
+
+    @Query("SELECT COUNT(*) FROM bills WHERE category = :category AND subCategory = :subCategory AND type IN (:types)")
+    suspend fun countBySubCategory(category: String, subCategory: String, types: List<String>): Int
+
+    @Query("SELECT id FROM bills WHERE category = :category AND subCategory = :subCategory AND type IN (:types)")
+    suspend fun idsBySubCategory(category: String, subCategory: String, types: List<String>): List<Long>
+
+    @Query("UPDATE bills SET subCategory = :newSub, updatedAt = :updatedAt WHERE category = :category AND subCategory = :oldSub AND type IN (:types)")
+    suspend fun renameSubCategory(category: String, oldSub: String, newSub: String, types: List<String>, updatedAt: Long): Int
+
     @Query("SELECT * FROM bills")
     suspend fun listAllForSync(): List<BillEntity>
 
@@ -279,7 +297,7 @@ interface BillDao {
     ): Int
 }
 
-@Database(entities = [BillEntity::class, RecognitionEntity::class, AssetAccount::class, AssetEntry::class, AssetMeta::class, CaptureAlias::class, CaptureEvidence::class, CaptureDelivery::class, ImportIdentity::class, RuleModelEntity::class, AppDataEntity::class, BillDeletionLog::class], version = 13, exportSchema = false)
+@Database(entities = [BillEntity::class, RecognitionEntity::class, AssetAccount::class, AssetEntry::class, AssetMeta::class, CaptureAlias::class, CaptureEvidence::class, CaptureDelivery::class, ImportIdentity::class, RuleModelEntity::class, AppDataEntity::class, BillDeletionLog::class], version = 14, exportSchema = false)
 abstract class AppDb : RoomDatabase() {
 
     abstract fun deletions(): BillDeletionDao
@@ -443,12 +461,24 @@ abstract class AppDb : RoomDatabase() {
             }
         }
 
+        val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE asset_accounts ADD COLUMN quickSelect INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE asset_accounts ADD COLUMN cardTail TEXT")
+                db.execSQL("ALTER TABLE asset_accounts ADD COLUMN creditLimitCents INTEGER")
+                db.execSQL("ALTER TABLE asset_accounts ADD COLUMN billingDay INTEGER")
+                db.execSQL("ALTER TABLE asset_accounts ADD COLUMN repaymentDay INTEGER")
+                db.execSQL("ALTER TABLE asset_accounts ADD COLUMN iconKey TEXT")
+                db.execSQL("ALTER TABLE asset_accounts ADD COLUMN colorHex TEXT")
+            }
+        }
+
         fun get(context: Context): AppDb = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext,
                 AppDb::class.java,
                 "mymoney.db",
-            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13).build().also { instance = it }
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14).build().also { instance = it }
         }
     }
 }

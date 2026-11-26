@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -21,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.mymoney.R
+import io.github.mymoney.data.AssetAccount
 
 /**
  * 账户 logo：品牌标识放在 `res/drawable-nodpi/`，原图透明底 PNG，不重绘、不改色。
@@ -75,8 +77,8 @@ object AccountLogos {
         "wallet_huabei" to listOf("花呗"),
         "wallet_jd" to listOf("白条", "京东"),
         "wallet_ecny" to listOf("数字人民币", "数币"),
-        "wallet_alipay" to listOf("支付宝", "余额宝"),
-        "wallet_wechat" to listOf("微信", "零钱"),
+        "wallet_alipay" to listOf("支付宝"),
+        "wallet_wechat" to listOf("微信"),
         "bank_cmb" to listOf("招商", "招行"),
         "bank_icbc" to listOf("工商", "工行", "牡丹"),
         "bank_abc" to listOf("农业", "农行"),
@@ -87,9 +89,64 @@ object AccountLogos {
     fun keyFor(name: String?): String? {
         val n = name.orEmpty().trim()
         if (n.isBlank()) return null
-        // 兜底「钱包」用通用图标；「微信钱包」等仍走品牌规则。
         if (n == "钱包") return "wallet_generic"
+        // 余额宝、零钱通走独立的矢量徽章与语义色，不和主钱包图标混用
+        if ("余额宝" in n || "零钱通" in n) return null
         return rules.firstOrNull { (_, words) -> words.any { it in n } }?.first
+    }
+
+    val iconGroups: List<CategoryIcons.CategoryIconGroup> = listOf(
+        CategoryIcons.CategoryIconGroup("支付与钱包", listOf("account_balance_wallet", "qr_code", "nfc", "smartphone", "payments", "coins", "swap_horiz", "globe")),
+        CategoryIcons.CategoryIconGroup("银行卡与信用", listOf("landmark", "credit_card", "vault", "lock", "badge_percent", "receipt_long", "shield", "scale")),
+        CategoryIcons.CategoryIconGroup("理财、储蓄与工作", listOf("piggy_bank", "savings", "trending_up", "bar_chart", "candlestick", "circle_dollar", "hand_coins", "emoji_events", "briefcase", "work")),
+        CategoryIcons.CategoryIconGroup("房产、车辆与专项", listOf("home", "apartment", "key_round", "local_taxi", "directions_bus", "parking", "flight", "card_giftcard", "heart", "more_horiz", CategoryIcons.FALLBACK)),
+    )
+
+    fun defaultIconKey(kind: String, name: String): String {
+        val preset = AccountPresets.all.firstOrNull { it.name == name }
+        if (preset?.iconKey != null) return preset.iconKey
+        val n = name.trim()
+        return when {
+            "余额宝" in n || "零钱通" in n || "定期" in n || "理财" in n -> "savings"
+            "基金" in n || "股票" in n || "证券" in n -> "trending_up"
+            "公积金" in n -> "apartment"
+            "医保" in n || "保险" in n -> "shield"
+            "房贷" in n -> "home"
+            "车贷" in n -> "local_taxi"
+            "公交" in n || "校园" in n || "交通" in n -> "directions_bus"
+            "现金" in n || kind == "CASH" -> "payments"
+            "信用" in n || "月付" in n || kind == "CREDIT" -> "credit_card"
+            kind == "SAVINGS" || "银行" in n -> "landmark"
+            kind == "OTHER_ASSET" -> "trending_up"
+            kind == "OTHER_DEBT" -> "receipt_long"
+            else -> "account_balance_wallet"
+        }
+    }
+
+    fun defaultColor(kind: String, name: String): Color {
+        val presetColor = AccountPresets.all.firstOrNull { it.name == name }?.colorHex?.let(::parseColorHex)
+        if (presetColor != null) return presetColor
+        val n = name.trim()
+        return when {
+            "交通" in n || "交行" in n -> Color(0xFF1D4ED8)
+            "邮储" in n || "邮政" in n -> Color(0xFF047857)
+            "浦发" in n -> Color(0xFF1E40AF)
+            "中信" in n -> Color(0xFFDC2626)
+            "兴业" in n || "上海银行" in n -> Color(0xFF2563EB)
+            "光大" in n -> Color(0xFF7C3AED)
+            "民生" in n -> Color(0xFF0D9488)
+            "平安" in n -> Color(0xFFEA580C)
+            "广发" in n || "北京银行" in n -> Color(0xFFE11D48)
+            "华夏" in n || "云闪付" in n -> Color(0xFFDC2626)
+            "余额宝" in n || "美团" in n -> Color(0xFFD97706)
+            "零钱通" in n || "现金" in n -> Color(0xFF10B981)
+            "公积金" in n || "江苏银行" in n -> Color(0xFF0EA5E9)
+            "医保" in n -> Color(0xFF10B981)
+            kind == "CREDIT" -> Color(0xFF3B82F6)
+            kind == "OTHER_DEBT" -> Color(0xFFE04F5F)
+            kind == "OTHER_ASSET" -> Color(0xFF0D9488)
+            else -> swatchFor(n)
+        }
     }
 
     fun resourceFor(key: String): Int? = when (key) {
@@ -109,13 +166,33 @@ object AccountLogos {
 }
 
 /**
- * 账户头像：有品牌 logo 就贴 logo（去透明留白后等比居中于 [size] 的圆），否则用名字首字
- * + 名字哈希出的底色圆形。两种形态尺寸一致，列表里不会跳。
+ * 账户头像：优先显示用户指定的图标与配色；其次命中品牌 PNG logo；
+ * 其余账户按类型与机构语义显示矢量图标 + 专属品牌色。
  */
 @Composable
-fun AccountAvatar(name: String, modifier: Modifier = Modifier, size: Dp = 40.dp) {
-    val key = AccountLogos.keyFor(name)
-    val res = key?.let(AccountLogos::resourceFor)
+fun AccountAvatar(account: AssetAccount, modifier: Modifier = Modifier, size: Dp = 40.dp) {
+    AccountAvatar(
+        name = account.name,
+        modifier = modifier,
+        size = size,
+        kind = account.kind,
+        iconKey = account.iconKey,
+        colorHex = account.colorHex,
+    )
+}
+
+@Composable
+fun AccountAvatar(
+    name: String,
+    modifier: Modifier = Modifier,
+    size: Dp = 40.dp,
+    kind: String = "PAYMENT",
+    iconKey: String? = null,
+    colorHex: String? = null,
+) {
+    val res = if (iconKey == null && colorHex == null) {
+        AccountLogos.keyFor(name)?.let(AccountLogos::resourceFor)
+    } else null
     if (res != null) {
         val resources = LocalContext.current.resources
         val bitmap by androidx.compose.runtime.produceState(
@@ -139,12 +216,22 @@ fun AccountAvatar(name: String, modifier: Modifier = Modifier, size: Dp = 40.dp)
             return
         }
     }
-    val swatch = swatchFor(name)
+    val resolvedKey = iconKey ?: AccountLogos.defaultIconKey(kind, name)
+    val tint = parseColorHex(colorHex) ?: AccountLogos.defaultColor(kind, name)
+    val effectiveGlass = LocalLiquidGlassEnabled.current && !LocalReduceTransparency.current
     Box(
-        modifier = modifier.size(size).clip(CircleShape).background(solidBadgeBackground(swatch)),
+        modifier = modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(solidBadgeBackground(tint))
+            .badgeLiquidGlaze(effectiveGlass),
         contentAlignment = Alignment.Center,
     ) {
-        val glyphStyle = if (size < 30.dp) AbType.footnote else AbType.headline
-        Text(name.take(1).ifBlank { "账" }, style = glyphStyle, color = Color.White, maxLines = 1)
+        Icon(
+            imageVector = CategoryIcons.vectorFor(resolvedKey),
+            contentDescription = null,
+            modifier = Modifier.size(size * 0.54f),
+            tint = Color.White,
+        )
     }
 }

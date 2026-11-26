@@ -47,10 +47,27 @@ class LedgerListCodecTest {
         assertTrue(partial.ledger!!.hasIncome)
         assertEquals(partial, Backup.decode(Backup.encode(partial)))
         assertNull(Backup.decode("""{"format":1,"bills":[]}""").ledger)
-        assertEquals(12, Backup.FORMAT)
+        assertEquals(13, Backup.FORMAT)
         assertNull(empty.assets)
         assertNull(partial.assets)
         assertTrue(Backup.encode(empty).contains("\"format\":${Backup.FORMAT}"))
+    }
+
+    @Test fun categoryIconAndColorSurviveCodecAndBackupRoundTrip() {
+        val styled = listOf(
+            CategoryGroup("咖啡", listOf("拿铁"), iconKey = "local_cafe", colorHex = "#8D6E63"),
+            CategoryGroup("默认"),
+        )
+        val decodedGroups = LedgerListCodec.readGroups(LedgerListCodec.encodeGroups(styled), groups)
+        assertEquals(styled, decodedGroups)
+
+        val snap = Backup.Snapshot(
+            exportedAt = 100L,
+            bills = emptyList(),
+            ledger = Backup.Ledger(expense = styled, income = emptyList(), accounts = emptyList(), noteTemplate = "{商户}"),
+            settings = null,
+        )
+        assertEquals(snap, Backup.decode(Backup.encode(snap)))
     }
 
     @Test fun malformedBackupArrayCannotMasqueradeAsExplicitEmpty() {

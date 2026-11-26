@@ -104,6 +104,10 @@ interface RecognitionDao {
     suspend fun unlinkIgnoredReviews()
     @Insert suspend fun insert(row: RecognitionEntity)
     @Update suspend fun update(row: RecognitionEntity)
+    @Query("UPDATE recognition_history SET category = :newName, updatedAt = :updatedAt WHERE category = :oldName AND type IN (:types)")
+    suspend fun renameCategory(oldName: String, newName: String, types: List<String>, updatedAt: Long): Int
+    @Query("UPDATE recognition_history SET subCategory = :newSub, updatedAt = :updatedAt WHERE category = :category AND subCategory = :oldSub AND type IN (:types)")
+    suspend fun renameSubCategory(category: String, oldSub: String, newSub: String, types: List<String>, updatedAt: Long): Int
     @Query("DELETE FROM recognition_history WHERE status = 'IGNORED'")
     suspend fun clearIgnored(): Int
     @Query("DELETE FROM recognition_history") suspend fun deleteAll()

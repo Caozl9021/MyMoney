@@ -10,11 +10,19 @@ object AssetBackupCodec {
     fun encode(snapshot: AssetSnapshot): Map<String, Any?> {
         validate(snapshot)
         return linkedMapOf(
-            "accounts" to snapshot.accounts.map { a -> linkedMapOf(
+            "accounts" to snapshot.accounts.map { a -> linkedMapOf<String, Any?>(
                 "id" to a.id, "name" to a.name, "kind" to a.kind, "aliases" to MiniJson.decode(a.aliases),
                 "sortOrder" to a.sortOrder, "archived" to a.archived, "included" to a.included,
                 "initialized" to a.initialized, "createdAt" to a.createdAt, "updatedAt" to a.updatedAt,
-            ) },
+            ).apply {
+                if (!a.quickSelect) put("quickSelect", false)
+                a.cardTail?.let { put("cardTail", it) }
+                a.creditLimitCents?.let { put("creditLimitCents", it) }
+                a.billingDay?.let { put("billingDay", it) }
+                a.repaymentDay?.let { put("repaymentDay", it) }
+                a.iconKey?.let { put("iconKey", it) }
+                a.colorHex?.let { put("colorHex", it) }
+            } },
             "entries" to snapshot.entries.map { e -> linkedMapOf(
                 "id" to e.id, "operationId" to e.operationId, "accountId" to e.accountId,
                 "deltaCents" to e.deltaCents, "kind" to e.kind, "note" to e.note,
@@ -33,7 +41,14 @@ object AssetBackupCodec {
             AssetAccount(id = a.text("id"), name = a.text("name"), kind = a.text("kind"),
                 aliases = MiniJson.encode(aliases), sortOrder = order.toInt(),
                 archived = a.flag("archived"), included = a.flag("included"), initialized = a.flag("initialized"),
-                createdAt = a.integer("createdAt"), updatedAt = a.integer("updatedAt"))
+                createdAt = a.integer("createdAt"), updatedAt = a.integer("updatedAt"),
+                quickSelect = a.optionalFlag("quickSelect", true),
+                cardTail = a.optionalText("cardTail"),
+                creditLimitCents = a.optionalInteger("creditLimitCents"),
+                billingDay = a.optionalInt("billingDay"),
+                repaymentDay = a.optionalInt("repaymentDay"),
+                iconKey = a.optionalText("iconKey"),
+                colorHex = a.optionalText("colorHex"))
         }
         val entries = root.list("entries").map { item ->
             val e = item as? Map<*, *> ?: errorInvalid("资产流水必须是对象")
@@ -51,6 +66,12 @@ object AssetBackupCodec {
         snapshot.accounts.forEach { a ->
             require(a.id.isNotBlank() && a.name.isNotBlank() && a.name == a.name.trim()) { "资产账户身份或名称无效" }
             require(a.kind in kinds && a.sortOrder >= 0 && a.createdAt >= 0 && a.updatedAt >= a.createdAt) { "资产账户资料无效" }
+            require(a.cardTail == null || (a.cardTail.isNotBlank() && a.cardTail == a.cardTail.trim() && a.cardTail.length <= 8)) { "资产账户尾号无效" }
+            require(a.creditLimitCents == null || a.creditLimitCents >= 0L) { "资产账户信用额度无效" }
+            require(a.billingDay == null || a.billingDay in 1..31) { "资产账户账单日无效" }
+            require(a.repaymentDay == null || a.repaymentDay in 1..31) { "资产账户还款日无效" }
+            require(a.iconKey == null || (a.iconKey.isNotBlank() && a.iconKey.length <= 64)) { "资产账户图标无效" }
+            require(a.colorHex == null || Regex("^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$").matches(a.colorHex)) { "资产账户颜色无效" }
             val aliases = (MiniJson.decode(a.aliases) as? List<*>)?.map {
                 (it as? String)?.takeIf { name -> name.isNotBlank() && name == name.trim() }
                     ?: errorInvalid("账户别名无效")
@@ -114,6 +135,7 @@ object AssetBackupCodec {
 
     private fun Map<*, *>.list(key: String): List<*> = this[key] as? List<*> ?: errorInvalid("资产${key}必须是数组")
     private fun Map<*, *>.flag(key: String): Boolean = this[key] as? Boolean ?: errorInvalid("资产${key}必须为布尔值")
+    private fun Map<*, *>.optionalFlag(key: String, default: Boolean): Boolean = if (!containsKey(key) || this[key] == null) default else flag(key)
     private fun Map<*, *>.text(key: String, allowEmpty: Boolean = false): String =
         (this[key] as? String)?.takeIf { allowEmpty || it.isNotBlank() } ?: errorInvalid("资产${key}必须为文字")
     private fun Map<*, *>.optionalText(key: String): String? = if (this[key] == null) null else text(key)
@@ -122,5 +144,9 @@ object AssetBackupCodec {
         // MiniJson parses integral JSON tokens as Long. Reject decimals and numeric strings.
         return when (raw) { is Long -> raw; is Int -> raw.toLong(); else -> errorInvalid("资产${key}必须为整数") }
     }
+    private fun Map<*, *>.optionalInteger(key: String): Long? = if (!containsKey(key) || this[key] == null) null else integer(key)
+    private fun Map<*, *>.optionalInt(key: String): Int? = optionalInteger(key)?.also {
+        require(it in Int.MIN_VALUE..Int.MAX_VALUE) { "资产${key}超出整数范围" }
+    }?.toInt()
     private fun errorInvalid(message: String): Nothing = throw IllegalArgumentException(message)
 }

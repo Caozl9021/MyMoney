@@ -13,20 +13,26 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -41,58 +47,74 @@ import io.github.mymoney.ui.design.AbRadius
 import io.github.mymoney.ui.design.AbSize
 import io.github.mymoney.ui.design.AbSpacing
 import io.github.mymoney.ui.design.AbTextButton
+import io.github.mymoney.ui.design.AbTextField
 import io.github.mymoney.ui.design.AbType
+import io.github.mymoney.ui.design.AccountAvatar
 import io.github.mymoney.ui.design.AppAlertDialog
 import io.github.mymoney.ui.design.AppDialog
 import io.github.mymoney.ui.design.AppDialogActions
-import io.github.mymoney.ui.design.CategoryBadge
 import io.github.mymoney.ui.design.CategoryIcons
-import io.github.mymoney.ui.design.CategoryPreset
-import io.github.mymoney.ui.design.CategoryPresets
+import io.github.mymoney.ui.design.ColorSwatchStrip
 import io.github.mymoney.ui.design.DragReorderColumn
 import io.github.mymoney.ui.design.EmptyState
-import io.github.mymoney.ui.design.GroupFooter
+import io.github.mymoney.ui.design.FloatingHeaderAction
 import io.github.mymoney.ui.design.GroupHeader
+import io.github.mymoney.ui.design.GroupedIconGrid
 import io.github.mymoney.ui.design.InlineMessage
-import io.github.mymoney.ui.design.InputRow
-import io.github.mymoney.ui.design.InsetDivider
 import io.github.mymoney.ui.design.InsetGroup
 import io.github.mymoney.ui.design.ListRow
 import io.github.mymoney.ui.design.LocalAbPalette
-import io.github.mymoney.ui.design.SlideSubPage
+import io.github.mymoney.ui.design.LocalLiquidGlassEnabled
+import io.github.mymoney.ui.design.LocalReduceTransparency
+import io.github.mymoney.ui.design.SectionLazyColumn
 import io.github.mymoney.ui.design.SlideSubPageValue
 import io.github.mymoney.ui.design.SubPageScaffold
 import io.github.mymoney.ui.design.abPressFeedback
-import io.github.mymoney.ui.design.rememberAbHaptic
+import io.github.mymoney.ui.design.badgeLiquidGlaze
+import io.github.mymoney.ui.design.parseColorHex
 import io.github.mymoney.ui.design.solidBadgeBackground
 import io.github.mymoney.ui.design.swatchFor
+import kotlinx.coroutines.launch
 
 /**
- * 分类管理。账户候选清单由资产页单独管理。
- *
- * 两个层级：一级列表（点进去看这个分类的二级）→ 二级管理。
- * 名字仍然是唯一来源：识别匹配、确认页 chip、CSV 导出都读这里。
+ * 分类管理：一级列表（右上角 `+` 添加、长按拖动排序、点进二级）→ 二级管理（右上角 `+` 添加、点按改名/删除）。
  */
 @Composable
 fun LedgerConfigPage(
     onBack: () -> Unit,
     initialTab: Int = 0,
     fixedTab: Int? = null,
-    presetsOnly: Boolean = false,
 ) {
-    val p = LocalAbPalette.current
-    var tab by rememberSaveable(initialTab, fixedTab, presetsOnly) { mutableStateOf((fixedTab ?: initialTab).coerceIn(0, 1)) }          // 0 支出 1 收入
-    var openGroup by rememberSaveable { mutableStateOf<String?>(null) } // 非空 = 在二级页
-    var version by remember { mutableStateOf(0) }               // 强制重读清单
-    var newGroup by rememberSaveable { mutableStateOf("") }
+    var tab by rememberSaveable(initialTab, fixedTab) { mutableStateOf((fixedTab ?: initialTab).coerceIn(0, 1)) } // 0 支出 1 收入
+    var openGroup by rememberSaveable { mutableStateOf<String?>(null) }
+    var version by remember { mutableStateOf(0) }
+    var addDialogOpen by rememberSaveable { mutableStateOf(false) }
     var resetConfirm by rememberSaveable { mutableStateOf(false) }
     var resetError by remember { mutableStateOf<String?>(null) }
-    var showPresets by rememberSaveable { mutableStateOf(false) } // 非空 = 在「常用预设」二级页
+
+    val pagePixels = RememberBackPixels()
+    val navScope = rememberCoroutineScope()
+    var subPreview by remember { mutableStateOf<ImageBitmap?>(null) }
+    var openingSub by remember { mutableStateOf(false) }
 
     val groups = remember(version, tab) {
         if (tab == 0) LedgerConfig.expenseGroups else LedgerConfig.incomeGroups
     }
     val type = if (tab == 0) BillType.EXPENSE else BillType.INCOME
+    val current = groups.firstOrNull { it.name == openGroup }
+
+    fun openSub(groupName: String) {
+        if (openingSub || openGroup != null) return
+        openingSub = true
+        navScope.launch {
+            try {
+                subPreview = pagePixels.snapshot()
+                openGroup = groupName
+            } finally {
+                openingSub = false
+            }
+        }
+    }
 
     if (resetConfirm) RestoreCategoriesDefaultsDialog(
         onDismiss = { resetConfirm = false },
@@ -104,161 +126,113 @@ fun LedgerConfigPage(
                 .onFailure { resetError = it.message ?: "恢复默认清单失败，请重试" }
         },
     )
-    val current = groups.firstOrNull { it.name == openGroup }
 
-    val title = when {
-        presetsOnly -> "分类预设"
-        fixedTab == 0 -> "支出分类"
-        fixedTab == 1 -> "收入分类"
+    val title = when (fixedTab) {
+        0 -> "支出分类"
+        1 -> "收入分类"
         else -> "分类"
     }
+
     Box(Modifier.fillMaxSize()) {
-        SubPageScaffold(title = title, onBack = onBack) { padding ->
-            io.github.mymoney.ui.design.SectionLazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
-                    start = AbSpacing.page,
-                end = AbSpacing.page,
-                top = padding.calculateTopPadding(),
-                bottom = padding.calculateBottomPadding(),
-            ),
-            verticalArrangement = Arrangement.spacedBy(AbSpacing.xs),
-        ) {
-            if (fixedTab == null || presetsOnly) item(key = "seg") {
-                io.github.mymoney.ui.design.Segmented(
-                    options = listOf("支出分类", "收入分类"), selected = tab,
-                    onSelect = { tab = it }, modifier = Modifier.fillMaxWidth().padding(bottom = AbSpacing.s),
-                )
-            }
-
-            if (!presetsOnly) {
-                item(key = "hdr") {
-                    Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.xxs)) {
-                        GroupHeader(if (tab == 0) "支出分类" else "收入分类")
-                        if (groups.size > 1) {
-                            Text(
-                                "长按拖动排序",
-                                style = AbType.caption1,
-                                color = p.secondaryLabel,
-                                modifier = Modifier.padding(start = AbSpacing.m, bottom = AbSpacing.xs),
-                            )
-                        }
+        BackSurface(enabled = false, onBack = {}, pixels = pagePixels) {
+            SubPageScaffold(
+                title = title,
+                onBack = onBack,
+                actions = {
+                    FloatingHeaderAction(AbIcons.Plus, "添加分类") { addDialogOpen = true }
+                },
+            ) { padding ->
+                SectionLazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        start = AbSpacing.page,
+                        end = AbSpacing.page,
+                        top = padding.calculateTopPadding(),
+                        bottom = padding.calculateBottomPadding(),
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(AbCardDensity.gap),
+                ) {
+                    if (fixedTab == null) item(key = "seg") {
+                        io.github.mymoney.ui.design.Segmented(
+                            options = listOf("支出分类", "收入分类"),
+                            selected = tab,
+                            onSelect = { tab = it },
+                            modifier = Modifier.fillMaxWidth().padding(bottom = AbSpacing.s),
+                        )
                     }
-                }
 
-                item(key = "groups") {
-                    InsetGroup {
-                        if (groups.isEmpty()) {
-                            EmptyState(
-                                icon = AbIcons.Tag,
-                                title = "暂无分类",
-                                message = "在下方添加新分类。",
-                            )
-                        } else {
-                DragReorderColumn(
-                    items = groups,
-                    keyOf = { it.name },
-                    onReorder = { next ->
-                        runCatching {
-                            LedgerConfig.reorderGroups(type, next.map { it.name })
-                        }.onSuccess { version++ }
-                    },
-                ) { group, _, _ ->
-                                GroupRow(
-                                    group = group,
-                                    dividerAbove = false,
-                                    onClick = { openGroup = group.name },
+                    item(key = "groups") {
+                        InsetGroup {
+                            if (groups.isEmpty()) {
+                                EmptyState(
+                                    icon = AbIcons.Tag,
+                                    title = "暂无分类",
+                                    message = "点击右上角「+」添加新分类。",
                                 )
+                            } else {
+                                DragReorderColumn(
+                                    items = groups,
+                                    keyOf = { it.name },
+                                    onReorder = { next ->
+                                        runCatching {
+                                            LedgerConfig.reorderGroups(type, next.map { it.name })
+                                        }.onSuccess { version++ }
+                                    },
+                                ) { group, _, _ ->
+                                    GroupRow(
+                                        group = group,
+                                        dividerAbove = false,
+                                        onClick = { openSub(group.name) },
+                                    )
+                                }
                             }
                         }
                     }
-                }
 
-                item(key = "add") {
-                    InsetGroup {
-                        InputRow(
-                            label = "添加",
-                            value = newGroup,
-                            onValueChange = { newGroup = it },
-                            placeholder = "新分类名",
-                            onDone = {
-                                LedgerConfig.addGroup(type, newGroup)
-                                newGroup = ""
-                                version++
-                            },
-                        )
-                    }
-                }
-
-            }
-
-            if (presetsOnly || fixedTab == null) {
-                // 预设：市面上大多数记账 App 都有的那一批名字。只补「当前还没有的」，
-                // 点一下就连同二级分类一起建好；之后和手工添加的分类没有任何区别。
-                val presets = CategoryPresets.forType(tab == 1)
-                val existing = groups.map { it.name }.toSet()
-                val missing = presets.filterNot { it.name in existing }
-                if (missing.isNotEmpty()) {
-                    item(key = "presets-entry") {
+                    item(key = "reset") {
                         InsetGroup {
                             ListRow(
-                                title = "常用预设",
-                                subtitle = "一键添加缺少的 ${missing.size} 个分类",
-                                leading = { CategoryBadge(category = "常用预设", tint = swatchFor("常用预设"), size = AbCardDensity.settingsIcon) },
-                                chevron = true,
-                                onClick = { showPresets = true },
+                                title = "恢复默认分类",
+                                destructive = true,
+                                onClick = { resetError = null; resetConfirm = true },
                             )
                         }
                     }
-                } else if (presetsOnly) {
-                    item(key = "presets-complete") {
-                        InsetGroup { ListRow(title = "常用预设已齐全", subtitle = "现有分类已包含全部常用预设") }
-                    }
                 }
             }
-
-            if (presetsOnly) item(key = "meal-presets") {
-                InsetGroup {
-                    ListRow(title = "补齐餐饮子类",
-                        onClick = {
-                            resetError = null
-                            runCatching { LedgerConfig.addMealSubCategories() }
-                                .onSuccess { version++ }
-                                .onFailure { resetError = it.message ?: "补齐餐饮子类失败，请重试" }
-                        })
-                }
-                if (resetError != null && !resetConfirm) InlineMessage(resetError.orEmpty(), isError = true, announce = true)
-            }
-
-            if (presetsOnly || fixedTab == null) item(key = "reset") {
-                InsetGroup {
-                    ListRow(
-                        title = "恢复默认分类",
-                        destructive = true,
-                        onClick = { resetError = null; resetConfirm = true },
-                    )
-                }
-            }
-
         }
-    }
-        SlideSubPage(visible = showPresets, modifier = Modifier.fillMaxSize()) {
-            ActiveBackHandler { showPresets = false }
-            PresetPickerPage(
-                type = type,
-                existing = groups.map { it.name }.toSet(),
-                onBack = { showPresets = false },
-                onChanged = { version++ },
-            )
+
+        SlideSubPageValue(value = current, modifier = Modifier.fillMaxSize()) { targetGroup ->
+            BackSurface(
+                enabled = current != null,
+                onBack = { openGroup = null; subPreview = null },
+                routeKey = targetGroup.name,
+                preview = subPreview,
+            ) {
+                SubCategoryPage(
+                    group = targetGroup,
+                    type = type,
+                    version = version,
+                    onBack = { openGroup = null; subPreview = null },
+                    onRenamed = { nextName -> openGroup = nextName; version++ },
+                    onChanged = { version++ },
+                )
+            }
         }
-        SlideSubPageValue(value = if (!showPresets && !presetsOnly) current else null, modifier = Modifier.fillMaxSize()) { targetGroup ->
-            ActiveBackHandler { openGroup = null }
-            SubCategoryPage(
-                group = targetGroup,
-                type = type,
-                version = version,
-                onBack = { openGroup = null },
-                onChanged = { version++ },
+
+        if (addDialogOpen) {
+            CategoryEditorDialog(
+                title = "添加${if (tab == 0) "支出" else "收入"}分类",
+                initialName = "",
+                initialIconKey = null,
+                initialColorHex = null,
+                existingNames = groups.map { it.name }.toSet(),
+                onDismiss = { addDialogOpen = false },
+                onSave = { name, iconKey, colorHex ->
+                    LedgerConfig.addGroup(type, name, iconKey, colorHex)
+                    version++
+                    addDialogOpen = false
+                },
             )
         }
     }
@@ -266,147 +240,85 @@ fun LedgerConfigPage(
 
 @Composable
 private fun GroupRow(group: CategoryGroup, dividerAbove: Boolean, onClick: () -> Unit, trailing: (@Composable () -> Unit)? = null) {
-    val p = LocalAbPalette.current
-    val tint = swatchFor(group.name)
+    val tint = parseColorHex(group.colorHex) ?: swatchFor(group.name)
     ListRow(
         title = group.name,
         subtitle = if (group.subs.isEmpty()) "无二级分类" else group.subs.joinToString(" / "),
         dividerAbove = dividerAbove,
         chevron = trailing == null,
         trailing = trailing,
-        leading = { CategoryBadge(category = group.name, tint = tint, size = AbCardDensity.settingsIcon) },
+        leading = {
+            CategoryBadgeWithIcon(
+                name = group.name,
+                iconKey = group.iconKey,
+                tint = tint,
+                size = AbCardDensity.settingsIcon,
+            )
+        },
         onClick = onClick,
     )
 }
 
-/** 「常用预设」二级页：一个卡组，行内统一单色图标 + 右侧圆形加号，点一下连同二级分类一起建好。 */
 @Composable
-private fun PresetPickerPage(
-    type: BillType,
-    existing: Set<String>,
-    onBack: () -> Unit,
-    onChanged: () -> Unit,
+private fun CategoryBadgeWithIcon(
+    name: String,
+    iconKey: String?,
+    tint: Color,
+    size: androidx.compose.ui.unit.Dp,
 ) {
-    val p = LocalAbPalette.current
-    val presets = remember(existing) {
-        CategoryPresets.forType(type == BillType.INCOME).filterNot { it.name in existing }
-    }
-    SubPageScaffold(title = "常用预设", onBack = onBack) { padding ->
-        io.github.mymoney.ui.design.SectionLazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                start = AbSpacing.page, end = AbSpacing.page,
-                top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding(),
-            ),
-            verticalArrangement = Arrangement.spacedBy(AbSpacing.l),
-        ) {
-            if (presets.isEmpty()) {
-                item(key = "empty") {
-                    InsetGroup { ListRow(title = "常用预设已齐全", subtitle = "现有分类已包含全部常用预设") }
-                }
-            } else {
-                item(key = "hint") { GroupHeader("可补 ${presets.size} 个分类") }
-                item(key = "list") {
-                    InsetGroup {
-                        presets.forEach { preset ->
-                            PresetRow(
-                                preset = preset,
-                                dividerAbove = false,
-                                onClick = {
-                                    runCatching {
-                                        LedgerConfig.addGroup(type, preset.name)
-                                        preset.subs.forEach { LedgerConfig.addSubCategory(type, preset.name, it) }
-                                    }.onSuccess { onChanged() }
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-        }
+    val effectiveGlass = LocalLiquidGlassEnabled.current && !LocalReduceTransparency.current
+    val resolvedIcon = iconKey ?: CategoryIcons.keyFor(name)
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(solidBadgeBackground(tint))
+            .badgeLiquidGlaze(effectiveGlass),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = CategoryIcons.vectorFor(resolvedIcon),
+            contentDescription = null,
+            modifier = Modifier.size(size * 0.54f),
+            tint = Color.White,
+        )
     }
 }
 
-/** 预设行：原样彩色实心图标徽章 + 名称/二级 + 右侧圆形加号。 */
-@Composable
-private fun PresetRow(
-    preset: CategoryPreset,
-    dividerAbove: Boolean,
-    onClick: () -> Unit,
-) {
-    val p = LocalAbPalette.current
-    val haptic = rememberAbHaptic()
-    val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-    Column(Modifier.fillMaxWidth()) {
-        if (dividerAbove) InsetDivider(inset = AbCardDensity.leadingInset)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = AbSize.minTouch)
-                .abPressFeedback(interaction, pressedScale = 0.992f, tintOverlay = true)
-                .clickable(
-                    interactionSource = interaction,
-                    indication = null,
-                ) { haptic.select(); onClick() }
-                .padding(horizontal = AbSpacing.l, vertical = AbSpacing.m),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(AbSpacing.m),
-        ) {
-            CategoryBadge(
-                category = preset.name,
-                tint = swatchFor(preset.name),
-                size = AbCardDensity.settingsIcon,
-            )
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(preset.name, style = AbType.body, color = p.label)
-                if (preset.subs.isNotEmpty()) {
-                    Text(
-                        preset.subs.joinToString(" / "),
-                        style = AbType.footnote,
-                        color = p.secondaryLabel,
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                    )
-                }
-            }
-            Box(
-                Modifier
-                    .size(30.dp)
-                    .clip(CircleShape)
-                    .background(solidBadgeBackground(p.accent)),
-                contentAlignment = Alignment.Center,
-            ) {
-                androidx.compose.material3.Icon(
-                    imageVector = AbIcons.Plus,
-                    contentDescription = "添加",
-                    modifier = Modifier.size(18.dp),
-                    tint = Color.White,
-                )
-            }
-        }
-    }
-}
-
-/** 二级分类管理：增删 + 删除整个一级分类。 */
+/** 二级分类管理：简洁三卡（主分类编辑、二级分类列表、删除主分类），右上角「+」添加二级分类。 */
 @Composable
 private fun SubCategoryPage(
     group: CategoryGroup,
     type: BillType,
     version: Int,
     onBack: () -> Unit,
+    onRenamed: (String) -> Unit,
     onChanged: () -> Unit,
 ) {
+    val context = LocalContext.current
     val p = LocalAbPalette.current
-    var draft by rememberSaveable { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    var addSubOpen by rememberSaveable { mutableStateOf(false) }
+    var editGroupOpen by remember { mutableStateOf(false) }
+    var editSubTarget by remember { mutableStateOf<String?>(null) }
+    var statusMessage by remember { mutableStateOf<String?>(null) }
 
-    // 父级可能已被删掉，重新读一次保证 subs 是最新的
     val fresh = remember(group.name, version) {
         (if (type == BillType.EXPENSE) LedgerConfig.expenseGroups else LedgerConfig.incomeGroups)
             .firstOrNull { it.name == group.name } ?: group
     }
+    val allGroupNames = remember(version, type) {
+        LedgerConfig.groupsFor(type).map { it.name }.toSet()
+    }
 
-    SubPageScaffold(title = fresh.name, onBack = onBack) { padding ->
-        io.github.mymoney.ui.design.SectionLazyColumn(
+    SubPageScaffold(
+        title = fresh.name,
+        onBack = onBack,
+        actions = {
+            FloatingHeaderAction(AbIcons.Plus, "添加二级分类") { addSubOpen = true }
+        },
+    ) { padding ->
+        SectionLazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 start = AbSpacing.page,
@@ -414,18 +326,29 @@ private fun SubCategoryPage(
                 top = padding.calculateTopPadding(),
                 bottom = padding.calculateBottomPadding(),
             ),
-            verticalArrangement = Arrangement.spacedBy(AbSpacing.xs),
+            verticalArrangement = Arrangement.spacedBy(AbCardDensity.gap),
         ) {
-            item(key = "hdr") {
-                GroupHeader("二级分类")
-                if (fresh.subs.size > 1) {
-                    Text(
-                        "长按拖动排序",
-                        style = AbType.caption1,
-                        color = p.secondaryLabel,
-                        modifier = Modifier.padding(start = AbSpacing.page, bottom = AbSpacing.xs),
+            item(key = "style") {
+                InsetGroup {
+                    ListRow(
+                        title = fresh.name,
+                        subtitle = "编辑名称、图标与配色",
+                        leading = {
+                            CategoryBadgeWithIcon(
+                                name = fresh.name,
+                                iconKey = fresh.iconKey,
+                                tint = parseColorHex(fresh.colorHex) ?: swatchFor(fresh.name),
+                                size = AbCardDensity.settingsIcon,
+                            )
+                        },
+                        chevron = true,
+                        onClick = { editGroupOpen = true },
                     )
                 }
+            }
+
+            if (statusMessage != null) {
+                item(key = "status") { InlineMessage(statusMessage.orEmpty(), announce = true) }
             }
 
             item(key = "subs") {
@@ -433,8 +356,8 @@ private fun SubCategoryPage(
                     if (fresh.subs.isEmpty()) {
                         EmptyState(
                             icon = AbIcons.Tag,
-                            title = "还没有二级分类",
-                            message = "可选。留空也可以正常记账和导出。",
+                            title = "暂无二级分类",
+                            message = "点击右上角「+」添加。",
                         )
                     } else {
                         DragReorderColumn(
@@ -449,35 +372,11 @@ private fun SubCategoryPage(
                             ListRow(
                                 title = sub,
                                 dividerAbove = false,
-                                trailing = {
-                                    AbTextButton(
-                                        text = "删除",
-                                        color = p.red,
-                                        onClick = {
-                                            LedgerConfig.removeSubCategory(type, fresh.name, sub)
-                                            onChanged()
-                                        },
-                                    )
-                                },
+                                chevron = true,
+                                onClick = { editSubTarget = sub },
                             )
                         }
                     }
-                }
-            }
-
-            item(key = "add") {
-                InsetGroup {
-                    InputRow(
-                        label = "添加",
-                        value = draft,
-                        onValueChange = { draft = it },
-                        placeholder = "新二级分类",
-                        onDone = {
-                            LedgerConfig.addSubCategory(type, fresh.name, draft)
-                            draft = ""
-                            onChanged()
-                        },
-                    )
                 }
             }
 
@@ -494,102 +393,267 @@ private fun SubCategoryPage(
                     )
                 }
             }
+        }
+    }
 
+    if (addSubOpen) {
+        var subDraft by remember { mutableStateOf("") }
+        var subError by remember { mutableStateOf<String?>(null) }
+        AppDialog(title = "添加二级分类", onDismiss = { addSubOpen = false }) {
+            InsetGroup {
+                Box(Modifier.fillMaxWidth().padding(horizontal = AbSpacing.l, vertical = AbSpacing.s)) {
+                    AbTextField(
+                        value = subDraft,
+                        onValueChange = { subDraft = it; subError = null },
+                        placeholder = "输入二级分类名称",
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+            if (subError != null) InlineMessage(subError.orEmpty(), isError = true, announce = true)
+            AppDialogActions(
+                confirmLabel = "添加",
+                onDismiss = { addSubOpen = false },
+                onConfirm = {
+                    val trimmed = subDraft.trim()
+                    when {
+                        trimmed.isEmpty() -> subError = "请输入二级分类名称"
+                        trimmed in fresh.subs -> subError = "已存在同名二级分类"
+                        else -> {
+                            LedgerConfig.addSubCategory(type, fresh.name, trimmed)
+                            addSubOpen = false
+                            onChanged()
+                        }
+                    }
+                },
+            )
+        }
+    }
+
+    if (editGroupOpen) {
+        var billCount by remember { mutableStateOf<Int?>(null) }
+        LaunchedEffect(fresh.name) {
+            billCount = LedgerConfig.countBillsForCategory(context, type, fresh.name)
+        }
+        CategoryEditorDialog(
+            title = "编辑「${fresh.name}」",
+            initialName = fresh.name,
+            initialIconKey = fresh.iconKey,
+            initialColorHex = fresh.colorHex,
+            existingNames = allGroupNames - fresh.name,
+            renameHistoryNotice = { next ->
+                val count = billCount ?: 0
+                if (next.trim() != fresh.name && count > 0) {
+                    "保存后将同步把 $count 笔历史账单中的「${fresh.name}」更新为「${next.trim()}」"
+                } else null
+            },
+            onDismiss = { editGroupOpen = false },
+            onSaveAsync = { nextName, nextIcon, nextColor ->
+                val synced = LedgerConfig.renameGroup(context, type, fresh.name, nextName, nextIcon, nextColor)
+                editGroupOpen = false
+                if (synced > 0) statusMessage = "已同步更新 $synced 笔历史账单"
+                if (nextName.trim() != fresh.name) onRenamed(nextName.trim()) else onChanged()
+            },
+        )
+    }
+
+    editSubTarget?.let { oldSub ->
+        var subDraft by remember(oldSub) { mutableStateOf(oldSub) }
+        var subCount by remember(oldSub) { mutableStateOf(0) }
+        var subError by remember(oldSub) { mutableStateOf<String?>(null) }
+        var busy by remember { mutableStateOf(false) }
+        LaunchedEffect(oldSub) {
+            subCount = LedgerConfig.countBillsForSubCategory(context, type, fresh.name, oldSub)
+        }
+        AppDialog(title = "编辑二级分类", onDismiss = { if (!busy) editSubTarget = null }, dismissible = !busy) {
+            InsetGroup {
+                Box(Modifier.fillMaxWidth().padding(horizontal = AbSpacing.l, vertical = AbSpacing.s)) {
+                    AbTextField(
+                        value = subDraft,
+                        onValueChange = { subDraft = it; subError = null },
+                        placeholder = "二级分类名称",
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+            if (subDraft.trim() != oldSub && subCount > 0) {
+                Text(
+                    "保存后将同步更新 $subCount 笔历史账单中的二级分类",
+                    style = AbType.caption1,
+                    color = p.secondaryLabel,
+                )
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+                AbTextButton(
+                    text = "删除此二级分类",
+                    color = p.red,
+                    enabled = !busy,
+                    onClick = {
+                        LedgerConfig.removeSubCategory(type, fresh.name, oldSub)
+                        editSubTarget = null
+                        onChanged()
+                    },
+                )
+            }
+            if (subError != null) InlineMessage(subError.orEmpty(), isError = true, announce = true)
+            AppDialogActions(
+                confirmLabel = if (busy) "保存中…" else "保存",
+                confirmEnabled = !busy,
+                onDismiss = { if (!busy) editSubTarget = null },
+                onConfirm = {
+                    val trimmed = subDraft.trim()
+                    if (trimmed.isEmpty()) {
+                        subError = "请输入二级分类名称"
+                        return@AppDialogActions
+                    }
+                    if (trimmed != oldSub && trimmed in fresh.subs) {
+                        subError = "已存在同名二级分类"
+                        return@AppDialogActions
+                    }
+                    busy = true
+                    scope.launch {
+                        runCatching { LedgerConfig.renameSubCategory(context, type, fresh.name, oldSub, trimmed) }
+                            .onSuccess { synced ->
+                                busy = false
+                                editSubTarget = null
+                                if (synced > 0) statusMessage = "已同步更新 $synced 笔历史账单"
+                                onChanged()
+                            }
+                            .onFailure {
+                                busy = false
+                                subError = it.message ?: "保存失败，请重试"
+                            }
+                    }
+                },
+            )
         }
     }
 }
 
-/** 账户清单：点选进入详情；长按拖动调整确认卡顺序。 */
 @Composable
-private fun AccountsSection(
-    version: Int,
-    assetAccounts: List<io.github.mymoney.data.AssetAccount>,
-    onChanged: () -> Unit,
-    onAdd: () -> Unit,
-    onOpenAccount: (String) -> Unit,
+private fun CategoryEditorDialog(
+    title: String,
+    initialName: String,
+    initialIconKey: String?,
+    initialColorHex: String?,
+    existingNames: Set<String>,
+    renameHistoryNotice: (String) -> String? = { null },
+    onDismiss: () -> Unit,
+    onSave: ((String, String?, String?) -> Unit)? = null,
+    onSaveAsync: (suspend (String, String?, String?) -> Unit)? = null,
 ) {
     val p = LocalAbPalette.current
-    var accountError by remember { mutableStateOf<String?>(null) }
-    var removeTarget by remember { mutableStateOf<io.github.mymoney.data.AssetAccount?>(null) }
-    val ordered = remember(version, assetAccounts) { assetAccounts.filter { !it.archived } }
+    val scope = rememberCoroutineScope()
+    val effectiveGlass = LocalLiquidGlassEnabled.current && !LocalReduceTransparency.current
+    var name by remember(initialName) { mutableStateOf(initialName) }
+    var pickedIcon by remember(initialIconKey) { mutableStateOf(initialIconKey) }
+    var pickedColor by remember(initialColorHex) { mutableStateOf(initialColorHex) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
 
-    Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-        InsetGroup {
-            ListRow(
-                title = "添加账户",
-                chevron = true,
-                onClick = onAdd,
-            )
-        }
-        InsetGroup {
-            if (ordered.isEmpty()) {
-                ListRow(title = "还没有账户")
-            } else {
-                DragReorderColumn(
-                    items = ordered,
-                    keyOf = { it.id },
-                    onReorder = { next ->
-                        accountError = null
-                        runCatching {
-                            AssetStore.reorderActive(next.map { it.id })
-                        }.onSuccess { onChanged() }
-                            .onFailure { accountError = it.message ?: "账户排序失败，请重试" }
-                    },
-                ) { row, _, _ ->
-                    ListRow(
-                        title = row.name,
-                        subtitle = if (!row.initialized) "待设置余额" else null,
-                        leading = {
-                            io.github.mymoney.ui.design.AccountAvatar(
-                                name = row.name,
-                                size = AbCardDensity.settingsIcon,
-                            )
-                        },
-                        trailing = {
-                            val removeInteraction = remember(row.id) { MutableInteractionSource() }
-                            Box(
-                                Modifier
-                                    .size(AbSize.minTouch)
-                                    .abPressFeedback(removeInteraction, pressedScale = 0.90f, pressedAlpha = 0.65f)
-                                    .clip(RoundedCornerShape(AbRadius.capsule))
-                                    .clickable(
-                                        interactionSource = removeInteraction,
-                                        indication = null,
-                                        role = androidx.compose.ui.semantics.Role.Button,
-                                    ) {
-                                        removeTarget = row
-                                    }
-                                    .semantics { contentDescription = "从清单移除 ${row.name}" },
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                androidx.compose.material3.Icon(
-                                    imageVector = AbIcons.Close,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp),
-                                    tint = p.secondaryLabel,
-                                )
-                            }
-                        },
-                        onClick = { onOpenAccount(row.id) },
-                    )
+    val previewName = name.trim().ifBlank { "未命名" }
+    val defaultIcon = CategoryIcons.suggestedKeyFor(previewName)
+    val defaultColor = swatchFor(previewName)
+    val previewColor = parseColorHex(pickedColor) ?: defaultColor
+    val previewIcon = pickedIcon ?: defaultIcon
+    val historyNotice = renameHistoryNotice(name)
+
+    AppDialog(title = title, onDismiss = { if (!busy) onDismiss() }, dismissible = !busy) {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(AbSpacing.m),
+        ) {
+            Box(
+                Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(solidBadgeBackground(previewColor))
+                    .badgeLiquidGlaze(effectiveGlass),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = CategoryIcons.vectorFor(previewIcon),
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+            Box(Modifier.weight(1f)) {
+                InsetGroup {
+                    Box(Modifier.fillMaxWidth().padding(horizontal = AbSpacing.l, vertical = AbSpacing.s)) {
+                        AbTextField(
+                            value = name,
+                            onValueChange = { name = it; error = null },
+                            placeholder = "输入分类名称",
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                 }
             }
         }
-        if (accountError != null) InlineMessage(accountError.orEmpty(), isError = true, announce = true)
-    }
-    removeTarget?.let { target ->
-        AppAlertDialog(
-            title = "从清单移除「${target.name}」？",
-            message = "不会删除历史账单；账户余额与流水记录仍保留在资产页。",
-            onDismiss = { removeTarget = null },
-            confirmLabel = "移除",
-            destructive = true,
+        if (historyNotice != null) {
+            Text(historyNotice, style = AbType.caption1, color = p.secondaryLabel)
+        }
+        if (pickedIcon != null || pickedColor != null) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                AbTextButton("恢复自动匹配样式", onClick = {
+                    pickedIcon = null
+                    pickedColor = null
+                })
+            }
+        }
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(max = 280.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(AbSpacing.l),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
+                Text("配色", style = AbType.footnote, color = p.secondaryLabel)
+                ColorSwatchStrip(
+                    selectedColorHex = pickedColor,
+                    fallbackColor = defaultColor,
+                    onSelect = { pickedColor = it },
+                )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
+                Text("图标", style = AbType.footnote, color = p.secondaryLabel)
+                GroupedIconGrid(
+                    selectedKey = previewIcon,
+                    accentColor = previewColor,
+                    onSelect = { pickedIcon = it },
+                )
+            }
+        }
+        if (error != null) InlineMessage(error.orEmpty(), isError = true, announce = true)
+        AppDialogActions(
+            confirmLabel = if (busy) "保存中…" else "保存",
+            confirmEnabled = !busy,
+            onDismiss = { if (!busy) onDismiss() },
             onConfirm = {
-                accountError = null
-                runCatching { LedgerConfig.removeAccount(target.name) }
-                    .onSuccess { onChanged() }
-                    .onFailure { accountError = it.message ?: "移除账户失败，请重试" }
-                removeTarget = null
+                val trimmed = name.trim()
+                if (trimmed.isEmpty()) {
+                    error = "请输入分类名称"
+                    return@AppDialogActions
+                }
+                if (trimmed in existingNames) {
+                    error = "已存在同名分类「$trimmed」"
+                    return@AppDialogActions
+                }
+                if (onSaveAsync != null) {
+                    busy = true
+                    scope.launch {
+                        runCatching { onSaveAsync(trimmed, pickedIcon, pickedColor) }
+                            .onFailure {
+                                busy = false
+                                error = it.message ?: "保存失败，请重试"
+                            }
+                    }
+                } else {
+                    onSave?.invoke(trimmed, pickedIcon, pickedColor)
+                }
             },
         )
     }
@@ -602,66 +666,6 @@ internal fun RestoreLedgerDefaultsDialog(onDismiss: () -> Unit, onConfirm: () ->
         Text("将替换全部支出分类、收入分类和账户候选清单；同名归档账户会恢复为候选。账户余额、资产流水、账单、记录历史、备注模板、识别设置和权限均保留。")
         if (errorMessage != null) InlineMessage(errorMessage, isError = true, announce = true)
         AppDialogActions(confirmLabel = "恢复默认清单", onConfirm = onConfirm, onDismiss = onDismiss)
-    }
-}
-
-
-/** 资产 → 账户管理：与确认卡共用同一份账户候选清单。 */
-@Composable
-internal fun AccountCandidatesPage(
-    onBack: () -> Unit,
-    onAdd: () -> Unit,
-    onOpenAccount: (String) -> Unit,
-) {
-    val accounts by io.github.mymoney.data.AssetStore.accounts.collectAsStateWithLifecycle()
-    val ready by io.github.mymoney.data.AssetStore.ready.collectAsStateWithLifecycle()
-    val storeError by io.github.mymoney.data.AssetStore.error.collectAsStateWithLifecycle()
-    var version by remember { mutableStateOf(0) }
-    var resetConfirm by rememberSaveable { mutableStateOf(false) }
-    var resetError by remember { mutableStateOf<String?>(null) }
-    // Store emissions also refresh the candidate projection when this page stays on screen.
-    val listVersion = version + accounts.hashCode()
-    SubPageScaffold(title = "账户管理", onBack = onBack) { padding ->
-        io.github.mymoney.ui.design.SectionLazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = AbSpacing.page, end = AbSpacing.page,
-                top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding()),
-            verticalArrangement = Arrangement.spacedBy(AbSpacing.m),
-        ) {
-            if (storeError != null) item { InlineMessage(storeError.orEmpty(), isError = true, announce = true) }
-            if (ready) {
-                item { GroupHeader("账户清单") }
-                item {
-                    AccountsSection(
-                        version = listVersion,
-                        assetAccounts = accounts,
-                        onChanged = { version++ },
-                        onAdd = onAdd,
-                        onOpenAccount = onOpenAccount,
-                    )
-                }
-                item {
-                    InsetGroup {
-                        ListRow(title = "恢复默认账户清单", destructive = true,
-                            onClick = { resetError = null; resetConfirm = true })
-                    }
-                }
-            }
-        }
-    }
-    if (resetConfirm) AppDialog(title = "恢复默认账户清单？", onDismiss = { resetConfirm = false }) {
-        Text("恢复为仅「钱包」，其他账户归档；余额、流水与账单保留。")
-        if (resetError != null) InlineMessage(resetError.orEmpty(), isError = true, announce = true)
-        AppDialogActions(
-            confirmLabel = "恢复默认账户",
-            onConfirm = {
-                resetError = null
-                runCatching { LedgerConfig.resetAccountsToDefault() }
-                    .onSuccess { version++; resetConfirm = false }
-                    .onFailure { resetError = it.message ?: "恢复默认账户清单失败，请重试" }
-            },
-            onDismiss = { resetConfirm = false },
-        )
     }
 }
 

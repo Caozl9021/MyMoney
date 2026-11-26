@@ -92,7 +92,7 @@ object LedgerPayloadCodec {
     }
 
     // ---------------- 账户 ----------------
-    fun encodeAccount(a: AssetAccount): Map<String, Any?> = linkedMapOf(
+    fun encodeAccount(a: AssetAccount): Map<String, Any?> = linkedMapOf<String, Any?>(
         "syncId" to a.id,  // 账户 id 本身即稳定 UUID，用它作 syncId
         "name" to a.name,
         "kind" to a.kind,
@@ -103,7 +103,15 @@ object LedgerPayloadCodec {
         "initialized" to a.initialized,
         "createdAt" to a.createdAt,
         "updatedAt" to a.updatedAt,
-    )
+        "quickSelect" to a.quickSelect,
+    ).apply {
+        a.cardTail?.let { put("cardTail", it) }
+        a.creditLimitCents?.let { put("creditLimitCents", it) }
+        a.billingDay?.let { put("billingDay", it) }
+        a.repaymentDay?.let { put("repaymentDay", it) }
+        a.iconKey?.let { put("iconKey", it) }
+        a.colorHex?.let { put("colorHex", it) }
+    }
 
     fun decodeAccount(payload: Map<*, *>): AssetAccount = AssetAccount(
         id = str(payload["syncId"]) ?: throw IllegalArgumentException("账户缺少 syncId"),
@@ -116,6 +124,13 @@ object LedgerPayloadCodec {
         initialized = bool(payload["initialized"]),
         createdAt = num(payload["createdAt"]),
         updatedAt = num(payload["updatedAt"]),
+        quickSelect = payload["quickSelect"] as? Boolean ?: true,
+        cardTail = str(payload["cardTail"]),
+        creditLimitCents = (payload["creditLimitCents"] as? Number)?.toLong(),
+        billingDay = (payload["billingDay"] as? Number)?.toInt(),
+        repaymentDay = (payload["repaymentDay"] as? Number)?.toInt(),
+        iconKey = str(payload["iconKey"]),
+        colorHex = str(payload["colorHex"]),
     )
 
     // ---------------- 流水 ----------------
@@ -156,8 +171,18 @@ object LedgerPayloadCodec {
     ): Map<String, Any?> = linkedMapOf(
         "syncId" to "config",
         "monthStartDay" to monthStartDay,
-        "expenseCategories" to expenseGroups.map { linkedMapOf("name" to it.name, "subs" to it.subs) },
-        "incomeCategories" to incomeGroups.map { linkedMapOf("name" to it.name, "subs" to it.subs) },
+        "expenseCategories" to expenseGroups.map { g ->
+            linkedMapOf<String, Any?>("name" to g.name, "subs" to g.subs).apply {
+                g.iconKey?.let { put("iconKey", it) }
+                g.colorHex?.let { put("colorHex", it) }
+            }
+        },
+        "incomeCategories" to incomeGroups.map { g ->
+            linkedMapOf<String, Any?>("name" to g.name, "subs" to g.subs).apply {
+                g.iconKey?.let { put("iconKey", it) }
+                g.colorHex?.let { put("colorHex", it) }
+            }
+        },
         "updatedAt" to updatedAt,
     )
 

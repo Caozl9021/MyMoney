@@ -249,10 +249,10 @@ fun ConfirmSheet(
     var configVersion by remember { mutableStateOf(0) }
     val groups = remember(type, configVersion) { LedgerConfig.groupsFor(type) }
     val assetAccounts by io.github.mymoney.data.AssetStore.accounts.collectAsStateWithLifecycle()
-    // 确认卡只列已设余额账户 + 兜底「钱包」，避免旧默认占位刷一排未设置。
-    val accounts = remember(assetAccounts, configVersion) {
+    // 确认卡只列已设余额且开启「在确认卡显示」的账户 + 当前已选/兜底「钱包」，保持单行横滑轻巧克制。
+    val accounts = remember(assetAccounts, configVersion, account) {
         val visible = assetAccounts
-            .filter { !it.archived && (it.initialized || it.name == "钱包") }
+            .filter { !it.archived && (it.initialized || it.name == "钱包") && (it.quickSelect || it.name == account) }
             .sortedWith(compareBy({ it.sortOrder }, { it.createdAt }, { it.id }))
             .map { it.name }
             .distinct()

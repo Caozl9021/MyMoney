@@ -4,6 +4,8 @@ import androidx.room.*
 import kotlinx.coroutines.flow.Flow
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.time.LocalDate
+import java.time.YearMonth
 
 @Entity(tableName = "asset_accounts", indices = [Index(value = ["name"], unique = true)])
 data class AssetAccount(
@@ -17,6 +19,13 @@ data class AssetAccount(
     val initialized: Boolean = false,
     val createdAt: Long,
     val updatedAt: Long,
+    @ColumnInfo(defaultValue = "1") val quickSelect: Boolean = true,
+    val cardTail: String? = null,
+    val creditLimitCents: Long? = null,
+    val billingDay: Int? = null,
+    val repaymentDay: Int? = null,
+    val iconKey: String? = null,
+    val colorHex: String? = null,
 )
 
 @Entity(tableName = "asset_entries", indices = [Index("accountId"), Index("billKey"), Index("operationId"), Index(value = ["reversalOf"], unique = true)])
@@ -51,6 +60,8 @@ interface AssetDao {
     @Insert suspend fun insertEntry(entry: AssetEntry)
     @Query("SELECT * FROM asset_entries WHERE billKey=:key ORDER BY createdAt, id") suspend fun entriesForBill(key: String): List<AssetEntry>
     @Query("DELETE FROM asset_accounts WHERE id=:id") suspend fun deleteAccount(id: String)
+    @Query("DELETE FROM asset_entries WHERE accountId=:accountId") suspend fun deleteEntriesForAccount(accountId: String)
+    @Query("DELETE FROM asset_entries WHERE id=:id") suspend fun deleteEntry(id: String)
     @Query("SELECT MAX(createdAt) FROM asset_entries") suspend fun latestEntryTime(): Long?
     @Query("DELETE FROM asset_entries") suspend fun clearEntries()
     @Query("DELETE FROM asset_accounts") suspend fun clearAccounts()
@@ -66,7 +77,24 @@ interface AssetDao {
 /** Pure accounting rules shared by the UI, writes, backup validation and tests. */
 object AssetMath {
     val kinds = listOf("CASH", "PAYMENT", "SAVINGS", "CREDIT", "OTHER_ASSET", "OTHER_DEBT")
+    private val colorHexRegex = Regex("^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$")
     fun isDebt(kind: String) = kind == "CREDIT" || kind == "OTHER_DEBT"
+    fun availableCreditCents(account: AssetAccount, balanceCents: Long): Long? {
+        if (account.kind != "CREDIT") return null
+        val limit = account.creditLimitCents ?: return null
+        return runCatching { Math.addExact(limit, balanceCents) }.getOrNull()
+    }
+    fun daysUntilDayOfMonth(dayOfMonth: Int, today: LocalDate): Int {
+        val targetDay = dayOfMonth.coerceIn(1, 31)
+        val currentMonthDate = LocalDate.of(today.year, today.month, targetDay.coerceAtMost(today.lengthOfMonth()))
+        val next = if (!currentMonthDate.isBefore(today)) {
+            currentMonthDate
+        } else {
+            val nextMonth = YearMonth.from(today).plusMonths(1)
+            LocalDate.of(nextMonth.year, nextMonth.month, targetDay.coerceAtMost(nextMonth.lengthOfMonth()))
+        }
+        return java.time.temporal.ChronoUnit.DAYS.between(today, next).toInt()
+    }
     fun parseCents(text: String): Long {
         require(text.trim().matches(Regex("[+-]?\\d+(\\.\\d+)?"))) { "请输入有效金额" }
         return try { BigDecimal(text.trim()).setScale(2, RoundingMode.HALF_UP).movePointRight(2).longValueExact() }
@@ -112,6 +140,12 @@ object AssetMath {
         val names = HashSet<String>()
         accounts.forEach {
             require(it.id.isNotBlank() && it.name.isNotBlank() && it.name == it.name.trim() && it.kind in kinds && it.sortOrder >= 0 && it.createdAt >= 0 && it.updatedAt >= it.createdAt) { "资产账户无效" }
+            require(it.cardTail == null || (it.cardTail.isNotBlank() && it.cardTail == it.cardTail.trim() && it.cardTail.length <= 8)) { "账户尾号无效" }
+            require(it.creditLimitCents == null || it.creditLimitCents >= 0L) { "信用额度不能为负" }
+            require(it.billingDay == null || it.billingDay in 1..31) { "账单日须在 1–31 日之间" }
+            require(it.repaymentDay == null || it.repaymentDay in 1..31) { "还款日须在 1–31 日之间" }
+            require(it.iconKey == null || (it.iconKey.isNotBlank() && it.iconKey.length <= 64)) { "账户图标无效" }
+            require(it.colorHex == null || colorHexRegex.matches(it.colorHex)) { "账户颜色无效" }
             (listOf(it.name) + aliases(it).onEach { alias -> require(alias == alias.trim()) { "账户别名含首尾空格" } }).distinct().forEach { name -> require(names.add(name)) { "账户名或别名冲突：$name" } }
         }
         val ids = accounts.map { it.id }.toSet()

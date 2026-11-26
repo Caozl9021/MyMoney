@@ -33,12 +33,29 @@ import java.time.format.DateTimeFormatter
 internal fun AccountBalanceCard(account: AssetAccount, balance: Long, hidden: Boolean,
     onMore: () -> Unit, onEditBalance: () -> Unit) {
     val p = LocalAbPalette.current
+    val clock = rememberLedgerClock()
+    val availableCredit = remember(account, balance) { AssetMath.availableCreditCents(account, balance) }
+    val creditSchedule = remember(account.kind, account.billingDay, account.repaymentDay, clock.date) {
+        if (account.kind != "CREDIT") null else buildList {
+            account.billingDay?.let { add("账单日 每月${it}日") }
+            account.repaymentDay?.let { day ->
+                val days = AssetMath.daysUntilDayOfMonth(day, clock.date)
+                val countdown = if (days == 0) "今日还款" else "还有 ${days} 天"
+                add("还款日 每月${day}日（$countdown）")
+            }
+        }.joinToString(" · ").ifEmpty { null }
+    }
     InsetGroup {
         Column(Modifier.fillMaxWidth().padding(AbCardDensity.content), verticalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(AbSpacing.s)) {
-                AccountAvatar(account.name, size = 40.dp)
-                Text(account.name, style = AbType.title2, color = p.label, modifier = Modifier.weight(1f))
+                AccountAvatar(account, size = 40.dp)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(account.name, style = AbType.title2, color = p.label)
+                    account.cardTail?.takeIf { it.isNotBlank() }?.let { tail ->
+                        Text("尾号 $tail", style = AbType.caption1, color = p.secondaryLabel)
+                    }
+                }
                 val moreInteraction = remember { MutableInteractionSource() }
                 Box(Modifier.heightIn(min = 48.dp).widthIn(min = 60.dp)
                     .abPressFeedback(moreInteraction, pressedScale = 0.94f, pressedAlpha = 0.72f)
@@ -49,7 +66,11 @@ internal fun AccountBalanceCard(account: AssetAccount, balance: Long, hidden: Bo
                             .padding(horizontal = AbSpacing.m, vertical = AbSpacing.xs))
                 }
             }
-            Text("账户余额（CNY）", style = AbType.footnote, color = p.secondaryLabel)
+            Text(
+                if (AssetMath.isDebt(account.kind)) "当前头寸（CNY）" else "账户余额（CNY）",
+                style = AbType.footnote,
+                color = p.secondaryLabel,
+            )
             val balanceInteraction = remember { MutableInteractionSource() }
             Row(
                 Modifier.fillMaxWidth()
@@ -64,6 +85,23 @@ internal fun AccountBalanceCard(account: AssetAccount, balance: Long, hidden: Bo
                     AbType.amountHero, p.label, Modifier.weight(1f))
                 Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
                     Icon(AbIcons.Pencil, null, Modifier.size(20.dp), tint = p.secondaryLabel)
+                }
+            }
+            if (availableCredit != null || creditSchedule != null) {
+                InsetDivider(inset = 0.dp)
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (availableCredit != null && account.creditLimitCents != null) {
+                        val limitLabel = if (hidden) "••••" else assetMoney(account.creditLimitCents)
+                        val availLabel = if (hidden) "••••" else assetMoney(availableCredit)
+                        Text(
+                            "可用额度 $availLabel · 总额度 $limitLabel",
+                            style = AbType.footnote.tabular(),
+                            color = if (!hidden && availableCredit < 0) p.expense else p.secondaryLabel,
+                        )
+                    }
+                    if (creditSchedule != null) {
+                        Text(creditSchedule, style = AbType.caption1, color = p.secondaryLabel)
+                    }
                 }
             }
         }

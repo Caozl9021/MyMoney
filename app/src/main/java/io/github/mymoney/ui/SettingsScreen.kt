@@ -117,7 +117,6 @@ private enum class SettingsPage(val title: String) {
     CATEGORIES("分类"),
     EXPENSE_CATEGORIES("支出分类"),
     INCOME_CATEGORIES("收入分类"),
-    CATEGORY_PRESETS("分类预设"),
     ASSETS("资产"),
     PENDING("记录历史"),
     AUTOMATION("自动记账"),
@@ -457,13 +456,11 @@ fun SettingsScreen(
                                 "收支分类" to listOf(
                                     SettingsLink("支出分类", AbIcons.Tag) { navigate(SettingsPage.EXPENSE_CATEGORIES) },
                                     SettingsLink("收入分类", AbIcons.Tag) { navigate(SettingsPage.INCOME_CATEGORIES) },
-                                    SettingsLink("分类预设", AbIcons.Layers) { navigate(SettingsPage.CATEGORY_PRESETS) },
                                 ),
                             ),
                         )
                         SettingsPage.EXPENSE_CATEGORIES -> LedgerConfigPage(onBack = back, fixedTab = 0)
                         SettingsPage.INCOME_CATEGORIES -> LedgerConfigPage(onBack = back, fixedTab = 1)
-                        SettingsPage.CATEGORY_PRESETS -> LedgerConfigPage(onBack = back, presetsOnly = true)
 
                         SettingsPage.ASSETS -> AssetsScreen(onBack = back)
                         SettingsPage.PENDING -> RecognitionHistoryScreen(

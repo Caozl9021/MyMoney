@@ -54,6 +54,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.mymoney.data.*
 import io.github.mymoney.ui.design.*
 import kotlinx.coroutines.CancellationException
@@ -699,7 +700,13 @@ private fun StatisticsBreakdownRow(
             horizontalArrangement = Arrangement.spacedBy(AbSpacing.m),
         ) {
             if (isAccount) {
-                AccountAvatar(name = group.name, size = AbCardDensity.icon)
+                val accounts by io.github.mymoney.data.AssetStore.accounts.collectAsStateWithLifecycle()
+                val matchedAccount = remember(accounts, group.name) { accounts.firstOrNull { it.name == group.name } }
+                if (matchedAccount != null) {
+                    AccountAvatar(account = matchedAccount, size = AbCardDensity.icon)
+                } else {
+                    AccountAvatar(name = group.name, size = AbCardDensity.icon)
+                }
             } else {
                 CategoryBadge(category = group.name, tint = swatch, size = AbCardDensity.icon)
             }
